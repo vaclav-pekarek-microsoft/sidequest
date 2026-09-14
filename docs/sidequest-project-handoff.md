@@ -2,7 +2,7 @@
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
 **Last revised:** 2026-09-14.
-**Implementation:** M1 foundation verified; M2 core modules next. No production deployment.
+**Implementation:** M1 foundation verified; M2 core modules in progress. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
 Sections 48–61 form the **accepted V1 baseline** and are authoritative if an earlier
