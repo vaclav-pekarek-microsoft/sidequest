@@ -46,11 +46,9 @@ jobs:
       - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
       - name: Install browser test runtime
-        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
         shell: pwsh
         run: tests/Sidequest.BrowserTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
       - name: Start synthetic browser-test application
-        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
         shell: bash
         run: |
           export SIDEQUEST_SQL_CONNECTION="$SIDEQUEST_TEST_SQL;Database=SidequestBrowserCi"
@@ -74,16 +72,27 @@ jobs:
             exit 1
           fi
       - name: Run real browser checks
-        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
         shell: pwsh
         env:
           SIDEQUEST_BASE_URL: http://127.0.0.1:5078
         run: |
           dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          [xml]$result = Get-Content tests/Sidequest.BrowserTests/TestResults/browser.trx
-          if ([int]$result.TestRun.ResultSummary.Counters.total -lt 1) {
-            throw "No browser scenarios were executed."
+      - name: Require executed foundation scenarios
+        shell: pwsh
+        run: |
+          $reports = @(
+            "tests/Sidequest.UnitTests/TestResults/unit.trx",
+            "tests/Sidequest.IntegrationTests/TestResults/integration.trx",
+            "tests/Sidequest.BrowserTests/TestResults/browser.trx"
+          )
+          foreach ($path in $reports) {
+            [xml]$result = Get-Content $path -ErrorAction Stop
+            $counters = $result.TestRun.ResultSummary.Counters
+            $total = [int]$counters.total
+            if ($total -lt 1 -or [int]$counters.executed -ne $total -or [int]$counters.passed -ne $total) {
+              throw "Every scenario must execute and pass in $path; empty or skipped suites are not acceptance evidence."
+            }
           }
       - name: Upload test evidence
         if: always()

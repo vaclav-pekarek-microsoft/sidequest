@@ -51,6 +51,8 @@ Browser checks run against an explicitly started synthetic local app using
 starts the development app against a disposable SQL database, and runs the browser
 project. Do not bypass managed local browser policy to run these checks. M1 browser
 compatibility scenarios are not substitutes for later full Event/Quest journeys.
+Foundation CI requires nonempty unit, SQL integration, and browser results with
+every discovered scenario executed and passed; skipped suites do not satisfy the gate.
 
 ## Architecture and contribution policy
 
