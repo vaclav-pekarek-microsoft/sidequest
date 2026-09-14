@@ -2,7 +2,7 @@
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
 **Last revised:** 2026-09-14.
-**Implementation started:** M1 foundation in progress; no production deployment.
+**Implementation:** M1 foundation verified; M2 core modules next. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
 Sections 48–61 form the **accepted V1 baseline** and are authoritative if an earlier
@@ -1939,6 +1939,15 @@ Dependency graph: M0 -> M1 -> M2 -> M3 -> M4. Within M2, Quests depend on the fr
 Event-access interface, not an unfinished Event implementation; messaging depends on
 frozen event envelopes, not direct calls into feature internals. Stubs/fakes are for
 contract tests only. M2 is not complete until real module implementations are integrated.
+
+M1 verification (2026-09-14): the strict Release build and
+[CI run 34861029210](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
+passed 1,298 unit cases, 324 real migrated-SQL cases, and 35 browser-project cases,
+including seven actual Linux Chromium journeys. All discovered cases executed and
+passed. The browser journeys verify synthetic admission, Fluent binding/dialog content,
+360px keyboard interaction without horizontal overflow, protected navigation, and logout.
+Public XML documentation is build-enforced. This establishes the M1 foundation gate,
+not M2 business workflows, M4 full-product acceptance, or live provider approval.
 
 ### Ownership map
 

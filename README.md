@@ -3,10 +3,11 @@
 An internal, Quest-first event activity organizer. The accepted V1 specification and
 decision log are in [the project handoff](docs/sidequest-project-handoff.md).
 
-Implementation is in progress. The current milestone establishes shared contracts,
-SQL persistence, Entra/development authentication, a Fluent UI shell, and CI. It is
-not a production-ready release; live tenant, email, hosting, and data-policy approval
-gates remain open.
+Implementation is in progress. The M1 foundation is verified: shared contracts,
+SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
+M2 Event/Quest workflows and delivery implementations are next. This is not a
+production-ready release; live tenant, email, hosting, and data-policy approval gates
+remain open.
 
 ## Local development
 
@@ -53,6 +54,12 @@ project. Do not bypass managed local browser policy to run these checks. M1 brow
 compatibility scenarios are not substitutes for later full Event/Quest journeys.
 Foundation CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
+
+The [M1 baseline CI run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
+passed 1,298 unit cases, 324 real-SQL cases, and 35 browser-project cases, including
+seven actual Chromium journeys. These cover synthetic sign-in, Fluent binding/dialog
+content, 360px keyboard interaction without horizontal overflow, protected navigation,
+and logout. The strict Release build also enforces public XML documentation.
 
 ## Architecture and contribution policy
 
