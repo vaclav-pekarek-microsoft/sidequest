@@ -1,0 +1,7 @@
+li {
+    overflow-wrap: anywhere;
+    margin-block: 1rem;
+}
+::deep fluent-text-area {
+    width: min(100%, 40rem);
+}

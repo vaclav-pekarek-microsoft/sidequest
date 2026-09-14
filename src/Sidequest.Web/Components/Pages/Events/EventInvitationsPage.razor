@@ -1,0 +1,77 @@
+@page "/events/invitations"
+@page "/events/{Id:guid}/invitations"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+
+<PageTitle>Event invitations · Sidequest</PageTitle>
+<h1>@(Id is null ? "My Event invitations" : "Manage Event invitations")</h1>
+<a href="/events">Events</a>
+<p>Event invitations require your acceptance. Membership does not join or follow any Quest, including after rejoining an Event.</p>
+<EventFeedback Busy="Busy" Error="Error" />
+<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+@if (result is not null)
+{
+    @if (result.Items.Count == 0)
+    {
+        <p>No Event invitations.</p>
+    }
+    @foreach (var invitation in result.Items)
+    {
+        <article @key="invitation.Id">
+            <h2>@invitation.EventName · @invitation.User.DisplayName</h2>
+            <p>@invitation.Status · Expires @invitation.ExpiresUtc.ToString("g") UTC</p>
+            @if (invitation.Status == EventInvitationStatus.Pending)
+            {
+                @if (Id is null)
+                {
+                    <FluentButton Disabled="@Busy" OnClick="@(() => ActAsync(invitation.Id, true))">Accept Event membership</FluentButton>
+                    <FluentButton Disabled="@Busy" OnClick="@(() => ActAsync(invitation.Id, false))">Decline</FluentButton>
+                }
+                else
+                {
+                    <FluentButton Disabled="@Busy" OnClick="@(() => ActAsync(invitation.Id, null))">Revoke pending invitation</FluentButton>
+                }
+            }
+        </article>
+    }
+    <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="PageAsync" />
+}
+
+@code {
+    /// <summary>Managed Event identifier, or null for the current named recipient's invitations only.</summary>
+    [Parameter] public Guid? Id { get; set; }
+    private PageResult<EventInvitationSummary>? result;
+    private int page = 1;
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+    private Task LoadAsync() => RunAsync(RefreshAsync);
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+    private async Task RefreshAsync(CancellationToken token)
+    {
+        result = null;
+        var loaded = await Events.ListInvitationsAsync(Id, new(page), token);
+        token.ThrowIfCancellationRequested();
+        result = loaded;
+    }
+    private Task ActAsync(Guid invitation, bool? accept) => RunAsync(async token =>
+    {
+        if (accept is { } decision)
+            await Events.RespondToInvitationAsync(invitation, decision, token);
+        else
+            await Events.RevokeInvitationAsync(invitation, token);
+        await RefreshAsync(token);
+    });
+    private Task PageAsync(int selected)
+    {
+        page = selected;
+        return LoadAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState() => result = null;
+}

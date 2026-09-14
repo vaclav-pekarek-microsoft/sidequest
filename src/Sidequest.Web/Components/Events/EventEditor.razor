@@ -1,0 +1,41 @@
+<EditForm Model="model" OnValidSubmit="SubmitAsync" FormName="event-editor">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <fieldset disabled="@Busy" class="editor">
+        <legend>Event configuration</legend>
+        <FluentTextField Label="Name (3–120 characters)" @bind-Value="model.Name" Required="true" Maxlength="120" />
+        <FluentTextArea Label="Discovery summary (visible to eligible users)" @bind-Value="model.DiscoverySummary" Maxlength="300" />
+        <FluentTextArea Label="Description (members only; plain text)" @bind-Value="model.Description" Maxlength="10000" />
+        <label>Start date, inclusive <InputDate @bind-Value="model.StartDate" /></label>
+        <label>End date, inclusive <InputDate @bind-Value="model.EndDate" /></label>
+        <FluentTextField Label="IANA time zone (for example Europe/Prague)" @bind-Value="model.TimeZoneId" ReadOnly="@ZoneLocked" Required="true" />
+        <p>Dates are interpreted in this zone. The zone is fixed when published; every child Quest must fit within these dates.</p>
+        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save Draft or changes</FluentButton>
+    </fieldset>
+</EditForm>
+
+@code {
+    private EventEditModel model = new();
+    private EventInput? previous;
+
+    /// <summary>Initial configuration copied into independent form state only when the parent supplies a new input.</summary>
+    [Parameter, EditorRequired] public EventInput Input { get; set; } = null!;
+    /// <summary>Prevents zone editing after publication; the server independently enforces this invariant.</summary>
+    [Parameter] public bool ZoneLocked { get; set; }
+    /// <summary>Disables repeated submission while the page saves.</summary>
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Submits validated form values to the owning page without changing lifecycle directly.</summary>
+    [Parameter] public EventCallback<EventInput> Submitted { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(previous, Input))
+        {
+            previous = Input;
+            model = EventEditModel.From(Input);
+        }
+    }
+
+    private Task SubmitAsync() => Submitted.InvokeAsync(model.ToInput());
+}

@@ -1,0 +1,18 @@
+<nav aria-label="List pages">
+    <FluentButton Disabled="@(Busy || Page <= 1)" OnClick="@(() => Changed.InvokeAsync(Page - 1))">Previous</FluentButton>
+    <span>Page @Page · @TotalCount items</span>
+    <FluentButton Disabled="@(Busy || (long)Page * PageSize >= TotalCount)" OnClick="@(() => Changed.InvokeAsync(Page + 1))">Next</FluentButton>
+</nav>
+
+@code {
+    /// <summary>Current one-based page number.</summary>
+    [Parameter] public int Page { get; set; } = 1;
+    /// <summary>Number of records per page, matching the service query.</summary>
+    [Parameter] public int PageSize { get; set; } = 25;
+    /// <summary>Total authorized record count, not a global or private-resource count.</summary>
+    [Parameter] public int TotalCount { get; set; }
+    /// <summary>Disables paging while an operation is pending.</summary>
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Requests a new page from the owning component.</summary>
+    [Parameter] public EventCallback<int> Changed { get; set; }
+}
