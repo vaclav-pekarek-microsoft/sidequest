@@ -1906,6 +1906,24 @@ Multiple development agents should work on bounded work packages, not independen
 invent the architecture or each build a complete application. This section is a
 development coordination contract, not a request to launch agents now.
 
+### Pull requests and GitHub identity
+
+All repository changes must be delivered through pull requests, including documentation,
+configuration, infrastructure, and agent-authored work. Create a dedicated task branch;
+do not commit or push directly to the default or integration branches. Integrate feature
+branches through pull requests, not direct pushes or unreviewed local merges.
+
+Use the GitHub account `vaclav-pekarek-microsoft` for commits, pushes, and pull requests.
+Before publishing, verify the authenticated account and use a Git author/committer
+identity associated with it. Do not substitute a bot, service account, or another user.
+Missing or mismatched authentication blocks publishing, not a reason to bypass this rule.
+Preserve required assistant attribution in commit trailers.
+
+All sub-agents inherit this policy. The integration owner coordinates PRs and shared-file
+changes; that role does not permit direct changes to the default/integration branches.
+Leave PRs open for review unless the user explicitly requests merging, and honor configured
+review/CI requirements. Root `AGENTS.md` makes these rules discoverable to later agents.
+
 ### Foundation gate and dependency graph
 
 | Milestone | Work / exit gate | Parallelism |
@@ -1958,7 +1976,7 @@ related architecture decision, and accepted before dependents change. No specula
 interface renaming, alternate enums, duplicated access checks, or new infrastructure
 packages per agent. A blocked agent reports the dependency rather than bypassing it.
 
-Integrate small vertical slices regularly into the integration branch; rerun the affected
+Integrate small vertical slices regularly through pull requests into the integration branch; rerun the affected
 contract and integration tests after each merge. Do not defer all integration to M4.
 Never give agents production secrets or unrestricted production deployment/migration duties.
 
@@ -1975,6 +1993,8 @@ audit, delivery, or persistence path is unwired.
 concurrency and idempotency behavior, required audit/outbox effects, accessible success/
 empty/error states, focused passing tests, and updated directly related documentation.
 No silent fallback providers, TODO authorization, fake deliveries, or unused adapters.
+Submit the change through a pull request under `vaclav-pekarek-microsoft`; integration
+is complete only after the PR is merged under the agreed review process.
 Record any unavailable external verification honestly.
 
 **Done for V1:** all in-scope work integrated; solution builds and relevant full checks
@@ -2025,6 +2045,7 @@ not V1 release requirements.
 | D32 | 2026-09-14 | Accept section 57 release/operations targets (300 concurrent users, p95 app latency under 2 seconds, 95% healthy-provider submissions within 2 minutes, reminders within 2 minutes, RPO <= 1 hour/RTO <= 4 hours), monitored operations/restore evidence, section 58 acceptance scenarios, and xUnit/bUnit/Playwright strategy. Organizational retention/residency/device-data approval remains required before production data. Targets are not a promised SLA. |
 | D33 | 2026-09-14 | Accept sections 59–60: foundation/shared contracts first, then 2–3 bounded feature agents in separate worktrees, integration-owner control of shared configuration/contracts/migrations/merges, frequent vertical integration, dependency-gated secondary features, acceptance-ID-based task handoffs, and end-to-end definition of done. No agents or implementation started by this decision. |
 | D34 | 2026-09-14 | Approve the reconciled full V1 baseline, including supporting authorization, administrator, schema, durable job, security, and non-goal contracts. Earlier supersessions remain effective. Mark Accepted for implementation; external evidence/approvals remain open. This approval does not start implementation or launch agents; wait for a separate development instruction. |
+| D35 | 2026-09-14 | All repository changes must go through pull requests using the GitHub account vaclav-pekarek-microsoft, including documentation and sub-agent work. Use task branches and matching Git author/committer identity; no direct default/integration-branch changes or alternate/bot publishing identity. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
