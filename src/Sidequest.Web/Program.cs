@@ -1,66 +1,58 @@
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.FluentUI.AspNetCore.Components;
+using Sidequest.Application;
+using Sidequest.Application.Abstractions;
+using Sidequest.Infrastructure;
+using Sidequest.Web.Authentication;
 using Sidequest.Web.Components;
-using Sidequest.Web.Components.Account;
-using Sidequest.Web.Data;
+using Sidequest.Web.Operations;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
+var authentication = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton(authentication);
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddFluentUIComponents();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<IdentityRedirectManager>();
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
-
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
-
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-
-builder.Services.AddIdentityCore<ApplicationUser>(options =>
-    {
-        options.SignIn.RequireConfirmedAccount = true;
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-    })
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
-
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.AddScoped<AuthenticationStateProvider, WorkforceAuthenticationStateProvider>();
+builder.Services.AddScoped<ICurrentUser, CircuitCurrentUser>();
+builder.Services.AddScoped<WorkforceAccounts>();
+builder.Services.AddSidequestApplication();
+builder.Services.AddSidequestInfrastructure(builder.Configuration);
+builder.Services.AddFoundationAuthentication(authentication, builder.Configuration);
+builder.Services.AddAuthorization();
+builder.Services.AddAntiforgery();
+builder.Services.AddExceptionHandler<SafeExceptionHandler>();
+builder.Services.AddProblemDetails();
+builder.Services.AddHealthChecks().AddCheck<SqlReadinessCheck>("sql", tags: ["ready"]);
 
 var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.UseExceptionHandler();
+if (!app.Environment.IsDevelopment())
 {
-    app.UseMigrationsEndPoint();
-}
-else
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 
+app.Use(async (context, next) =>
+{
+    if (authentication.IsDevelopment && !AuthenticationEndpoints.IsLoopback(context))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    // No authenticated HTML or auth responses belong in shared/offline caches.
+    context.Response.Headers.CacheControl = "no-store";
+    await next(context);
+});
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
-
+app.MapFoundationAuthentication(authentication);
+app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
 app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-// Add additional endpoints required by the Identity /Account Razor components.
-app.MapAdditionalIdentityEndpoints();
-
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Run();
+
+/// <summary>Exposes the web application entry point to integration-test hosts.</summary>
+public partial class Program;

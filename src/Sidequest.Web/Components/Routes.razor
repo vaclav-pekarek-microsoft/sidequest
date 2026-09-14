@@ -1,9 +1,10 @@
-﻿@using Sidequest.Web.Components.Account.Shared
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
-                <RedirectToLogin />
+                <h1>Sign-in required</h1>
+                <p>Your session may have expired or access may have changed.</p>
+                <a href="/signin" data-enhance-nav="false">Sign in again</a>
             </NotAuthorized>
         </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />

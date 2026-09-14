@@ -1,0 +1,17 @@
+@page "/foundation"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Compatibility screen · Sidequest</PageTitle>
+<AuthorizeView>
+    <Authorized>
+        <h1>Fluent compatibility screen</h1>
+        <p>.NET 10 · per-page Interactive Server · Fluent UI 4.14.4. This is a UI compatibility check, not an Event or Quest editor. No data is saved.</p>
+        <CompatibilityProbe />
+    </Authorized>
+    <NotAuthorized>
+        <h1>Session ended</h1>
+        <p>Your session expired or your account is no longer eligible.</p>
+        <a href="/signin" data-enhance-nav="false">Sign in again</a>
+    </NotAuthorized>
+</AuthorizeView>
