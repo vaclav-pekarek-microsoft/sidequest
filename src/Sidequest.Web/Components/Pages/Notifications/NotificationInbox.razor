@@ -1,0 +1,61 @@
+@page "/notifications"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Notifications · Sidequest</PageTitle>
+<h1>Notifications</h1>
+<nav aria-label="Notification settings">
+    <a href="/notifications/preferences">Preferences</a>
+    <a href="/notifications/failures">Delivery recovery (administrators)</a>
+</nav>
+<p>In-app notifications work independently of email. Provider acceptance does not guarantee mailbox delivery.</p>
+<div role="status" aria-live="polite">@status</div>
+@if (error is not null)
+{
+    <p role="alert">@error</p>
+}
+<div class="actions">
+    <FluentButton OnClick="RefreshAsync" Disabled="@busy">Refresh</FluentButton>
+    <FluentButton OnClick="@(() => MarkAsync(null))" Disabled="@(busy || unread == 0)">Mark all read</FluentButton>
+</div>
+@if (busy)
+{
+    <p>Loading notifications…</p>
+}
+else if (items is not null)
+{
+    <p>@unread unread · @items.TotalCount notifications</p>
+    @if (items.Items.Count == 0)
+    {
+        <p>No notifications on this page.</p>
+    }
+    else
+    {
+        <ul class="notifications">
+            @foreach (var item in items.Items)
+            {
+                <li @key="item.Id">
+                    <p>@item.Summary</p>
+                    <p><time datetime="@item.CreatedUtc.ToString("O")">@item.CreatedUtc.ToString("u") UTC</time> · @(item.IsRead ? "Read" : "Unread")</p>
+                    @if (item.QuestId is Guid questId)
+                    {
+                        <a href="@($"/quests/{questId}")">View current Quest</a>
+                    }
+                    else if (item.EventId is Guid eventId)
+                    {
+                        <a href="@($"/events/{eventId}")">View current Event</a>
+                    }
+                    @if (!item.IsRead)
+                    {
+                        <FluentButton OnClick="@(() => MarkAsync(item.Id))" Disabled="@busy">Mark read</FluentButton>
+                    }
+                </li>
+            }
+        </ul>
+        <div class="actions">
+            <FluentButton OnClick="@(() => MoveAsync(-1))" Disabled="@(busy || page == 1)">Previous</FluentButton>
+            <span>Page @(page)</span>
+            <FluentButton OnClick="@(() => MoveAsync(1))" Disabled="@(busy || page * 25 >= items.TotalCount)">Next</FluentButton>
+        </div>
+    }
+}

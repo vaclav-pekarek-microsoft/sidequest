@@ -1,0 +1,47 @@
+@page "/notifications/preferences"
+@page "/notifications/preferences/{EventId:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Notification preferences · Sidequest</PageTitle>
+<h1>Notification preferences</h1>
+<a href="/notifications">Back to notifications</a>
+<p>Required invitations, access decisions, service messages and calendar updates cannot be disabled here.</p>
+<p>Calendar clients may ask you to accept changes. Declining in Outlook does not change Sidequest attendance: leave in Sidequest.</p>
+<div role="status" aria-live="polite">@status</div>
+@if (error is not null)
+{
+    <p role="alert">@error</p>
+}
+@if (model is null)
+{
+    <p>@(busy ? "Loading preferences…" : "Preferences are unavailable.")</p>
+    <FluentButton OnClick="LoadAsync" Disabled="@busy">Retry</FluentButton>
+}
+else
+{
+    <EditForm Model="model" OnValidSubmit="SaveAsync" FormName="notification-preferences">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <fieldset disabled="@busy">
+            <legend>Optional communications</legend>
+            <FluentCheckbox @bind-Value="model.NewQuestEmail">Email me about new public Quests</FluentCheckbox>
+            <FluentCheckbox @bind-Value="model.ActivityEmail">Email me optional joined/followed Quest activity</FluentCheckbox>
+            <FluentCheckbox @bind-Value="model.RemindersEnabled">Enable attendee reminders (email and in-app)</FluentCheckbox>
+            <label for="reminder-hours">Remind me this many hours before start (0.01–168, up to two decimal places)</label>
+            <InputNumber id="reminder-hours" @bind-Value="model.ReminderHours" min="0.01" max="168" step="0.01" />
+            <ValidationMessage For="@(() => model.ReminderHours)" />
+            <FluentTextField Label="Preferred IANA time zone (optional)" @bind-Value="model.TimeZoneId" />
+            <FluentButton Type="ButtonType.Submit" Disabled="@busy">Save preferences</FluentButton>
+        </fieldset>
+    </EditForm>
+    @if (EventId is not null)
+    {
+        <section aria-labelledby="event-preference-heading">
+            <h2 id="event-preference-heading">This Event's new-Quest email</h2>
+            <p>This explicit override replaces your default for this Event only. Current Event membership is required.</p>
+            <FluentCheckbox @bind-Value="eventEnabled">Enable new-Quest email for this Event</FluentCheckbox>
+            <FluentButton OnClick="SaveEventAsync" Disabled="@busy">Save Event override</FluentButton>
+        </section>
+    }
+}
