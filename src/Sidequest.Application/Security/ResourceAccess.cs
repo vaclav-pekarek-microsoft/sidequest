@@ -45,6 +45,9 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
             x => x.EventId == eventId && x.UserId == userId && x.Status == MembershipStatus.Active, cancellationToken).ConfigureAwait(false);
         if (item is null || !AccessRules.CanReadEvent(eligible, member, owner, item.Status) || (ownerOnly && !owner))
             throw Unavailable();
+        if (!owner && await db.EventStatusHistory.AnyAsync(x => x.EventId == eventId &&
+            x.Previous == EventStatus.Draft && x.Next == EventStatus.Cancelled, cancellationToken).ConfigureAwait(false))
+            throw Unavailable();
         return item;
     }
 
