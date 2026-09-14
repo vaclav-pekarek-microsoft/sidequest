@@ -69,11 +69,22 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <param name="cancellationToken">Requests cooperative cancellation of database writes.</param>
     /// <returns>The number of state entries written to the database.</returns>
     /// <exception cref="DomainException">An optimistic concurrency or duplicate-key conflict is translated to
-    /// <see cref="ErrorCode.Conflict"/>, or an attempted modification/deletion of immutable audit or status-history
+    /// <see cref="ErrorCode.Conflict"/>, a SQL deadlock aborts the transaction, or an attempted modification/deletion of immutable audit or status-history
     /// records is rejected with that same code.</exception>
     /// <exception cref="DbUpdateException">Another database update failure occurs that is not translated to a domain conflict.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    /// <summary>Acquires the addressed Event's mutation lock for the caller's explicit Serializable transaction.</summary>
+    /// <param name="eventId">Internal Event identifier resolved before beginning the mutation transaction.</param>
+    /// <param name="cancellationToken">Cancels waiting for the database lock.</param>
+    /// <returns>A task completing when the Event row or absent-key range is locked until transaction completion.</returns>
+    /// <remarks>Call this before transactional actor, Quest, membership, or ownership reads. The lock neither
+    /// grants access nor reports existence; reauthorize after acquisition. It does not track an Event,
+    /// save changes, commit, or authorize external calls inside the transaction.</remarks>
+    /// <exception cref="DomainException">The identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default);
     /// <summary>Begins a caller-owned explicit transaction for atomic domain, audit, and durable-work changes.</summary>
     /// <param name="isolationLevel">Database isolation level; Serializable is the default for invariant-preserving operations.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation while beginning the transaction.</param>

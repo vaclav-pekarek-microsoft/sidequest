@@ -1949,6 +1949,37 @@ passed. The browser journeys verify synthetic admission, Fluent binding/dialog c
 Public XML documentation is build-enforced. This establishes the M1 foundation gate,
 not M2 business workflows, M4 full-product acceptance, or live provider approval.
 
+Shared M2 integration contracts:
+
+- `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
+  observing recipients, and prior attendees. Membership additions/decisions, joins/leaves,
+  attendee removals, and access removals require nonempty targets included in `RecipientIds`.
+  Delivery must never infer targets by joining timestamps or mutable membership/participation
+  state. Targeted legacy payloads without this metadata fail explicitly rather than guessing;
+  other change kinds may omit it. One UTC operation instant remains required for audit
+  consistency, not as a recipient-identity key.
+- `ISidequestDbContext.LockEventAsync` acquires the parent Event lock first within
+  an explicit Serializable transaction, before transactional authorization or child
+  reads. Resolve immutable parent IDs before starting that transaction. Provider-specific
+  lock hints and SQL deadlock-to-Conflict translation stay in Infrastructure. Translation
+  covers result-reader consumption as well as command execution, saves, and transaction
+  completion: SQL can report a deadlock while rows are read after execution has returned.
+  Preserve provider cancellation and unrelated failures; never retry a caller-owned
+  transaction or hide its rollback behind a successful result.
+- The Event-owned `IEventLifecycleReconciler` stages overdue parent completion,
+  pending membership cleanup, and Quest-side lifecycle effects in the caller's locked
+  transaction. It never saves or commits. Persist system reconciliation separately
+  before a requested command's lifecycle rejection can roll it back; never commit an
+  unvalidated user mutation. Quest-side cascades do not depend on the reconciler.
+- Cancelled unpublished Quests retain draft privacy after cancellation or archival:
+  only their current eligible member owners may read them, and moderation never exposes
+  them. A retained Draft-to-Cancelled history record identifies this case without
+  a new schema field; every direct content/delivery query must honor it.
+- `QuestDateFilter` supplies optional inclusive lower/exclusive upper UTC start-instant
+  bounds to an additional `IQuestService.ListAsync` overload. Apply the same predicates
+  before count and paging. Convert date controls using the selected Event zone, or
+  visibly labeled UTC for cross-Event lists; do not filter an already-paged result.
+
 ### Ownership map
 
 | Work package | Owns | Must not independently change |
