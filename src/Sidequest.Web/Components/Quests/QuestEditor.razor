@@ -1,0 +1,28 @@
+@using Sidequest.Domain.Model
+<EditForm Model="model" OnValidSubmit="SaveAsync" FormName="quest-editor">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <p>Event time zone: <strong>@ZoneId</strong> (inherited, read-only).</p>
+    <p>Private Quest content and owners can be inspected by Event owners in an audited moderation view.
+        They cannot see invitation, attendee, or follower rosters in that view.</p>
+    <fieldset disabled="@Busy">
+        <legend>Quest details</legend>
+        <FluentTextField Label="Title" @bind-Value="model.Title" Required="true" />
+        <FluentTextArea Label="Description (plain text)" @bind-Value="model.Description" />
+        <FluentTextField Label="Location (required to publish)" @bind-Value="model.Location" />
+        <label>Suggested capacity <InputNumber @bind-Value="model.Capacity" /></label>
+        <label>Starts in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.Start" /></label>
+        <label>Ends in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.End" /></label>
+        <p>During a daylight-saving overlap, explicitly enter the intended UTC offset in hours
+            (for example, 1 or 2). Leave blank for unambiguous times. Nonexistent times are rejected.</p>
+        <label>Start UTC offset (hours) <InputNumber @bind-Value="model.StartOffsetHours" step="0.25" /></label>
+        <label>End UTC offset (hours) <InputNumber @bind-Value="model.EndOffsetHours" step="0.25" /></label>
+        <label>Visibility
+            <InputSelect @bind-Value="model.Visibility" disabled="@Published">
+                <option value="@QuestVisibility.Public">Public within this Event</option>
+                <option value="@QuestVisibility.Private">Private, named Event members only</option>
+            </InputSelect>
+        </label>
+        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save @(Published ? "changes" : "draft")</FluentButton>
+    </fieldset>
+</EditForm>

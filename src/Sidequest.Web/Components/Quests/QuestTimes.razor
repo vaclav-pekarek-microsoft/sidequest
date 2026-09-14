@@ -1,0 +1,8 @@
+@using NodaTime
+@using Sidequest.Domain.Rules
+<p>
+    <strong>@ZoneId</strong>:
+    <time datetime="@StartUtc.ToString("O")">@Local(StartUtc)</time>
+    – <time datetime="@EndUtc.ToString("O")">@Local(EndUtc)</time>
+</p>
+<small>Times use the Event zone. Your personal zone is unavailable; no browser-zone assumption is made.</small>
