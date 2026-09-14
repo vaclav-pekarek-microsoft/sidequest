@@ -1958,6 +1958,17 @@ Shared M2 integration contracts:
   state. Targeted legacy payloads without this metadata fail explicitly rather than guessing;
   other change kinds may omit it. One UTC operation instant remains required for audit
   consistency, not as a recipient-identity key.
+- `ScheduledWork.DueUtc` is the mutable next execution/retry instant, not a checksum
+  for the original business deadline. Completion payloads retain their captured end
+  instant; handlers validate the work/resource identity and current resource deadline,
+  then apply the current-time guard. Retry backoff and administrator replay may change
+  `DueUtc` without invalidating an otherwise valid completion payload.
+- Event cancellation emits one Event-level status audience plus attendee-only child
+  withdrawal envelopes using `EventCancelled` with a Quest identifier. The parent
+  audience includes registered effective members and affected Quest recipients.
+  Each affected attendee retains a distinct per-Quest calendar withdrawal, while
+  followers, invitees, and non-attending owners do not receive redundant per-child
+  status email. Direct Quest cancellation keeps its full Quest-specific status audience.
 - `ISidequestDbContext.LockEventAsync` acquires the parent Event lock first within
   an explicit Serializable transaction, before transactional authorization or child
   reads. Resolve immutable parent IDs before starting that transaction. Provider-specific
