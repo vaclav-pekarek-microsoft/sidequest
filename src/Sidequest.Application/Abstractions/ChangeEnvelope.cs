@@ -15,9 +15,13 @@ namespace Sidequest.Application.Abstractions;
 /// <param name="PreviousAttendeeIds">Prior attendee snapshot for withdrawal/transition handling, or null when not supplied.</param>
 /// <param name="CalendarChanged">Optional flag indicating a calendar-relevant content change; defaults to false for payload compatibility.</param>
 /// <param name="MaterialChange">Optional flag indicating a material attendee change requiring mandatory delivery; defaults to false.</param>
+/// <param name="AffectedUserIds">Captured internal action targets, distinct from the actor and observing recipients.
+/// Required and nonempty for membership additions/decisions, joins/leaves, attendee removals, and access removals;
+/// targets must also be captured in RecipientIds. Null is permitted for other change kinds.</param>
 /// <remarks>Recipients remain subject to current access and optional preferences at delivery; minimal access-loss notices and withdrawals use restricted historical data.
-/// Record immutability is shallow: recipient arrays are not cloned or protected against mutation. Treat them as a stable snapshot
-/// and do not modify them during staging, serialization, or concurrent reading.</remarks>
+/// Never infer targets from timestamps or subsequently mutable membership/participation state. A targeted legacy payload
+/// without target metadata must fail explicitly rather than guessing. Record immutability is shallow: identity arrays
+/// are not cloned or protected against mutation. Treat them as stable snapshots during staging, serialization, and reading.</remarks>
 public sealed record ChangeEnvelope(
     Guid ChangeId,
     NotificationKind Kind,
@@ -30,4 +34,5 @@ public sealed record ChangeEnvelope(
     string Reason = "",
     Guid[]? PreviousAttendeeIds = null,
     bool CalendarChanged = false,
-    bool MaterialChange = false);
+    bool MaterialChange = false,
+    Guid[]? AffectedUserIds = null);
