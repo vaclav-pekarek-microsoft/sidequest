@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sidequest.Application/Sidequest.Application.csproj" />
+    <Project Path="src/Sidequest.Domain/Sidequest.Domain.csproj" />
+    <Project Path="src/Sidequest.Infrastructure/Sidequest.Infrastructure.csproj" />
+    <Project Path="src/Sidequest.Web/Sidequest.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj" />
+    <Project Path="tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj" />
+    <Project Path="tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj" />
+  </Folder>
+</Solution>

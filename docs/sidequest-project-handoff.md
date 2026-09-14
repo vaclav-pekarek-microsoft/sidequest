@@ -2,7 +2,7 @@
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
 **Last revised:** 2026-09-14.
-**Implementation has not started.**
+**Implementation:** M1 foundation verified; M2 core modules next. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
 Sections 48–61 form the **accepted V1 baseline** and are authoritative if an earlier
@@ -1921,8 +1921,9 @@ Preserve required assistant attribution in commit trailers.
 
 All sub-agents inherit this policy. The integration owner coordinates PRs and shared-file
 changes; that role does not permit direct changes to the default/integration branches.
-Leave PRs open for review unless the user explicitly requests merging, and honor configured
-review/CI requirements. Root `AGENTS.md` makes these rules discoverable to later agents.
+Automatic PR merging is authorized after verification and configured review/CI requirements
+pass. Never bypass PRs or push directly to main. Root `AGENTS.md` makes these rules
+discoverable to later agents.
 
 ### Foundation gate and dependency graph
 
@@ -1938,6 +1939,15 @@ Dependency graph: M0 -> M1 -> M2 -> M3 -> M4. Within M2, Quests depend on the fr
 Event-access interface, not an unfinished Event implementation; messaging depends on
 frozen event envelopes, not direct calls into feature internals. Stubs/fakes are for
 contract tests only. M2 is not complete until real module implementations are integrated.
+
+M1 verification (2026-09-14): the strict Release build and
+[CI run 34861029210](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
+passed 1,298 unit cases, 324 real migrated-SQL cases, and 35 browser-project cases,
+including seven actual Linux Chromium journeys. All discovered cases executed and
+passed. The browser journeys verify synthetic admission, Fluent binding/dialog content,
+360px keyboard interaction without horizontal overflow, protected navigation, and logout.
+Public XML documentation is build-enforced. This establishes the M1 foundation gate,
+not M2 business workflows, M4 full-product acceptance, or live provider approval.
 
 ### Ownership map
 
@@ -1964,6 +1974,20 @@ Each assignment must include:
 - Required focused tests and the commands established in M1; no invented success claims.
 - Handoff containing changed files, behavior, migration needs, test results, unresolved blockers,
   and integration steps.
+
+All C# work follows pragmatic SOLID principles, cohesive responsibilities, dependency
+inversion, clear naming, nullable safety, cancellation-aware async, and explicit failures.
+Every public C# type/member must have meaningful XML documentation, including public
+constructors, properties, methods, fields/constants, enum members, interfaces, and
+handwritten test APIs. Document parameters, returns, relevant exceptions, units,
+nullability, state transitions, and side effects; use inherited documentation only
+where it genuinely describes the implementation. Missing public documentation fails
+the build through XML generation and warnings-as-errors. Comment quality remains a
+review requirement, not something a passing compiler check alone establishes.
+The user-selected C# guide is pinned and linked in
+`.github\instructions\csharp.instructions.md`; all agents follow it alongside these
+requirements. Apply `.editorconfig`, keep handwritten public types in matching
+individual files, and review conformance before integrating the foundation.
 
 Give each concurrent agent a separate branch/worktree where available. Do not allow
 unsynchronized edits in a shared working tree. Never let two agents own the same file
@@ -1993,6 +2017,7 @@ audit, delivery, or persistence path is unwired.
 concurrency and idempotency behavior, required audit/outbox effects, accessible success/
 empty/error states, focused passing tests, and updated directly related documentation.
 No silent fallback providers, TODO authorization, fake deliveries, or unused adapters.
+Public C# APIs are XML-documented and the change meets the C# standards in `AGENTS.md`.
 Submit the change through a pull request under `vaclav-pekarek-microsoft`; integration
 is complete only after the PR is merged under the agreed review process.
 Record any unavailable external verification honestly.
@@ -2046,6 +2071,9 @@ not V1 release requirements.
 | D33 | 2026-09-14 | Accept sections 59–60: foundation/shared contracts first, then 2–3 bounded feature agents in separate worktrees, integration-owner control of shared configuration/contracts/migrations/merges, frequent vertical integration, dependency-gated secondary features, acceptance-ID-based task handoffs, and end-to-end definition of done. No agents or implementation started by this decision. |
 | D34 | 2026-09-14 | Approve the reconciled full V1 baseline, including supporting authorization, administrator, schema, durable job, security, and non-goal contracts. Earlier supersessions remain effective. Mark Accepted for implementation; external evidence/approvals remain open. This approval does not start implementation or launch agents; wait for a separate development instruction. |
 | D35 | 2026-09-14 | All repository changes must go through pull requests using the GitHub account vaclav-pekarek-microsoft, including documentation and sub-agent work. Use task branches and matching Git author/committer identity; no direct default/integration-branch changes or alternate/bot publishing identity. |
+| D36 | 2026-09-14 | Implementation is authorized. Automatically merge verified PRs when configured review/CI requirements pass, while retaining PR-only changes and the vaclav-pekarek-microsoft identity. M1 foundation begins before parallel feature work; external approval gates still apply. |
+| D37 | 2026-09-14 | C# implementation must follow good engineering standards, including pragmatic SOLID. All public classes/types and members, methods, properties, constructors, fields, and enum values require proper XML documentation; enforce missing-documentation failures in builds and review semantic quality before merging. |
+| D38 | 2026-09-14 | Adopt PlagueHO/github-copilot-assets-library's csharp-best-practices.instructions.md as the C# baseline for all development agents, pinned at commit ea4125167b98053f083cffcc79883221f872da30. Record its application in repository instructions and EditorConfig; retain D37's public XML documentation requirement and apply the baseline before foundation integration. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
