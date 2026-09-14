@@ -1,0 +1,132 @@
+@page "/events/{Id:guid}/members"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+
+<PageTitle>Event membership · Sidequest</PageTitle>
+<h1>Individual members and equal owners</h1>
+<a href="@($"/events/{Id}")">Event</a>
+<EventFeedback Busy="Busy" Error="Error" />
+<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+@if (detail?.Summary.IsOwner == true)
+{
+    <DirectoryPicker UserSelected="SelectUser" RecheckAccess="LoadAsync" />
+    @if (selected is not null)
+    {
+        <p>Selected: @selected.DisplayName (@selected.Email)</p>
+        <FluentCheckbox @bind-Value="restore">Explicitly restore this individual if previously removed. Prior Quest participation is never restored.</FluentCheckbox>
+        <FluentCheckbox @bind-Value="ownerConfirmed">I confirm granting equal owner permissions and required individual membership.</FluentCheckbox>
+        <p>
+            <FluentButton Disabled="@Busy" OnClick="@(() => AddAsync(false, false))">Add individual member</FluentButton>
+            @if (detail.Summary.Status == EventStatus.Active)
+            {
+                <FluentButton Disabled="@Busy" OnClick="@(() => AddAsync(true, false))">Invite with acceptance</FluentButton>
+            }
+            <FluentButton Disabled="@(Busy || !ownerConfirmed)" OnClick="@(() => AddAsync(false, true))">Add equal owner</FluentButton>
+        </p>
+    }
+    <FluentTextArea Label="Membership removal reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" />
+    <FluentCheckbox @bind-Value="removalConfirmed">I confirm removal ends this user's Quest invitations, attendance, follows, and applicable calendars. Owners must first be removed from all Event and child Quest owner lists.</FluentCheckbox>
+    <FluentCheckbox @bind-Value="removeOwnerConfirmed">I confirm removing the selected equal owner role. At least one eligible owner must remain; membership itself is retained.</FluentCheckbox>
+}
+@if (members is not null)
+{
+    @if (members.Items.Count == 0)
+    {
+        <p>No individual membership records in this view.</p>
+    }
+    <ul>
+        @foreach (var member in members.Items)
+        {
+            <li @key="member.User.Id">
+                <strong>@member.User.DisplayName</strong> · @member.Status · @(member.IsOwner ? "Equal owner" : "Member")
+                @if (detail?.Summary.IsOwner == true)
+                {
+                    @if (member.IsOwner)
+                    {
+                        <FluentButton Disabled="@(Busy || !removeOwnerConfirmed)" OnClick="@(() => RemoveAsync(member.User.Id, true))">Remove owner role</FluentButton>
+                    }
+                    else if (member.Status == MembershipStatus.Active)
+                    {
+                        <FluentButton Disabled="@(Busy || !removalConfirmed || reason.Trim().Length < 10)" OnClick="@(() => RemoveAsync(member.User.Id, false))">Remove membership</FluentButton>
+                    }
+                }
+            </li>
+        }
+    </ul>
+    <EventPager Page="page" TotalCount="members.TotalCount" Busy="Busy" Changed="PageAsync" />
+}
+
+@code {
+    /// <summary>Event whose audience is reauthorized before reading or changing individual memberships.</summary>
+    [Parameter] public Guid Id { get; set; }
+    private EventDetail? detail;
+    private PageResult<MembershipSummary>? members;
+    private DirectoryUser? selected;
+    private string reason = "";
+    private bool restore;
+    private bool ownerConfirmed;
+    private bool removeOwnerConfirmed;
+    private bool removalConfirmed;
+    private int page = 1;
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+    private Task LoadAsync() => RunAsync(RefreshAsync);
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+    private async Task RefreshAsync(CancellationToken token)
+    {
+        detail = null;
+        members = null;
+        var loaded = await Events.GetAsync(Id, token);
+        var audience = await Events.ListMembersAsync(Id, new(page), token);
+        token.ThrowIfCancellationRequested();
+        detail = loaded;
+        members = audience;
+    }
+    private void SelectUser(DirectoryUser user)
+    {
+        selected = user;
+        ownerConfirmed = false;
+        restore = false;
+    }
+    private Task AddAsync(bool invite, bool owner) => RunAsync(async token =>
+    {
+        if (selected is null)
+            return;
+        if (owner)
+            await Events.AddOwnerAsync(Id, selected.ObjectId, token);
+        else if (invite)
+            await Events.InviteAsync(Id, selected.ObjectId, token);
+        else
+            await Events.AddMemberAsync(Id, selected.ObjectId, restore, token);
+        selected = null;
+        await RefreshAsync(token);
+    });
+    private Task RemoveAsync(Guid userId, bool owner) => RunAsync(async token =>
+    {
+        if (owner)
+            await Events.RemoveOwnerAsync(Id, userId, token);
+        else
+            await Events.RemoveMemberAsync(Id, userId, reason, token);
+        removalConfirmed = false;
+        removeOwnerConfirmed = false;
+        await RefreshAsync(token);
+    });
+    private Task PageAsync(int selectedPage)
+    {
+        page = selectedPage;
+        return LoadAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        detail = null;
+        members = null;
+        selected = null;
+    }
+}

@@ -1,0 +1,86 @@
+@inherits EventViewBase
+@inject NavigationManager Navigation
+@inject Sidequest.Application.Events.Implementation.IEventManagementQueries Management
+
+<section aria-label="Owner lifecycle actions">
+    <h2>Lifecycle</h2>
+    <EventFeedback Busy="Busy" Error="Error" />
+    @if (Item.Status == EventStatus.Draft)
+    {
+        <p>Publishing lists this Event to eligible users and activates the configured individual audience.</p>
+        <FluentButton Disabled="@Busy" OnClick="@(() => TransitionAsync(EventStatus.Active))">Publish Event</FluentButton>
+    }
+    @if (Item.Status is EventStatus.Draft or EventStatus.Active)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadImpactAsync">Review cancellation impact</FluentButton>
+        @if (affectedQuests is { } count)
+        {
+            <p role="status">Cancellation currently affects @count Draft, Active, or Suspended child Quests. Counts may change while you review.</p>
+        }
+        <FluentTextArea Label="Cancellation reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" />
+        <FluentCheckbox @bind-Value="confirmed">Cancel all Draft, Active, and Suspended child Quests, close pending membership work, and withdraw affected calendars. This cannot be undone.</FluentCheckbox>
+        <FluentButton Disabled="@(Busy || affectedQuests is null || !confirmed || reason.Trim().Length < 10)" OnClick="@(() => TransitionAsync(EventStatus.Cancelled))">Cancel Event and affected Quests</FluentButton>
+    }
+    @if (Item.Status is EventStatus.Completed or EventStatus.Cancelled)
+    {
+        <p>Archive retains authorized history and access revocation. All Quests must be completed, cancelled, or archived.</p>
+        <FluentButton Disabled="@Busy" OnClick="@(() => TransitionAsync(EventStatus.Archived))">Archive Event</FluentButton>
+    }
+    @if (Item.Status == EventStatus.Draft)
+    {
+        <FluentCheckbox @bind-Value="deleteConfirmed">Permanently delete this unpublished Draft. Deletion is allowed only without requests, invitations, or Quests.</FluentCheckbox>
+        <FluentButton Disabled="@(Busy || !deleteConfirmed)" OnClick="DeleteAsync">Delete Draft</FluentButton>
+    }
+</section>
+
+@code {
+    private string reason = "";
+    private bool confirmed;
+    private bool deleteConfirmed;
+    private int? affectedQuests;
+    /// <summary>Owner-authorized lifecycle and rowversion snapshot; never mutated by this component.</summary>
+    [Parameter, EditorRequired] public EventSummary Item { get; set; } = null!;
+    /// <summary>Requests parent reload after a successful lifecycle transition or an access denial.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private async Task LoadImpactAsync()
+    {
+        await RunAsync(async token =>
+        {
+            affectedQuests = null;
+            confirmed = false;
+            affectedQuests = await Management.GetCancellationImpactAsync(Item.Id, token);
+        });
+        if (Error is not null)
+            await Changed.InvokeAsync();
+    }
+
+    private async Task TransitionAsync(EventStatus target)
+    {
+        await RunAsync(async token =>
+        {
+            await Events.ChangeStatusAsync(Item.Id, Item.Version, target, reason, token);
+            confirmed = false;
+            affectedQuests = null;
+            reason = "";
+        });
+        await Changed.InvokeAsync();
+    }
+    private async Task DeleteAsync()
+    {
+        await RunAsync(async token =>
+        {
+            await Events.DeleteDraftAsync(Item.Id, Item.Version, token);
+            Navigation.NavigateTo("/events");
+        });
+        if (Error is not null)
+            await Changed.InvokeAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        affectedQuests = null;
+        confirmed = false;
+        deleteConfirmed = false;
+    }
+}

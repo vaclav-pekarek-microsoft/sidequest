@@ -1,0 +1,90 @@
+@page "/events/{Id:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+@inject NavigationManager Navigation
+
+<PageTitle>Event · Sidequest</PageTitle>
+<h1>Event</h1>
+<a href="/events">Events</a>
+<EventFeedback Busy="Busy" Error="Error" />
+<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+@if (detail is not null)
+{
+    <EventCard Item="detail.Summary" />
+    @if (detail.Description is not null)
+    {
+        <section>
+            <h2>Description</h2>
+            <p class="description">@detail.Description</p>
+            <p><a href="@($"/quests?eventId={Id}")">Quests in this Event</a></p>
+            @if (detail.Summary.Status == EventStatus.Active)
+            {
+                <a href="@($"/quests/create?eventId={Id}")">Create Quest</a>
+            }
+            <p><a href="@($"/events/{Id}/members")">Members</a></p>
+            @if (detail.Summary.IsOwner)
+            {
+                <p><a href="@($"/events/{Id}/edit")">Settings</a> ·
+                    <a href="@($"/events/{Id}/requests")">Membership requests</a> ·
+                    <a href="@($"/events/{Id}/invitations")">Event invitations</a> ·
+                    <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a> ·
+                    <a href="@($"/quests/moderation?eventId={Id}")">Quest moderation</a>
+                </p>
+                <EventLifecycle Item="detail.Summary" Changed="LoadAsync" />
+            }
+            else
+            {
+                <FluentCheckbox @bind-Value="leaveConfirmed">I understand leaving removes Quest invitations, attendance, follows, and applicable calendar entries.</FluentCheckbox>
+                <FluentButton Disabled="@(Busy || !leaveConfirmed)" OnClick="LeaveAsync">Leave Event</FluentButton>
+                <p>Owners must remove all Event and child Quest ownership assignments before leaving.</p>
+            }
+        </section>
+    }
+    else
+    {
+        <p>Only the discovery summary and owner contacts are available. Request membership to see full content.</p>
+        <FluentButton Disabled="@Busy" OnClick="RequestAsync">Request membership</FluentButton>
+        @if (requested)
+        {
+            <p role="status">Your request is pending. <a href="/events/requests">View my requests</a></p>
+        }
+    }
+}
+
+@code {
+    /// <summary>Internal Event route identifier; every load reauthorizes it on the server.</summary>
+    [Parameter] public Guid Id { get; set; }
+    private EventDetail? detail;
+    private bool leaveConfirmed;
+    private bool requested;
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync() => LoadAsync();
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+    private Task LoadAsync() => RunAsync(async token =>
+    {
+        detail = null;
+        leaveConfirmed = false;
+        requested = false;
+        var loaded = await Events.GetAsync(Id, token);
+        token.ThrowIfCancellationRequested();
+        detail = loaded;
+    });
+    private Task RequestAsync() => RunAsync(async token =>
+    {
+        await Events.RequestMembershipAsync(Id, token);
+        var loaded = await Events.GetAsync(Id, token);
+        token.ThrowIfCancellationRequested();
+        detail = loaded;
+        requested = !loaded.Summary.IsMember;
+    });
+    private Task LeaveAsync() => RunAsync(async token =>
+    {
+        await Events.LeaveAsync(Id, token);
+        detail = null;
+        Navigation.NavigateTo("/events");
+    });
+    /// <inheritdoc />
+    protected override void ClearProtectedState() => detail = null;
+}

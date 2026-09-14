@@ -1,0 +1,117 @@
+@page "/events/create"
+@page "/events/{Id:guid}/edit"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+@inject NavigationManager Navigation
+@inject TimeProvider Clock
+
+<PageTitle>Event editor · Sidequest</PageTitle>
+<h1>@(Id is null ? "Create Event" : "Edit Event")</h1>
+<a href="/events">Events</a>
+<EventFeedback Busy="Busy" Error="Error" />
+@if (input is not null)
+{
+    <EventEditor Input="input" Busy="Busy" ZoneLocked="@(detail?.Summary.Status != EventStatus.Draft && Id is not null)" Submitted="SaveAsync" />
+}
+@if (duplicates.Count > 0)
+{
+    <section aria-label="Potential duplicate Events">
+        <h2>Similar Events overlap these dates</h2>
+        <p>Review the existing Events and owner contacts. This is a warning, not a restriction.</p>
+        @foreach (var duplicate in duplicates)
+        {
+            <EventCard @key="duplicate.Event.Id" Item="duplicate.Event" />
+        }
+        <FluentButton Disabled="@Busy" OnClick="CreateAnywayAsync">Create anyway</FluentButton>
+    </section>
+}
+@if (Id is not null)
+{
+    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Discard local form and reload</FluentButton>
+}
+
+@code {
+    /// <summary>Event to edit, or null for a new Draft. Route changes cancel stale loads.</summary>
+    [Parameter] public Guid? Id { get; set; }
+    private EventDetail? detail;
+    private EventInput? input;
+    private EventInput? proposed;
+    private IReadOnlyList<DuplicateEvent> duplicates = [];
+
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => RunAsync(async token =>
+    {
+        if (Id is { } id)
+        {
+            var current = await Events.GetAsync(id, token);
+            if (!current.Summary.IsOwner)
+                throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.NotFound, "Unavailable.");
+            if (current.Summary.Status is not (EventStatus.Draft or EventStatus.Active) ||
+                detail is not null && current.Summary.Version != detail.Summary.Version)
+                throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.Conflict, "Reload before editing.");
+            // Retain the user's unsaved fields and original rowversion; never silently overwrite an edit.
+        }
+        else
+        {
+            await Events.ListAsync(EventListKind.Mine, new(1, 1), token);
+        }
+    });
+
+    private Task LoadAsync() => RunAsync(async token =>
+    {
+        ClearProtectedState();
+        if (Id is { } id)
+        {
+            var loaded = await Events.GetAsync(id, token);
+            token.ThrowIfCancellationRequested();
+            if (!loaded.Summary.IsOwner)
+                throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.NotFound, "Unavailable.");
+            detail = loaded;
+            var item = loaded.Summary;
+            input = new(item.Name, loaded.Description ?? "", item.DiscoverySummary, item.StartDate, item.EndDate, item.TimeZoneId);
+        }
+        else
+        {
+            var today = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+            input = new("", "", "", today, today, "Etc/UTC");
+        }
+    });
+
+    private Task SaveAsync(EventInput values) => RunAsync(async token =>
+    {
+        if (Id is { } id && detail is not null)
+        {
+            await Events.EditAsync(id, detail.Summary.Version, values, token);
+            Navigation.NavigateTo($"/events/{id}");
+            return;
+        }
+        proposed = values;
+        duplicates = await Events.FindDuplicatesAsync(values.Name, values.StartDate, values.EndDate, token);
+        if (duplicates.Count == 0)
+            await CreateAsync(values, token);
+    });
+
+    private Task CreateAnywayAsync() => RunAsync(async token =>
+    {
+        if (proposed is not null)
+            await CreateAsync(proposed, token);
+    });
+
+    private async Task CreateAsync(EventInput values, CancellationToken token)
+    {
+        var created = await Events.CreateAsync(values, token);
+        Navigation.NavigateTo($"/events/{created}");
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        detail = null;
+        input = null;
+        proposed = null;
+        duplicates = [];
+    }
+}
