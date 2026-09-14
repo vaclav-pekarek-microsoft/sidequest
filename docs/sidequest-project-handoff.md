@@ -1975,6 +1975,17 @@ Shared M2 integration contracts:
   bounds to an additional `IQuestService.ListAsync` overload. Apply the same predicates
   before count and paging. Convert date controls using the selected Event zone, or
   visibly labeled UTC for cross-Event lists; do not filter an already-paged result.
+- The calendar recovery HTTP boundary uses authenticated
+  `GET /notifications/calendar/{questId:guid}` and delegates current authorization to
+  `INotificationService.DownloadCalendarAsync`. Return exact UTF-8 calendar content as
+  `text/calendar; charset=utf-8; method=REQUEST`, attachment `sidequest.ics`, with
+  `Cache-Control: no-store` and no range/cached-version processing. Initialize only the
+  HTTP request's scoped authentication provider from its middleware-validated principal;
+  never capture an HTTP principal in an interactive circuit or renew its session deadline.
+  Forward request cancellation and retain safe error responses. The endpoint mapper is
+  preparatory until the integration owner registers the real notification service and
+  maps it in application startup; passing isolated endpoint tests does not prove that
+  application composition is complete.
 
 ### Ownership map
 
