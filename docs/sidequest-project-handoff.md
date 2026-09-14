@@ -1396,7 +1396,11 @@ cancelled/completed Quests.
 
 Draft Events cannot contain Quests. Hard deletion is permitted only for an unpublished
 Draft Event with no requests, invitations, or Quests; record the deletion in the audit log.
-A Draft Event is never disclosed to a non-manager. Completed/Cancelled/Archived Events are excluded
+A Draft Event is never disclosed to a non-manager. An Event cancelled before publication
+retains owner-only access after cancellation and archival; draft audience membership does
+not become usable through cancellation. Retained Draft-to-Cancelled Event history identifies
+that restriction, and every direct Event/child/delivery query must honor it.
+Completed/Cancelled/Archived Events are excluded
 from non-member discovery; an already-known link gives only a minimal unavailable-state
 response, with no Event content.
 
