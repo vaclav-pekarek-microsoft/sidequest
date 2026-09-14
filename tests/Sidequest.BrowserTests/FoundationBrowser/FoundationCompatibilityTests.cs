@@ -9,7 +9,7 @@ namespace Sidequest.BrowserTests.FoundationBrowser;
 public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixture) : IClassFixture<FoundationBrowserFixture>
 {
     private const string Completion = "Preview completed. Nothing was saved.";
-    private static readonly Regex SyntheticBanner = new("SYNTHETIC DEVELOPMENT", RegexOptions.CultureInvariant);
+    private static readonly Regex SyntheticBanner = new("SYNTHETIC DEVELOPMENT");
 
     /// <summary>Checks each synthetic sign-in path, actual Fluent label binding into the dialog, and its exact no-save completion message.</summary>
     /// <param name="persona">The Alice, Bob, Admin, or Carol option selected through the synthetic login form.</param>
