@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Start isolated SQL Server
+        shell: bash
+        run: |
+          password="Sq1!$(openssl rand -hex 20)"
+          echo "::add-mask::$password"
+          echo "SIDEQUEST_TEST_SQL=Server=localhost,1433;User ID=sa;Password=$password;Encrypt=true;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          docker run --name sidequest-test-sql -d -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$password" \
+            mcr.microsoft.com/mssql/server:2022-latest
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec sidequest-test-sql /opt/mssql-tools18/bin/sqlcmd \
+              -S localhost -U sa -P "$password" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            echo "SQL Server did not become ready."
+            exit 1
+          fi
+      - run: dotnet restore Sidequest.slnx
+      - run: dotnet build Sidequest.slnx --no-restore --configuration Release
+      - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
+      - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
+      - name: Install browser test runtime
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: pwsh
+        run: tests/Sidequest.BrowserTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Start synthetic browser-test application
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: bash
+        run: |
+          export SIDEQUEST_SQL_CONNECTION="$SIDEQUEST_TEST_SQL;Database=SidequestBrowserCi"
+          export ConnectionStrings__Sidequest="$SIDEQUEST_SQL_CONNECTION"
+          export ASPNETCORE_ENVIRONMENT=Development
+          export Authentication__Mode=Development
+          dotnet tool restore
+          dotnet ef database update --project src/Sidequest.Infrastructure --startup-project src/Sidequest.Infrastructure --configuration Release --no-build
+          dotnet run --project src/Sidequest.Web --configuration Release --no-build --no-launch-profile -- --urls http://127.0.0.1:5078 > "$RUNNER_TEMP/sidequest-web.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/sidequest-web.pid"
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5078/health/ready >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            echo "The synthetic browser-test application did not become ready."
+            exit 1
+          fi
+      - name: Run real browser checks
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: pwsh
+        env:
+          SIDEQUEST_BASE_URL: http://127.0.0.1:5078
+        run: |
+          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$result = Get-Content tests/Sidequest.BrowserTests/TestResults/browser.trx
+          if ([int]$result.TestRun.ResultSummary.Counters.total -lt 1) {
+            throw "No browser scenarios were executed."
+          }
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: warn
+      - name: Stop test application
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/sidequest-web.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/sidequest-web.pid")" 2>/dev/null || true
+          fi
+      - name: Stop isolated SQL Server
+        if: always()
+        run: docker rm --force sidequest-test-sql
