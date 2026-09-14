@@ -1,0 +1,72 @@
+@inherits EventViewBase
+
+<fieldset disabled="@Busy">
+    <legend>@(Groups ? "Choose a source group" : "Choose a workforce user")</legend>
+    <FluentTextField Label="Directory search (at least two characters)" @bind-Value="query" Maxlength="100" />
+    <FluentButton OnClick="SearchAsync" Disabled="@(Busy || query.Trim().Length < 2)">Search directory</FluentButton>
+    <EventFeedback Busy="Busy" Error="@Error" />
+    @if (searched && users.Count == 0 && groups.Count == 0 && Error is null)
+    {
+        <p>No eligible matching directory entries.</p>
+    }
+    <ul>
+        @foreach (var user in users)
+        {
+            <li @key="user.ObjectId">
+                <FluentButton OnClick="@(() => UserSelected.InvokeAsync(user))">@user.DisplayName (@user.Email)</FluentButton>
+            </li>
+        }
+        @foreach (var group in groups)
+        {
+            <li @key="group.ObjectId">
+                <FluentButton OnClick="@(() => GroupSelected.InvokeAsync(group))">@group.DisplayName</FluentButton>
+            </li>
+        }
+    </ul>
+</fieldset>
+
+@code {
+    private string query = "";
+    private bool searched;
+    private IReadOnlyList<DirectoryUser> users = [];
+    private IReadOnlyList<DirectoryGroup> groups = [];
+    /// <summary>Selects group search for one-time expansion rather than individual user search.</summary>
+    [Parameter] public bool Groups { get; set; }
+    /// <summary>Reports the selected directory identity; commands re-resolve it and never trust submitted contact fields.</summary>
+    [Parameter] public EventCallback<DirectoryUser> UserSelected { get; set; }
+    /// <summary>Reports a source group for an explicit background action, never an authorization grant.</summary>
+    [Parameter] public EventCallback<DirectoryGroup> GroupSelected { get; set; }
+    /// <summary>Requests parent resource reauthorization after a failed identity/access check without hiding provider errors.</summary>
+    [Parameter] public EventCallback RecheckAccess { get; set; }
+
+    private async Task SearchAsync()
+    {
+        await RunAsync(async token =>
+        {
+            users = [];
+            groups = [];
+            searched = true;
+            if (Groups)
+            {
+                var result = await Events.SearchGroupsAsync(query, token);
+                token.ThrowIfCancellationRequested();
+                groups = result;
+            }
+            else
+            {
+                var result = await Events.SearchUsersAsync(query, token);
+                token.ThrowIfCancellationRequested();
+                users = result;
+            }
+        });
+        if (AccessDenied)
+            await RecheckAccess.InvokeAsync();
+    }
+
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        users = [];
+        groups = [];
+    }
+}

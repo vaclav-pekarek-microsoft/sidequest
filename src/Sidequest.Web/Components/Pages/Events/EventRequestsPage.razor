@@ -1,0 +1,82 @@
+@page "/events/requests"
+@page "/events/{Id:guid}/requests"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+
+<PageTitle>Membership requests · Sidequest</PageTitle>
+<h1>@(Id is null ? "My membership requests" : "Manage membership requests")</h1>
+<a href="/events">Events</a>
+<EventFeedback Busy="Busy" Error="@Error" />
+<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+@if (Id is not null)
+{
+    <FluentTextArea Label="Decision reason (required for rejection, 10–2,000 characters)" @bind-Value="reason" Maxlength="2000" />
+}
+@if (result is not null)
+{
+    @if (result.Items.Count == 0)
+    {
+        <p>No membership requests.</p>
+    }
+    @foreach (var request in result.Items)
+    {
+        <article @key="request.Id">
+            <h2>@request.EventName · @request.User.DisplayName</h2>
+            <p>@request.Status · @request.CreatedUtc.ToString("g") UTC</p>
+            <p>@request.Reason</p>
+            @if (request.Status == MembershipRequestStatus.Pending)
+            {
+                @if (Id is null)
+                {
+                    <FluentButton Disabled="@Busy" OnClick="@(() => ActAsync(request.Id, null))">Withdraw request</FluentButton>
+                }
+                else
+                {
+                    <FluentButton Disabled="@Busy" OnClick="@(() => ActAsync(request.Id, true))">Approve membership</FluentButton>
+                    <FluentButton Disabled="@(Busy || reason.Trim().Length < 10)" OnClick="@(() => ActAsync(request.Id, false))">Reject with reason</FluentButton>
+                }
+            }
+        </article>
+    }
+    <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="PageAsync" />
+}
+
+@code {
+    /// <summary>Managed Event identifier, or null for requests belonging only to the current user.</summary>
+    [Parameter] public Guid? Id { get; set; }
+    private PageResult<RequestSummary>? result;
+    private string reason = "";
+    private int page = 1;
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+    private Task LoadAsync() => RunAsync(RefreshAsync);
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+    private async Task RefreshAsync(CancellationToken token)
+    {
+        result = null;
+        var loaded = await Events.ListRequestsAsync(Id, new(page), token);
+        token.ThrowIfCancellationRequested();
+        result = loaded;
+    }
+    private Task ActAsync(Guid request, bool? approve) => RunAsync(async token =>
+    {
+        if (approve is { } decision)
+            await Events.DecideRequestAsync(request, decision, reason, token);
+        else
+            await Events.WithdrawRequestAsync(request, token);
+        await RefreshAsync(token);
+    });
+    private Task PageAsync(int selected)
+    {
+        page = selected;
+        return LoadAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState() => result = null;
+}

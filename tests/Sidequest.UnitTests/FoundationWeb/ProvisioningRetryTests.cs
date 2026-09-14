@@ -190,6 +190,10 @@ public sealed class ProvisioningRetryTests
         }
 
         /// <inheritdoc/>
+        public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not acquire Event locks.");
+
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             Disposed = true;

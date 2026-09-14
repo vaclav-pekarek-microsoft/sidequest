@@ -1,0 +1,78 @@
+@using Sidequest.Domain.Model
+<section aria-labelledby="management-title">
+    <h2 id="management-title">@(Moderation ? "Event-owner moderation" : "Quest management")</h2>
+    @if (Moderation)
+    {
+        <p>This audited view contains no participant counts or rosters. Event ownership does not grant editing rights.</p>
+    }
+    else
+    {
+        @if (Detail.Summary.Status is QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended)
+        {
+            <a href="@($"/quests/{Detail.Summary.Id}/edit")">Edit content</a>
+        }
+        <label>Event member / current owner
+            <select @bind="selected" disabled="@Busy">
+                <option value="">Choose a person</option>
+                @foreach (var person in Candidates)
+                {
+                    <option @key="person.Id" value="@person.Id">@person.DisplayName</option>
+                }
+            </select>
+        </label>
+        <FluentButton Disabled="@(Busy || MemberPage <= 1)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage - 1))">Previous members</FluentButton>
+        <FluentButton Disabled="@(Busy || !MoreMembers)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage + 1))">More members</FluentButton>
+    }
+    <FluentTextArea Label="Reason (10–2000 characters for cancellation, moderation, or removal)" @bind-Value="reason" Disabled="@Busy" />
+    <label>
+        <input type="checkbox" @bind="confirmed" disabled="@Busy" />
+        I confirm this action. Cancellation/suspension withdraws attendee calendars; removal can end access
+        and attendance; ownership changes give/remove equal management rights. Nothing joins another person.
+    </label>
+    <div>
+        @if (Moderation)
+        {
+            @if (Detail.Summary.Status == QuestStatus.Active)
+            {
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("suspend"))">Suspend</FluentButton>
+            }
+            @if (Detail.Summary.Status == QuestStatus.Suspended)
+            {
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("reinstate"))">Reinstate with latest details</FluentButton>
+            }
+        }
+        else
+        {
+            @if (Detail.Summary.Status == QuestStatus.Draft)
+            {
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("publish"))">Publish draft</FluentButton>
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("delete"))">Delete draft</FluentButton>
+            }
+            @if (Detail.Summary.Status is QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended)
+            {
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("cancel"))">Cancel Quest</FluentButton>
+            }
+            @if (Detail.Summary.Status is QuestStatus.Completed or QuestStatus.Cancelled)
+            {
+                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("archive"))">Archive</FluentButton>
+            }
+            @if (Detail.Summary.Status != QuestStatus.Archived)
+            {
+                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("add-owner"))">Add equal owner</FluentButton>
+            }
+            <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("remove-owner"))">Remove owner access</FluentButton>
+            @if (Detail.Summary.Visibility == QuestVisibility.Private)
+            {
+                @if (Detail.Summary.Status == QuestStatus.Active)
+                {
+                    <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("invite"))">Invite (immediate access)</FluentButton>
+                }
+                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("revoke"))">Revoke invitation</FluentButton>
+            }
+            @if (Detail.Summary.Status is QuestStatus.Active or QuestStatus.Suspended)
+            {
+                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("remove-attendee"))">Remove attendee</FluentButton>
+            }
+        }
+    </div>
+</section>

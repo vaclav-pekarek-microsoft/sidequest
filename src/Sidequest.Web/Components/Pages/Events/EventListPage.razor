@@ -1,0 +1,63 @@
+@page "/events"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+
+<PageTitle>Events · Sidequest</PageTitle>
+<h1>Events</h1>
+<nav aria-label="Event views">
+    <a href="/events/create">Create Event</a> ·
+    <a href="/events/requests">My requests</a> ·
+    <a href="/events/invitations">My invitations</a>
+</nav>
+<p>
+    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Mine))">My Events</FluentButton>
+    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Available))">Available Events</FluentButton>
+    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
+</p>
+<h2>@kind</h2>
+<EventFeedback Busy="Busy" Error="@Error" />
+<FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
+@if (result is not null)
+{
+    @if (result.Items.Count == 0)
+    {
+        <p>No Events in this view. Available Events are open to membership requests.</p>
+    }
+    @foreach (var item in result.Items)
+    {
+        <EventCard @key="item.Id" Item="item" />
+    }
+    <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="ChangePageAsync" />
+}
+
+@code {
+    private EventListKind kind;
+    private int page = 1;
+    private PageResult<EventSummary>? result;
+    /// <inheritdoc />
+    protected override Task OnInitializedAsync() => LoadAsync();
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+
+    private Task LoadAsync() => RunAsync(async token =>
+    {
+        result = null;
+        var loaded = await Events.ListAsync(kind, new(page), token);
+        token.ThrowIfCancellationRequested();
+        result = loaded;
+    });
+    private Task SelectAsync(EventListKind selected)
+    {
+        kind = selected;
+        page = 1;
+        return LoadAsync();
+    }
+    private Task ChangePageAsync(int selected)
+    {
+        page = selected;
+        return LoadAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState() => result = null;
+}

@@ -28,7 +28,8 @@ public interface IResourceAccess
     /// <param name="userId">Internal actor account ID, required to match the eligible current identity.</param>
     /// <param name="ownerOnly">Whether Event ownership is required in addition to the ordinary read predicate.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of authorization reads.</param>
-    /// <returns>The authorized Event; Draft access is owner-only and non-draft full access requires active membership.</returns>
+    /// <returns>The authorized Event. Eligibility and active membership are always required;
+    /// drafts and Events cancelled without publication remain owner-only, including after archival.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Current account is forbidden, or the resource/actor/access check fails with a non-disclosing NotFound outcome.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<Event> RequireEventAsync(ISidequestDbContext db, Guid eventId, Guid userId, bool ownerOnly = false, CancellationToken cancellationToken = default);
@@ -39,7 +40,9 @@ public interface IResourceAccess
     /// <param name="ownerOnly">Whether Quest ownership is additionally required, including when moderation is requested.</param>
     /// <param name="moderation">Selects Event-owner moderation instead of ordinary visibility/invitation rules; never grants draft access or roster disclosure.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of authorization reads.</param>
-    /// <returns>The authorized Quest. Callers remain responsible for privacy-filtered projections and private moderation-access auditing.</returns>
+    /// <returns>The authorized Quest. A cancelled unpublished draft remains owner-only, including after archival,
+    /// and is never exposed through moderation. Callers remain responsible for privacy-filtered projections
+    /// and private moderation-access auditing.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Current account is forbidden, or missing resources and failed access checks produce a non-disclosing NotFound outcome.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     /// <example>

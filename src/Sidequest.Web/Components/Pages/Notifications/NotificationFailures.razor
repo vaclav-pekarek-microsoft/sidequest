@@ -1,0 +1,44 @@
+@page "/notifications/failures"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Delivery recovery · Sidequest</PageTitle>
+<h1>Delivery recovery</h1>
+<a href="/notifications">Back to notifications</a>
+<p>Administrator-only, redacted diagnostics. This screen grants no Event or Quest content access.</p>
+<p>Correct configuration or dependency failures before replay. Replays retain logical keys and recheck current access; uncertain email submission can cause duplicates.</p>
+<div role="status" aria-live="polite">@status</div>
+@if (error is not null)
+{
+    <p role="alert">@error</p>
+}
+<FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Refresh failures</FluentButton>
+@if (busy)
+{
+    <p>Loading delivery state…</p>
+}
+else if (failures is not null)
+{
+    @if (failures.Count == 0)
+    {
+        <p>No failed work is currently listed.</p>
+    }
+    <ul>
+        @foreach (var failure in failures)
+        {
+            <li @key="failure.Id">
+                <p>@failure.Kind · @failure.Attempts attempts · @failure.Error</p>
+                <FluentButton OnClick="@(() => pending = failure)" Disabled="@(busy || !RendererInfo.IsInteractive)">Review replay</FluentButton>
+            </li>
+        }
+    </ul>
+}
+@if (pending is not null)
+{
+    <section aria-labelledby="replay-heading">
+        <h2 id="replay-heading">Confirm replay</h2>
+        <p>Have you corrected the dependency? Replay may submit an uncertain message again. Obsolete content remains suppressed.</p>
+        <FluentButton OnClick="ReplayAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Confirm replay</FluentButton>
+        <FluentButton OnClick="@(() => pending = null)" Disabled="@(busy || !RendererInfo.IsInteractive)">Cancel</FluentButton>
+    </section>
+}

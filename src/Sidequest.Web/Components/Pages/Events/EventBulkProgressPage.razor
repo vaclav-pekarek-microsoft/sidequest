@@ -1,0 +1,77 @@
+@page "/events/bulk/{Id:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits EventViewBase
+@using Sidequest.Application.Events.Implementation
+@inject IEventManagementQueries Management
+
+<PageTitle>Bulk membership progress · Sidequest</PageTitle>
+<h1>Bulk membership progress</h1>
+<a href="/events">Events</a>
+<EventFeedback Busy="Busy" Error="@Error" />
+<FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
+@if (progress is not null)
+{
+    <p role="status">@progress.Mode · @progress.Status</p>
+    <dl>
+        <dt>Frozen recipients</dt><dd>@progress.Total</dd>
+        <dt>Applied individuals</dt><dd>@progress.Applied</dd>
+        <dt>Skipped individuals</dt><dd>@progress.Skipped</dd>
+        <dt>Failed individuals</dt><dd>@progress.Failed</dd>
+        <dt>Unfinished</dt><dd>@(progress.Total - progress.Applied - progress.Skipped - progress.Failed)</dd>
+    </dl>
+    @if (progress.Status == BulkStatus.Expanding)
+    {
+        <p>No individual changes are applied until directory enumeration completes and the full deduplicated snapshot is saved.</p>
+    }
+    @if (progress.Error is not null)
+    {
+        <p role="alert">@progress.Error</p>
+    }
+    <p>Retries use the saved snapshot, not current group membership. Removed memberships are never silently restored.
+        A new explicit operation is required to enumerate current group members again.</p>
+    @if (recipients is not null)
+    {
+        <h2>Individual outcomes</h2>
+        <ul>
+            @foreach (var recipient in recipients.Items)
+            {
+                <li @key="recipient.User.Id">@recipient.User.DisplayName · @recipient.Status · @recipient.Detail</li>
+            }
+        </ul>
+        <EventPager Page="page" TotalCount="recipients.TotalCount" Busy="Busy" Changed="PageAsync" />
+    }
+}
+
+@code {
+    /// <summary>Operational identifier; progress is available only to a current Event owner.</summary>
+    [Parameter] public Guid Id { get; set; }
+    private BulkOperationSummary? progress;
+    private PageResult<BulkRecipientSummary>? recipients;
+    private int page = 1;
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync() => LoadAsync();
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+    private Task LoadAsync() => RunAsync(async token =>
+    {
+        progress = null;
+        recipients = null;
+        var loaded = await Events.GetBulkAsync(Id, token);
+        var outcomes = await Management.ListBulkRecipientsAsync(Id, new(page), token);
+        token.ThrowIfCancellationRequested();
+        progress = loaded;
+        recipients = outcomes;
+    });
+    private Task PageAsync(int selected)
+    {
+        page = selected;
+        return LoadAsync();
+    }
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        progress = null;
+        recipients = null;
+    }
+}

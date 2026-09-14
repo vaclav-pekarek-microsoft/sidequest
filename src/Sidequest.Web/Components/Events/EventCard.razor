@@ -1,0 +1,17 @@
+<article class="event-card">
+    <h2><a href="@($"/events/{Item.Id}")">@Item.Name</a></h2>
+    <p>@Item.Status · @Item.StartDate.ToString("d") – @Item.EndDate.ToString("d") · @Item.TimeZoneId</p>
+    <p>@Item.DiscoverySummary</p>
+    <p>@(Item.IsOwner ? "You are an equal owner." : Item.IsMember ? "You are a member." : "Membership is required for full content.")</p>
+    <p>Owners:
+        @foreach (var owner in Item.Owners)
+        {
+            <span @key="owner.Id">@owner.DisplayName (@owner.Email) </span>
+        }
+    </p>
+</article>
+
+@code {
+    /// <summary>Authorized summary; descriptions, rosters, and private Quest data never belong in discovery cards.</summary>
+    [Parameter, EditorRequired] public EventSummary Item { get; set; } = null!;
+}

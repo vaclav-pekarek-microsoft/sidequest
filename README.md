@@ -5,9 +5,10 @@ decision log are in [the project handoff](docs/sidequest-project-handoff.md).
 
 Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
-M2 Event/Quest workflows and delivery implementations are next. This is not a
-production-ready release; live tenant, email, hosting, and data-policy approval gates
-remain open.
+M2 Event/Quest workflows and delivery are integrated into the host and have passed
+combined workflow and browser acceptance. Uploads, administration/templates, and
+dashboard/PWA/offline basics remain M3 work. This is not a production-ready release;
+live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
 
@@ -35,6 +36,25 @@ an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 
+The M2 host starts durable SQL processing after checking that every supported work type
+has exactly one handler. Running it can process existing queued work in the configured
+database. Use an explicitly chosen development database, not a shared production catalog.
+Missing email configuration causes explicit delivery failures, not simulated success.
+
+Provider configuration is separate from sign-in configuration:
+
+- `Directory:Graph`: tenant, approved workforce extension/value/policy and expansion limits.
+- `Directory:Credentials`: matching tenant, Graph application client ID and protected secret.
+- `Delivery:Email`: verified sender/organizer, ACS connection string or managed-identity
+  HTTPS endpoint, optional managed identity client ID and submission timeout.
+- `Events:Limits` and `Delivery:Work`: bounded workflow, polling, lease and concurrency settings.
+
+Directory tenants must match the authenticated tenant. Store credentials in user secrets
+or the deployment secret store; never commit them. Missing Graph policy or credentials
+fails directory operations explicitly without preventing existing Event access.
+Calendar downloads require a configured organizer. CI uses a reserved synthetic organizer
+address solely for local calendar rendering, with no ACS credentials or live email calls.
+
 ## Verification
 
 ```powershell
@@ -50,9 +70,11 @@ point this setting at a production server.
 Browser checks run against an explicitly started synthetic local app using
 `SIDEQUEST_BASE_URL` (loopback only). CI installs Chromium in its isolated Linux runner,
 starts the development app against a disposable SQL database, and runs the browser
-project. Do not bypass managed local browser policy to run these checks. M1 browser
-compatibility scenarios are not substitutes for later full Event/Quest journeys.
-Foundation CI requires nonempty unit, SQL integration, and browser results with
+project. Do not bypass managed local browser policy to run these checks. The browser
+project includes M1 compatibility scenarios and M2 membership, participation, private
+access, moderation, calendar recovery, stale-editor and mobile interaction journeys.
+Neither synthetic suite establishes approved live-provider or release acceptance.
+CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
 
 The [M1 baseline CI run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
@@ -60,6 +82,15 @@ passed 1,298 unit cases, 324 real-SQL cases, and 35 browser-project cases, inclu
 seven actual Chromium journeys. These cover synthetic sign-in, Fluent binding/dialog
 content, 360px keyboard interaction without horizontal overflow, protected navigation,
 and logout. The strict Release build also enforces public XML documentation.
+
+The [M2 combined acceptance run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34896985551)
+passed 1,549 unit cases, 850 real-SQL cases, and 45 browser-project cases, including
+17 actual Chromium journeys. Its 104 new composition cases exercise real production
+services through durable lifecycle, membership, cancellation, reminder, and delivery
+boundaries. They also verify that an early completion claim cannot acknowledge an
+unfinished Quest: the original work completes at its immutable deadline. Browser
+journeys verify real authorized navigation, private access, calendar recovery,
+concurrency feedback, and 360px keyboard flows with prerender-safe controls.
 
 ## Architecture and contribution policy
 
@@ -74,6 +105,10 @@ dependency. Components call application services rather than database or provide
 All synchronous and asynchronous save overloads reject audit/status-history mutation
 and translate stale rowversions and duplicate keys into domain conflicts. Event
 ownership never bypasses active individual membership, including for draft Events.
+Mutations acquire the parent Event lock first inside an explicit Serializable
+transaction; SQL-specific locking stays behind the persistence port. SQL deadlocks
+surface as safe conflicts, not automatic retries of partially executed commands.
+Cancelled unpublished Quests remain owner-only even after archival.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
