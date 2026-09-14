@@ -2,12 +2,23 @@ using NodaTime;
 
 namespace Sidequest.Domain.Rules;
 
+/// <summary>Converts IANA-zone local scheduling inputs and enforces Quest containment in inclusive Event dates.</summary>
 public static class TimeRules
 {
+    /// <summary>Resolves a time zone from the bundled TZDB provider.</summary>
+    /// <param name="id">Non-null IANA time-zone identifier.</param>
+    /// <returns>The resolved zone and its daylight-saving rules.</returns>
+    /// <exception cref="DomainException">The identifier is unknown (Validation on TimeZoneId).</exception>
     public static DateTimeZone Zone(string id) =>
         DateTimeZoneProviders.Tzdb.GetZoneOrNull(id)
         ?? throw new DomainException(ErrorCode.Validation, "Choose a valid IANA time zone.", "TimeZoneId");
 
+    /// <summary>Maps inclusive local Event dates to an inclusive-start, exclusive-end instant window.</summary>
+    /// <param name="start">First included local date.</param>
+    /// <param name="end">Last included local date; must not precede start or equal DateOnly.MaxValue.</param>
+    /// <param name="zoneId">IANA Event zone inherited by its Quests.</param>
+    /// <returns>Start-of-day boundaries at the zone's offsets; End is the start of the day after end, not a fixed 24-hour increment.</returns>
+    /// <exception cref="DomainException">Dates are invalid, a whole local date is skipped, or the zone is unknown (Validation).</exception>
     public static (DateTimeOffset Start, DateTimeOffset End) EventWindow(DateOnly start, DateOnly end, string zoneId)
     {
         if (end < start)
@@ -27,6 +38,12 @@ public static class TimeRules
         }
     }
 
+    /// <summary>Resolves a wall-clock value in the specified zone to UTC, rejecting gaps and requiring overlap disambiguation.</summary>
+    /// <param name="local">Local wall-clock components; DateTime.Kind is deliberately ignored.</param>
+    /// <param name="zoneId">IANA Event zone in which to interpret the value.</param>
+    /// <param name="selectedOffset">Chosen UTC offset for an overlap, or null when the local time is unambiguous.</param>
+    /// <returns>The selected instant normalized to offset zero.</returns>
+    /// <exception cref="DomainException">The zone is invalid, time falls in a gap, an overlap lacks an offset, or the selected offset is invalid (Validation).</exception>
     public static DateTimeOffset ToUtc(DateTime local, string zoneId, TimeSpan? selectedOffset = null)
     {
         var zone = Zone(zoneId);
@@ -44,6 +61,13 @@ public static class TimeRules
         return chosen.ToDateTimeOffset().ToUniversalTime();
     }
 
+    /// <summary>Validates a positive Quest duration entirely contained in its parent Event's local-date window.</summary>
+    /// <param name="start">Quest start instant; may equal the Event window start.</param>
+    /// <param name="end">Quest end instant; must exceed start and may equal the exclusive Event window end.</param>
+    /// <param name="eventStart">Inclusive first Event local date.</param>
+    /// <param name="eventEnd">Inclusive last Event local date.</param>
+    /// <param name="zoneId">Parent Event IANA zone; Quests do not define an independent zone.</param>
+    /// <exception cref="DomainException">Duration, containment, Event dates, or zone is invalid (Validation).</exception>
     public static void ValidateQuest(DateTimeOffset start, DateTimeOffset end, DateOnly eventStart, DateOnly eventEnd, string zoneId)
     {
         var window = EventWindow(eventStart, eventEnd, zoneId);

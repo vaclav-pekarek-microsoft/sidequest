@@ -5,8 +5,11 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Application.Security;
 
+/// <summary>Database-backed authorization using the current external identity and individual membership/ownership relations.</summary>
+/// <param name="currentUser">Identity source; identity claims are rechecked against eligible, non-departed database accounts.</param>
 public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
 {
+    /// <inheritdoc/>
     public async Task<UserAccount> RequireUserAsync(ISidequestDbContext db, CancellationToken cancellationToken = default)
     {
         var identity = await currentUser.GetIdentityAsync(cancellationToken)
@@ -17,6 +20,7 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
             ?? throw new DomainException(ErrorCode.Forbidden, "Your account is not eligible for Sidequest.");
     }
 
+    /// <inheritdoc/>
     public async Task<UserAccount> RequireAdministratorAsync(ISidequestDbContext db, CancellationToken cancellationToken = default)
     {
         var user = await RequireUserAsync(db, cancellationToken);
@@ -25,6 +29,7 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         return user;
     }
 
+    /// <inheritdoc/>
     public async Task<Event> RequireEventAsync(ISidequestDbContext db, Guid eventId, Guid userId,
         bool ownerOnly = false, CancellationToken cancellationToken = default)
     {
@@ -41,6 +46,7 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         return item;
     }
 
+    /// <inheritdoc/>
     public async Task<Quest> RequireQuestAsync(ISidequestDbContext db, Guid questId, Guid userId,
         bool ownerOnly = false, bool moderation = false, CancellationToken cancellationToken = default)
     {
