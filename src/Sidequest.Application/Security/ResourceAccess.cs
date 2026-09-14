@@ -12,7 +12,8 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         var identity = await currentUser.GetIdentityAsync(cancellationToken)
             ?? throw new DomainException(ErrorCode.Forbidden, "Sign in to continue.");
         return await db.Users.SingleOrDefaultAsync(
-            x => x.TenantId == identity.TenantId && x.ObjectId == identity.ObjectId && x.IsEligible, cancellationToken)
+            x => x.TenantId == identity.TenantId && x.ObjectId == identity.ObjectId &&
+                x.IsEligible && x.DepartureVerifiedUtc == null, cancellationToken)
             ?? throw new DomainException(ErrorCode.Forbidden, "Your account is not eligible for Sidequest.");
     }
 

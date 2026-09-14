@@ -21,10 +21,11 @@ public static class InputRules
             throw new DomainException(ErrorCode.Validation, "Suggested capacity must be between 1 and 10000.", "SuggestedCapacity");
     }
 
-    public static void Version(Entity entity, string expected)
+    public static void Version(Entity entity, string? expected)
     {
         Span<byte> decoded = stackalloc byte[8];
-        if (!Convert.TryFromBase64String(expected, decoded, out var length) || length != 8)
+        if (string.IsNullOrWhiteSpace(expected) ||
+            !Convert.TryFromBase64String(expected, decoded, out var length) || length != 8)
             throw new DomainException(ErrorCode.Validation, "A valid item version is required.", "Version");
         if (!entity.Version.AsSpan().SequenceEqual(decoded))
             throw new DomainException(ErrorCode.Conflict, "This item changed. Reload before saving.");

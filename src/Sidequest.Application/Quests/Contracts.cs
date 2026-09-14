@@ -9,10 +9,10 @@ public sealed record QuestInput(string Title, string Description, string Locatio
     DateTime StartLocal, DateTime EndLocal, TimeSpan? StartOffset, TimeSpan? EndOffset, QuestVisibility Visibility);
 public sealed record QuestSummary(Guid Id, Guid EventId, string EventName, string Title, string Location,
     DateTimeOffset StartUtc, DateTimeOffset EndUtc, string TimeZoneId, QuestStatus Status, QuestVisibility Visibility,
-    int AttendeeCount, int FollowerCount, int? SuggestedCapacity, ParticipationStatus Participation,
+    int? AttendeeCount, int? FollowerCount, int? SuggestedCapacity, ParticipationStatus Participation,
     bool IsOwner, bool CanModerate, string Version, Guid? CoverAssetId);
 public sealed record QuestDetail(QuestSummary Summary, string Description, string StatusReason,
-    IReadOnlyList<OwnerSummary> Owners, IReadOnlyList<PersonSummary> Attendees,
+    IReadOnlyList<OwnerSummary> Owners, IReadOnlyList<PersonSummary>? Attendees,
     IReadOnlyList<PersonSummary>? Followers, IReadOnlyList<PersonSummary>? Invitees);
 public sealed record QuestHistoryItem(string Action, string Reason, DateTimeOffset OccurredUtc, string? Actor);
 public sealed record OfflineQuest(Guid Id, Guid EventId, string Title, string Location,

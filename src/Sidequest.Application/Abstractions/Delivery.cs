@@ -1,4 +1,5 @@
 using Sidequest.Domain.Model;
+using Sidequest.Domain.Rules;
 
 namespace Sidequest.Application.Abstractions;
 
@@ -47,8 +48,19 @@ public interface IBackgroundWorkHandler
 
 public sealed record PageRequest(int Page = 1, int PageSize = 25)
 {
-    public int Offset => (Math.Max(1, Page) - 1) * Limit;
-    public int Limit => Math.Clamp(PageSize, 1, 100);
+    public int Offset
+    {
+        get
+        {
+            var offset = ((long)Page - 1) * Limit;
+            if (Page < 1 || offset > int.MaxValue)
+                throw new DomainException(ErrorCode.Validation, "Page is outside the supported range.", "Page");
+            return (int)offset;
+        }
+    }
+
+    public int Limit => PageSize is >= 1 and <= 100 ? PageSize
+        : throw new DomainException(ErrorCode.Validation, "Page size must be between 1 and 100.", "PageSize");
 }
 
 public sealed record PageResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
