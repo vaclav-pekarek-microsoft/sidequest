@@ -52,6 +52,8 @@ authorized database administration process. No first-user-wins behavior.
 
 Sign-in provisions/updates `(TenantId,ObjectId)` in a serializable transaction, retrying
 duplicate-key/deadlock/concurrency conflicts at most twice with fresh contexts.
+This includes `DomainException(Conflict)` translated by the persistence boundary;
+Forbidden/Validation outcomes and ineligible accounts are not retried.
 The integration-owned schema must enforce that unique key. Disabled or verified-departed
 users remain disabled. Request cookies revalidate SQL eligibility on every request;
 circuits revalidate every minute and fail closed on errors. Resource commands still

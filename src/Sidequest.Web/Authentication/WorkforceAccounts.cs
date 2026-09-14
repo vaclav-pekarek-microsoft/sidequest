@@ -65,6 +65,7 @@ public sealed class WorkforceAccounts(
     }
 
     private static bool IsRetryableConflict(Exception exception) =>
+        exception is DomainException { Code: ErrorCode.Conflict } ||
         exception is DbUpdateConcurrencyException ||
         exception is SqlException { Number: 1205 or 2601 or 2627 } ||
         exception is DbUpdateException { InnerException: SqlException { Number: 1205 or 2601 or 2627 } };
