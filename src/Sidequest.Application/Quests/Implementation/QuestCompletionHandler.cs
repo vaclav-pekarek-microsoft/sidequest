@@ -19,7 +19,8 @@ public sealed class QuestCompletionHandler(ISidequestDbContextFactory factory, I
     public string WorkType => WorkTypes.QuestCompletion;
 
     /// <inheritdoc />
-    /// <remarks>The payload captures the Quest end; ScheduledWork.DueUtc may change independently for retries or administrative replay.</remarks>
+    /// <remarks>The payload captures the Quest end; ScheduledWork.DueUtc may change independently for retries or administrative replay.
+    /// Premature execution fails explicitly so the dispatcher cannot acknowledge an unfinished completion intent.</remarks>
     public async Task ExecuteAsync(Guid workId, CancellationToken cancellationToken)
     {
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
@@ -47,10 +48,14 @@ public sealed class QuestCompletionHandler(ISidequestDbContextFactory factory, I
         var quest = await db.Quests.SingleOrDefaultAsync(x => x.Id == payload.QuestId, cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow();
         await eventLifecycle.ReconcileAsync(db, parentId.Value, now, cancellationToken).ConfigureAwait(false);
-        if (quest is not null && quest.EndUtc == payload.EndUtc && now >= quest.EndUtc &&
+        if (quest is not null && quest.EndUtc == payload.EndUtc &&
             quest.Status is QuestStatus.Active or QuestStatus.Suspended)
+        {
+            if (now < quest.EndUtc)
+                throw new DomainException(ErrorCode.Conflict, "Quest completion is not due yet.");
             await QuestChanges.TransitionAsync(db, writer, quest, QuestStatus.Completed, null,
                 "The Quest end time has been reached.", now, cancellationToken).ConfigureAwait(false);
+        }
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }

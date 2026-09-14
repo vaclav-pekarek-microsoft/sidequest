@@ -1966,7 +1966,11 @@ Shared M2 integration contracts:
   for the original business deadline. Completion payloads retain their captured end
   instant; handlers validate the work/resource identity and current resource deadline,
   then apply the current-time guard. Retry backoff and administrator replay may change
-  `DueUtc` without invalidating an otherwise valid completion payload.
+  `DueUtc` without invalidating an otherwise valid completion payload. A premature
+  claim of a still-current completion intent must fail explicitly, not return success:
+  success would let the dispatcher acknowledge unfinished work and lose its future
+  completion. The queue retains bounded retry/dead-letter ownership; handlers never
+  alter leases, attempts or retry scheduling themselves.
 - Event cancellation emits one Event-level status audience plus attendee-only child
   withdrawal envelopes using `EventCancelled` with a Quest identifier. The parent
   audience includes registered effective members and affected Quest recipients.
