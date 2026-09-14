@@ -15,8 +15,8 @@
     <p role="alert">@error</p>
 }
 <div class="actions">
-    <FluentButton OnClick="RefreshAsync" Disabled="@busy">Refresh</FluentButton>
-    <FluentButton OnClick="@(() => MarkAsync(null))" Disabled="@(busy || unread == 0)">Mark all read</FluentButton>
+    <FluentButton OnClick="RefreshAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Refresh</FluentButton>
+    <FluentButton OnClick="@(() => MarkAsync(null))" Disabled="@(busy || !RendererInfo.IsInteractive || unread == 0)">Mark all read</FluentButton>
 </div>
 @if (busy)
 {
@@ -47,15 +47,15 @@ else if (items is not null)
                     }
                     @if (!item.IsRead)
                     {
-                        <FluentButton OnClick="@(() => MarkAsync(item.Id))" Disabled="@busy">Mark read</FluentButton>
+                        <FluentButton OnClick="@(() => MarkAsync(item.Id))" Disabled="@(busy || !RendererInfo.IsInteractive)">Mark read</FluentButton>
                     }
                 </li>
             }
         </ul>
         <div class="actions">
-            <FluentButton OnClick="@(() => MoveAsync(-1))" Disabled="@(busy || page == 1)">Previous</FluentButton>
+            <FluentButton OnClick="@(() => MoveAsync(-1))" Disabled="@(busy || !RendererInfo.IsInteractive || page == 1)">Previous</FluentButton>
             <span>Page @(page)</span>
-            <FluentButton OnClick="@(() => MoveAsync(1))" Disabled="@(busy || page * 25 >= items.TotalCount)">Next</FluentButton>
+            <FluentButton OnClick="@(() => MoveAsync(1))" Disabled="@(busy || !RendererInfo.IsInteractive || page * 25 >= items.TotalCount)">Next</FluentButton>
         </div>
     }
 }

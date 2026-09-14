@@ -9,6 +9,7 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
 {
     private CancellationTokenSource? operation;
     private bool disposed;
+    private bool operationBusy;
 
     /// <summary>Server-authorized application boundary; components never access persistence or providers directly.</summary>
     [Inject]
@@ -22,8 +23,12 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
     [Inject]
     protected EventCircuitRevalidation Revalidation { get; set; } = null!;
 
-    /// <summary>Whether an application operation is currently running; disables repeated mutation controls.</summary>
-    protected bool Busy { get; private set; }
+    /// <summary>Whether controls must wait for interactivity or an application operation; prevents inert prerender clicks and repeated mutations.</summary>
+    protected bool Busy
+    {
+        get => operationBusy || !RendererInfo.IsInteractive;
+        private set => operationBusy = value;
+    }
 
     /// <summary>Safe user-facing error text, never a raw exception or provider response.</summary>
     protected string? Error { get; private set; }

@@ -11,6 +11,10 @@ The initial scaffold used `dotnet new blazor -int Server -au Individual`; genera
 Identity account pages, SQLite and samples have been removed in favor of Entra.
 Pages use static SSR by default. Only components with `@rendermode InteractiveServer`
 become interactive, with prerendering. Never make `Routes` globally interactive.
+Keep actions and form controls disabled until `RendererInfo.IsInteractive` is true.
+Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
+an early click. Preserve prerendering and server reauthorization rather than adding
+arbitrary client delays or retrying mutations to hide this handoff.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.
