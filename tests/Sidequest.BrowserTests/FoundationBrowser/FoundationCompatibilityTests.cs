@@ -34,7 +34,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await Expect(PreviewHost(page).GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
         await PreviewHost(page).GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }).ClickAsync();
         await Expect(dialog).ToBeHiddenAsync();
-        await Expect(page.GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
+        await Expect(page.Locator(".foundation-card").GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
         await Expect(input).ToHaveValueAsync(label);
         Assert.Equal("/foundation", new Uri(page.Url).AbsolutePath);
     }
@@ -78,7 +78,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await TabToAsync(page, PreviewHost(page).GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }));
         await page.Keyboard.PressAsync("Enter");
         await Expect(dialog).ToBeHiddenAsync();
-        await Expect(page.GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
+        await Expect(page.Locator(".foundation-card").GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
         await AssertNoOverflowAsync(page);
     }
 
