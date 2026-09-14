@@ -5,10 +5,10 @@ decision log are in [the project handoff](docs/sidequest-project-handoff.md).
 
 Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
-M2 Event/Quest workflows and delivery are integrated into the host; combined acceptance
-is in progress. This is not a
-production-ready release; live tenant, email, hosting, and data-policy approval gates
-remain open.
+M2 Event/Quest workflows and delivery are integrated into the host and have passed
+combined workflow and browser acceptance. Uploads, administration/templates, and
+dashboard/PWA/offline basics remain M3 work. This is not a production-ready release;
+live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
 
@@ -74,7 +74,7 @@ project. Do not bypass managed local browser policy to run these checks. The bro
 project includes M1 compatibility scenarios and M2 membership, participation, private
 access, moderation, calendar recovery, stale-editor and mobile interaction journeys.
 Neither synthetic suite establishes approved live-provider or release acceptance.
-Foundation CI requires nonempty unit, SQL integration, and browser results with
+CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
 
 The [M1 baseline CI run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
@@ -82,6 +82,15 @@ passed 1,298 unit cases, 324 real-SQL cases, and 35 browser-project cases, inclu
 seven actual Chromium journeys. These cover synthetic sign-in, Fluent binding/dialog
 content, 360px keyboard interaction without horizontal overflow, protected navigation,
 and logout. The strict Release build also enforces public XML documentation.
+
+The [M2 combined acceptance run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34896985551)
+passed 1,549 unit cases, 850 real-SQL cases, and 45 browser-project cases, including
+17 actual Chromium journeys. Its 104 new composition cases exercise real production
+services through durable lifecycle, membership, cancellation, reminder, and delivery
+boundaries. They also verify that an early completion claim cannot acknowledge an
+unfinished Quest: the original work completes at its immutable deadline. Browser
+journeys verify real authorized navigation, private access, calendar recovery,
+concurrency feedback, and 360px keyboard flows with prerender-safe controls.
 
 ## Architecture and contribution policy
 

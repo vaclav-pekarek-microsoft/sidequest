@@ -1953,6 +1953,19 @@ passed. The browser journeys verify synthetic admission, Fluent binding/dialog c
 Public XML documentation is build-enforced. This establishes the M1 foundation gate,
 not M2 business workflows, M4 full-product acceptance, or live provider approval.
 
+M2 combined acceptance subsequently passed in Linux CI
+[34896985551](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34896985551):
+1,549 unit, 850 real-SQL, and 45 browser-project cases, including 17 actual Chromium
+journeys, all executed with zero failures/skips. The 104 composition cases connect
+actual Event/Quest producers, lifecycle reconciliation, outbox expansion, queue
+ownership, reminder freshness, calendar rendering and delivery. An unchanged regression
+exposed and verifies the correction for premature Quest-completion acknowledgement;
+the original durable job now completes at its immutable cutoff. Real UI acceptance
+also verifies private access/revocation, calendar download, stale-editor input retention,
+and 360px keyboard/no-overflow behavior without lost prerender clicks. This establishes
+the M2 core integration gate, not completion of M3 secondary features, M4 full-product
+acceptance, or any live-provider/release approval.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,

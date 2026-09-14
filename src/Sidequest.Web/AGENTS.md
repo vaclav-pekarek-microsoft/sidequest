@@ -120,5 +120,7 @@ dotnet run --project src\Sidequest.Web --launch-profile http
 Graph, email, Event/Quest workflows and durable delivery now have real implementations.
 The host verifies handler completeness before starting its SQL worker; Graph policy and
 provider credentials remain external configuration/approval gates. M2 combined acceptance
-is in progress. Uploads, administration and offline caching remain later milestones.
+passed in Linux CI34896985551, including actual production composition, real SQL workflows,
+and authenticated Chromium journeys. Uploads, administration and offline caching remain
+later milestones.
 Do not introduce fake success adapters to satisfy external contracts.
