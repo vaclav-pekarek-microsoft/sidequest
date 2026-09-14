@@ -39,6 +39,8 @@ else
 <p>Application roles and equal resource ownership are stored in Sidequest, not inferred from Entra roles.</p>
 
 @code {
+    /// <summary>Gets or sets the untrusted requested destination, normalized to a local path before use.</summary>
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    /// <summary>Gets or sets whether a failed remote sign-in should display generic recovery guidance.</summary>
     [SupplyParameterFromQuery] public bool Failed { get; set; }
 }

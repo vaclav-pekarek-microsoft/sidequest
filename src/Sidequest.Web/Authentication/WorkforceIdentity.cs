@@ -3,8 +3,14 @@ using Sidequest.Application.Abstractions;
 
 namespace Sidequest.Web.Authentication;
 
+/// <summary>Maps validated authentication claims to tenant/object identities without deriving permissions from email.</summary>
 public static class WorkforceIdentity
 {
+    /// <summary>Enforces configured tenant, object, workforce app-role, and synthetic-mode claim requirements.</summary>
+    /// <param name="principal">The authenticated principal whose claims have already been validated by its authentication handler.</param>
+    /// <param name="settings">The allowed tenant, admission role, and authentication mode.</param>
+    /// <returns>An identity with bounded display/contact fields, or <see langword="null"/> when any admission requirement fails.</returns>
+    /// <remarks>This mapping does not check session expiry or persisted eligibility; callers must perform those checks separately.</remarks>
     public static UserIdentity? Read(ClaimsPrincipal principal, FoundationAuthenticationSettings settings)
     {
         if (principal.Identity?.IsAuthenticated != true ||

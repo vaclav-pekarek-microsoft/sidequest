@@ -6,8 +6,15 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Web.Authentication;
 
+/// <summary>Registers cookie authentication and optional Entra validation with fail-closed account checks.</summary>
 public static class AuthenticationRegistration
 {
+    /// <summary>Configures mode-isolated cookies, Entra token provisioning, and request-level SQL revalidation.</summary>
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="settings">Authentication settings already validated for the host environment.</param>
+    /// <param name="configuration">Configuration containing the Entra registration when Entra mode is selected.</param>
+    /// <returns>The same service collection for further registration.</returns>
+    /// <remarks>Tokens are not saved in cookies. Cookies have a one-hour non-sliding lifetime.</remarks>
     public static IServiceCollection AddFoundationAuthentication(this IServiceCollection services,
         FoundationAuthenticationSettings settings, IConfiguration configuration)
     {

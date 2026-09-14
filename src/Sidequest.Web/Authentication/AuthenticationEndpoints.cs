@@ -5,16 +5,27 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 namespace Sidequest.Web.Authentication;
 
+/// <summary>Maps the HTTP-only authentication flows and their loopback and redirect guards.</summary>
 public static class AuthenticationEndpoints
 {
+    /// <summary>Checks whether the direct peer address is a loopback address.</summary>
+    /// <param name="context">The request whose connection address is inspected; forwarded headers are not consulted.</param>
+    /// <returns><see langword="true"/> for a known loopback peer; otherwise <see langword="false"/>.</returns>
     public static bool IsLoopback(HttpContext context) =>
         context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
 
+    /// <summary>Accepts a local absolute path or substitutes the application root for an unsafe redirect.</summary>
+    /// <param name="value">The untrusted return URL from a query string or form.</param>
+    /// <returns>A root-relative path without backslashes or control characters; <c>/</c> when rejected.</returns>
     public static string LocalReturnUrl(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value[0] == '/' &&
         (value.Length == 1 || value[1] is not ('/' or '\\')) &&
         !value.Any(c => char.IsControl(c) || c == '\\') ? value : "/";
 
+    /// <summary>Maps either synthetic sign-in or Entra challenge, plus antiforgery-protected sign-out.</summary>
+    /// <param name="app">The application receiving authentication endpoints.</param>
+    /// <param name="settings">Validated startup settings selecting the mutually exclusive authentication mode.</param>
+    /// <remarks>Synthetic sign-in provisions SQL accounts before issuing a cookie. Entra provisioning occurs during token validation.</remarks>
     public static void MapFoundationAuthentication(this WebApplication app, FoundationAuthenticationSettings settings)
     {
         if (settings.IsDevelopment)

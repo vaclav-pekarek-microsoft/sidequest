@@ -8,10 +8,22 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Web.Authentication;
 
+/// <summary>Provisions admitted identities and rechecks persisted session eligibility using operation-scoped contexts.</summary>
+/// <param name="factory">Creates a fresh database context for each operation or provisioning retry.</param>
+/// <param name="settings">The allowed identity claims and optional bootstrap administrator object.</param>
+/// <param name="clock">Provides UTC sign-in timestamps and session-expiry comparisons.</param>
+/// <param name="logger">Records safe provisioning retry diagnostics without token or contact data.</param>
 public sealed class WorkforceAccounts(
     ISidequestDbContextFactory factory, FoundationAuthenticationSettings settings,
     TimeProvider clock, ILogger<WorkforceAccounts> logger)
 {
+    /// <summary>Creates or updates an eligible local account before authentication issues its session cookie.</summary>
+    /// <param name="principal">The validated Entra principal or loopback development principal to admit.</param>
+    /// <param name="cancellationToken">Cancels SQL operations or the bounded delay between retry attempts.</param>
+    /// <returns>A task completing after the serializable provisioning transaction commits.</returns>
+    /// <exception cref="DomainException">Admission is forbidden, the account is disabled/departed, or persistence rejects the operation.</exception>
+    /// <exception cref="OperationCanceledException">The operation was canceled.</exception>
+    /// <remarks>Conflicts retry twice with fresh contexts. Only first provisioning may grant the explicitly configured administrator role.</remarks>
     public async Task ProvisionAsync(ClaimsPrincipal principal, CancellationToken cancellationToken)
     {
         var identity = WorkforceIdentity.Read(principal, settings)
@@ -46,6 +58,11 @@ public sealed class WorkforceAccounts(
         }
     }
 
+    /// <summary>Updates display/contact information and the sign-in timestamp without changing identity or eligibility.</summary>
+    /// <param name="user">The tracked local account; the caller is responsible for matching its tenant/object key.</param>
+    /// <param name="identity">The admitted identity supplying current display name and email.</param>
+    /// <param name="now">The UTC instant of successful sign-in.</param>
+    /// <exception cref="DomainException">The account is disabled or has verified departure; no fields are changed.</exception>
     public static void UpdateContact(UserAccount user, UserIdentity identity, DateTimeOffset now)
     {
         if (!user.IsEligible || user.DepartureVerifiedUtc is not null)
@@ -55,6 +72,12 @@ public sealed class WorkforceAccounts(
         user.LastSignedInUtc = now;
     }
 
+    /// <summary>Checks session expiry, workforce claims, and current local eligibility without modifying account data.</summary>
+    /// <param name="principal">The session principal to revalidate.</param>
+    /// <param name="cancellationToken">Cancels the database lookup.</param>
+    /// <returns>Whether the unexpired admitted identity maps to an eligible, non-departed local account.</returns>
+    /// <exception cref="OperationCanceledException">The database lookup was canceled.</exception>
+    /// <remarks>Database failures propagate so authentication callers can invalidate the session rather than assume access.</remarks>
     public async Task<bool> IsEligibleAsync(ClaimsPrincipal principal, CancellationToken cancellationToken)
     {
         var identity = WorkforceIdentity.Read(principal, settings);

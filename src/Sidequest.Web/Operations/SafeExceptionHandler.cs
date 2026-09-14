@@ -5,8 +5,13 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Web.Operations;
 
+/// <summary>Logs correlation metadata and renders safe HTTP errors without exposing exception content.</summary>
+/// <param name="logger">Records failure types, HTTP outcomes, and correlation identifiers.</param>
 public sealed class SafeExceptionHandler(ILogger<SafeExceptionHandler> logger) : IExceptionHandler
 {
+    /// <summary>Maps domain and antiforgery failures to HTTP status codes.</summary>
+    /// <param name="exception">The failure whose classification is inspected; its message is not used.</param>
+    /// <returns>The mapped HTTP status, or 500 for an unexpected failure.</returns>
     public static int Status(Exception exception) => exception switch
     {
         AntiforgeryValidationException => StatusCodes.Status400BadRequest,
@@ -18,6 +23,8 @@ public sealed class SafeExceptionHandler(ILogger<SafeExceptionHandler> logger) :
         _ => StatusCodes.Status500InternalServerError
     };
 
+    /// <inheritdoc/>
+    /// <remarks>Writes HTML for HTML clients and problem details otherwise, preserving the failure status and including a correlation ID.</remarks>
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
         var status = Status(exception);

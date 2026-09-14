@@ -6,8 +6,12 @@ using Sidequest.Web.Operations;
 
 namespace Sidequest.UnitTests.FoundationWeb;
 
+/// <summary>Verifies safe HTTP error representations and correlation identifiers for HTML and JSON clients.</summary>
 public sealed class SafeErrorTests
 {
+    /// <summary>Verifies that unexpected failures preserve HTTP 500 while hiding exception type and private details.</summary>
+    /// <param name="accept">The response media type requested by the client.</param>
+    /// <returns>A task completing after the handler response is written, parsed, and checked.</returns>
     [Theory]
     [InlineData("text/html")]
     [InlineData("application/json")]

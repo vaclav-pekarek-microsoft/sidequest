@@ -1,11 +1,23 @@
 namespace Sidequest.Web.Authentication;
 
+/// <summary>Holds the validated, immutable admission and one-time administrator bootstrap settings.</summary>
+/// <param name="IsDevelopment">Whether explicitly enabled synthetic development authentication is selected.</param>
+/// <param name="TenantId">The only tenant permitted to supply identities.</param>
+/// <param name="WorkforceRole">The exact admission app-role claim value; it grants no database application role.</param>
+/// <param name="BootstrapAdministratorObjectId">The explicitly configured object to bootstrap on first provisioning, or no bootstrap.</param>
 public sealed record FoundationAuthenticationSettings(
     bool IsDevelopment, Guid TenantId, string WorkforceRole, Guid? BootstrapAdministratorObjectId)
 {
+    /// <summary>The claim type that distinguishes synthetic identities from Entra identities.</summary>
     public const string SyntheticClaim = "sidequest:synthetic";
+    /// <summary>The authentication scheme used for the application session cookie in either mode.</summary>
     public const string CookieScheme = "Cookies";
 
+    /// <summary>Loads startup settings, defaulting to Entra and rejecting unsafe or incomplete configuration.</summary>
+    /// <param name="configuration">The merged configuration, including secret-store values for Entra.</param>
+    /// <param name="environment">The host environment used to forbid synthetic authentication outside Development.</param>
+    /// <returns>Validated settings for one authentication mode and tenant.</returns>
+    /// <exception cref="InvalidOperationException">The mode, tenant/client credentials, workforce role, or bootstrap identity is invalid.</exception>
     public static FoundationAuthenticationSettings Load(IConfiguration configuration, IHostEnvironment environment)
     {
         var mode = configuration["Authentication:Mode"] ?? "Entra";

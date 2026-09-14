@@ -6,14 +6,17 @@ using Sidequest.Web.Components;
 
 namespace Sidequest.UnitTests.FoundationWeb;
 
+/// <summary>Exercises real Fluent components and Blazor validation without relying on browser JavaScript execution.</summary>
 public sealed class CompatibilityProbeTests : BunitContext
 {
+    /// <summary>Registers Fluent services and permits package-owned JavaScript calls in the bUnit renderer.</summary>
     public CompatibilityProbeTests()
     {
         Services.AddFluentUIComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
+    /// <summary>Verifies that an empty submission displays required-field errors and leaves the dialog closed.</summary>
     [Fact]
     public void EmptyFormShowsValidationErrorWithoutOpeningDialog()
     {
@@ -26,6 +29,9 @@ public sealed class CompatibilityProbeTests : BunitContext
         Assert.Empty(component.FindAll("[role=status]"));
     }
 
+    /// <summary>Verifies valid binding, dialog content, and close feedback without persistence at label-length boundaries.</summary>
+    /// <param name="length">The valid label length in characters.</param>
+    /// <returns>A task completing after the bound input and dialog callbacks are exercised.</returns>
     [Theory]
     [InlineData(1)]
     [InlineData(80)]
@@ -46,6 +52,8 @@ public sealed class CompatibilityProbeTests : BunitContext
         Assert.Equal("Preview completed. Nothing was saved.", component.Find("[role=status]").TextContent);
     }
 
+    /// <summary>Verifies that an 81-character label is rejected and correcting it clears errors and opens the preview.</summary>
+    /// <returns>A task completing after invalid and corrected submissions are rendered.</returns>
     [Fact]
     public async Task OverlongInputShowsErrorAndCanBeCorrected()
     {

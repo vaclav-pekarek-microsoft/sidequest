@@ -13,6 +13,7 @@ using Sidequest.Web.Operations;
 
 namespace Sidequest.UnitTests.FoundationWeb;
 
+/// <summary>Verifies startup admission guards, identity boundaries, local redirects, and absolute session expiry.</summary>
 public sealed class AuthenticationTests
 {
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
@@ -20,6 +21,8 @@ public sealed class AuthenticationTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-14T12:00:00Z");
     private static FoundationAuthenticationSettings Entra => new(false, Tenant, "Workforce", ObjectId);
 
+    /// <summary>Verifies that explicitly selecting synthetic authentication cannot override a non-development host.</summary>
+    /// <param name="environment">The non-development environment to reject.</param>
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]
@@ -31,6 +34,7 @@ public sealed class AuthenticationTests
         Assert.Contains("only in the Development", error.Message);
     }
 
+    /// <summary>Verifies fixed synthetic identities and explicit bootstrap of only the documented Admin object.</summary>
     [Fact]
     public void ExplicitDevelopmentModeUsesOnlyDocumentedAdmin()
     {
@@ -51,6 +55,7 @@ public sealed class AuthenticationTests
         Assert.Null(Load(new() { ["Authentication:Mode"] = "Development" }, "Development").BootstrapAdministratorObjectId);
     }
 
+    /// <summary>Verifies that omitting the mode never implicitly enables synthetic authentication.</summary>
     [Fact]
     public void MissingModeDefaultsToEntraEvenInDevelopment()
     {
@@ -59,6 +64,9 @@ public sealed class AuthenticationTests
         Assert.Equal(Tenant, settings.TenantId);
     }
 
+    /// <summary>Verifies that invalid startup settings identify the offending configuration key.</summary>
+    /// <param name="key">The setting to replace in otherwise valid configuration.</param>
+    /// <param name="value">The missing or invalid value expected to fail startup validation.</param>
     [Theory]
     [InlineData("Authentication:Mode", "Fake")]
     [InlineData("AzureAd:TenantId", null)]
@@ -77,6 +85,7 @@ public sealed class AuthenticationTests
         Assert.Contains(key, error.Message);
     }
 
+    /// <summary>Verifies that administrator bootstrap requires a complete tenant/object pair matching the admitted tenant.</summary>
     [Fact]
     public void BootstrapRequiresMatchingExplicitTenantAndObject()
     {
@@ -92,6 +101,7 @@ public sealed class AuthenticationTests
         Assert.Null(Load(ValidConfiguration()).BootstrapAdministratorObjectId);
     }
 
+    /// <summary>Verifies tenant/object identity mapping and admission-role isolation from administrator permissions.</summary>
     [Fact]
     public void WorkforceAdmissionUsesTenantObjectAndRoleNotEmail()
     {
@@ -104,6 +114,9 @@ public sealed class AuthenticationTests
         Assert.False(principal.IsInRole("Administrator"));
     }
 
+    /// <summary>Verifies rejection when one mandatory identity or admission claim is invalid.</summary>
+    /// <param name="type">The claim type to replace on an otherwise valid principal.</param>
+    /// <param name="value">The replacement value that must not satisfy admission.</param>
     [Theory]
     [InlineData("tid", "cccccccc-cccc-4ccc-8ccc-cccccccccccc")]
     [InlineData("oid", "00000000-0000-0000-0000-000000000000")]
@@ -120,6 +133,7 @@ public sealed class AuthenticationTests
         Assert.Null(WorkforceIdentity.Read(principal, Entra));
     }
 
+    /// <summary>Verifies that tenant/contact claims cannot substitute for workforce assignment or authentication.</summary>
     [Fact]
     public void TenantAndEmailAloneNeverAdmitGuestOrAnonymousPrincipal()
     {
@@ -130,6 +144,7 @@ public sealed class AuthenticationTests
         Assert.Null(WorkforceIdentity.Read(new ClaimsPrincipal(new ClaimsIdentity(Principal().Claims)), Entra));
     }
 
+    /// <summary>Verifies mode isolation, the required synthetic marker, and rejection of unlisted synthetic objects.</summary>
     [Fact]
     public void SyntheticAndEntraPrincipalsCannotCrossModes()
     {
@@ -143,6 +158,9 @@ public sealed class AuthenticationTests
         Assert.Null(WorkforceIdentity.Read(unlisted, development));
     }
 
+    /// <summary>Verifies that safe local paths survive normalization while external or malformed targets resolve to home.</summary>
+    /// <param name="input">The untrusted candidate redirect destination.</param>
+    /// <param name="expected">The accepted local path or root fallback.</param>
     [Theory]
     [InlineData(null, "/")]
     [InlineData("", "/")]
@@ -156,6 +174,9 @@ public sealed class AuthenticationTests
     public void ReturnUrlsAreLocalOnly(string? input, string expected) =>
         Assert.Equal(expected, AuthenticationEndpoints.LocalReturnUrl(input));
 
+    /// <summary>Verifies that synthetic endpoints recognize only known direct loopback peers.</summary>
+    /// <param name="address">The IPv4/IPv6 peer address, or an unknown address.</param>
+    /// <param name="expected">Whether the request is allowed by the loopback guard.</param>
     [Theory]
     [InlineData("127.0.0.1", true)]
     [InlineData("::1", true)]
@@ -168,6 +189,9 @@ public sealed class AuthenticationTests
         Assert.Equal(expected, AuthenticationEndpoints.IsLoopback(context));
     }
 
+    /// <summary>Verifies that disabled or departed accounts are rejected before any contact or timestamp changes.</summary>
+    /// <param name="eligible">The persisted account eligibility flag before sign-in.</param>
+    /// <param name="departed">Whether persisted departure verification is present.</param>
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]
@@ -187,6 +211,7 @@ public sealed class AuthenticationTests
         Assert.Null(user.LastSignedInUtc);
     }
 
+    /// <summary>Verifies that eligible sign-in updates contact and UTC timestamp without changing tenant/object identity.</summary>
     [Fact]
     public void EligibleSignInUpdatesContactWithoutChangingIdentity()
     {
@@ -200,6 +225,7 @@ public sealed class AuthenticationTests
         Assert.Equal(ObjectId, user.ObjectId);
     }
 
+    /// <summary>Verifies rejection of missing expiry and the exact non-sliding one-hour deadline boundary.</summary>
     [Fact]
     public void SessionExpiresAtOneHourAndDoesNotExtendOnCircuitReconnect()
     {
@@ -211,6 +237,8 @@ public sealed class AuthenticationTests
         Assert.False(WorkforceSession.IsCurrent(principal, Now.AddHours(1).AddSeconds(1)));
     }
 
+    /// <summary>Verifies circuit-state identity lookup, expiry rejection, and cancellation before state access.</summary>
+    /// <returns>A task completing after the identity and cancellation assertions.</returns>
     [Fact]
     public async Task CurrentUserReadsCircuitStateAndRejectsExpiredSession()
     {
@@ -224,6 +252,9 @@ public sealed class AuthenticationTests
             await current.GetIdentityAsync(new CancellationToken(true)));
     }
 
+    /// <summary>Verifies the explicit HTTP outcome for each application-domain failure category.</summary>
+    /// <param name="code">The domain classification to map.</param>
+    /// <param name="expected">The expected HTTP status code.</param>
     [Theory]
     [InlineData(ErrorCode.Validation, 400)]
     [InlineData(ErrorCode.Forbidden, 403)]
@@ -252,21 +283,34 @@ public sealed class AuthenticationTests
         new("preferred_username", "unrelated@sample.invalid")
     ], "test", "name", "roles"));
 
+    /// <summary>Provides a configurable host environment without accessing project or host files.</summary>
     private sealed class TestEnvironment : IHostEnvironment
     {
+        /// <inheritdoc/>
         public string EnvironmentName { get; set; } = "Production";
+        /// <inheritdoc/>
         public string ApplicationName { get; set; } = "Sidequest.Tests";
+        /// <inheritdoc/>
         public string ContentRootPath { get; set; } = "";
+        /// <inheritdoc/>
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
+    /// <summary>Freezes UTC time for deterministic session-boundary assertions.</summary>
+    /// <param name="now">The UTC instant returned by every clock read.</param>
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
+        /// <summary>Returns the fixed UTC instant supplied by the test.</summary>
+        /// <returns>The configured instant without advancing with wall-clock time.</returns>
         public override DateTimeOffset GetUtcNow() => now;
     }
 
+    /// <summary>Supplies a principal directly to the circuit current-user adapter without an HTTP context.</summary>
+    /// <param name="principal">The authenticated or expired-session principal under test.</param>
     private sealed class FixedAuthenticationState(ClaimsPrincipal principal) : AuthenticationStateProvider
     {
+        /// <summary>Returns authentication state for the fixed principal supplied by the test.</summary>
+        /// <returns>A completed task carrying the test principal.</returns>
         public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(principal));
     }
 }

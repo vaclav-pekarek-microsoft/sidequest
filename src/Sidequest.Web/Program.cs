@@ -54,4 +54,5 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Run();
 
+/// <summary>Exposes the web application entry point to integration-test hosts.</summary>
 public partial class Program;

@@ -3,8 +3,12 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Sidequest.Web.Operations;
 
+/// <summary>Checks SQL connectivity with a read-only scalar command while exposing no connection details.</summary>
+/// <param name="configuration">Supplies the <c>Sidequest</c> connection string from host configuration.</param>
 public sealed class SqlReadinessCheck(IConfiguration configuration) : IHealthCheck
 {
+    /// <inheritdoc/>
+    /// <remarks>The command timeout is five seconds. Success indicates availability, not schema or migration readiness.</remarks>
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
