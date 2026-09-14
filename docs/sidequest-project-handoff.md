@@ -1966,6 +1966,20 @@ Each assignment must include:
 - Handoff containing changed files, behavior, migration needs, test results, unresolved blockers,
   and integration steps.
 
+All C# work follows pragmatic SOLID principles, cohesive responsibilities, dependency
+inversion, clear naming, nullable safety, cancellation-aware async, and explicit failures.
+Every public C# type/member must have meaningful XML documentation, including public
+constructors, properties, methods, fields/constants, enum members, interfaces, and
+handwritten test APIs. Document parameters, returns, relevant exceptions, units,
+nullability, state transitions, and side effects; use inherited documentation only
+where it genuinely describes the implementation. Missing public documentation fails
+the build through XML generation and warnings-as-errors. Comment quality remains a
+review requirement, not something a passing compiler check alone establishes.
+The user-selected C# guide is pinned and linked in
+`.github\instructions\csharp.instructions.md`; all agents follow it alongside these
+requirements. Apply `.editorconfig`, keep handwritten public types in matching
+individual files, and review conformance before integrating the foundation.
+
 Give each concurrent agent a separate branch/worktree where available. Do not allow
 unsynchronized edits in a shared working tree. Never let two agents own the same file
 at once; serially integrate changes to shared pages/components.
@@ -1994,6 +2008,7 @@ audit, delivery, or persistence path is unwired.
 concurrency and idempotency behavior, required audit/outbox effects, accessible success/
 empty/error states, focused passing tests, and updated directly related documentation.
 No silent fallback providers, TODO authorization, fake deliveries, or unused adapters.
+Public C# APIs are XML-documented and the change meets the C# standards in `AGENTS.md`.
 Submit the change through a pull request under `vaclav-pekarek-microsoft`; integration
 is complete only after the PR is merged under the agreed review process.
 Record any unavailable external verification honestly.
@@ -2048,6 +2063,8 @@ not V1 release requirements.
 | D34 | 2026-09-14 | Approve the reconciled full V1 baseline, including supporting authorization, administrator, schema, durable job, security, and non-goal contracts. Earlier supersessions remain effective. Mark Accepted for implementation; external evidence/approvals remain open. This approval does not start implementation or launch agents; wait for a separate development instruction. |
 | D35 | 2026-09-14 | All repository changes must go through pull requests using the GitHub account vaclav-pekarek-microsoft, including documentation and sub-agent work. Use task branches and matching Git author/committer identity; no direct default/integration-branch changes or alternate/bot publishing identity. |
 | D36 | 2026-09-14 | Implementation is authorized. Automatically merge verified PRs when configured review/CI requirements pass, while retaining PR-only changes and the vaclav-pekarek-microsoft identity. M1 foundation begins before parallel feature work; external approval gates still apply. |
+| D37 | 2026-09-14 | C# implementation must follow good engineering standards, including pragmatic SOLID. All public classes/types and members, methods, properties, constructors, fields, and enum values require proper XML documentation; enforce missing-documentation failures in builds and review semantic quality before merging. |
+| D38 | 2026-09-14 | Adopt PlagueHO/github-copilot-assets-library's csharp-best-practices.instructions.md as the C# baseline for all development agents, pinned at commit ea4125167b98053f083cffcc79883221f872da30. Record its application in repository instructions and EditorConfig; retain D37's public XML documentation requirement and apply the baseline before foundation integration. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.

@@ -67,3 +67,10 @@ Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
 are prohibited. Shared contracts and migrations have one integration owner. See
 [AGENTS.md](AGENTS.md) and handoff sections 59–60.
+
+C# changes follow pragmatic SOLID and the engineering standards in `AGENTS.md`.
+The adopted external guide and project-specific application rules are linked in
+[the C# instructions](.github/instructions/csharp.instructions.md); `.editorconfig`
+records the formatting baseline.
+All public C# types/members require meaningful XML documentation. Builds emit XML
+documentation and treat missing public comments as errors, including handwritten tests.
