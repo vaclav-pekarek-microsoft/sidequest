@@ -31,8 +31,8 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await page.GetByRole(AriaRole.Button, new() { Name = "Preview dialog", Exact = true }).ClickAsync();
         var dialog = Preview(page);
         await Expect(dialog).ToBeVisibleAsync();
-        await Expect(dialog).ToContainTextAsync(label);
-        await dialog.GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }).ClickAsync();
+        await Expect(PreviewHost(page).GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
+        await PreviewHost(page).GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }).ClickAsync();
         await Expect(dialog).ToBeHiddenAsync();
         await Expect(page.GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
         await Expect(input).ToHaveValueAsync(label);
@@ -73,9 +73,9 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await page.Keyboard.PressAsync("Enter");
         var dialog = Preview(page);
         await Expect(dialog).ToBeVisibleAsync();
-        await Expect(dialog).ToContainTextAsync("Keyboard-only 360px preview");
+        await Expect(PreviewHost(page).GetByText("Keyboard-only 360px preview", new() { Exact = true })).ToBeVisibleAsync();
         await AssertNoOverflowAsync(page);
-        await TabToAsync(page, dialog.GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }));
+        await TabToAsync(page, PreviewHost(page).GetByRole(AriaRole.Button, new() { Name = "Close preview", Exact = true }));
         await page.Keyboard.PressAsync("Enter");
         await Expect(dialog).ToBeHiddenAsync();
         await Expect(page.GetByRole(AriaRole.Status)).ToHaveTextAsync(Completion);
@@ -130,6 +130,10 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
 
     private static ILocator Preview(IPage page) =>
         page.GetByRole(AriaRole.Dialog, new() { Name = "Compatibility preview", Exact = true });
+
+    // Fluent's accessible dialog is in shadow DOM; its slotted content belongs to the host.
+    private static ILocator PreviewHost(IPage page) =>
+        page.Locator("fluent-dialog").Filter(new() { Has = Preview(page) });
 
     private static async Task TabToAsync(IPage page, ILocator target)
     {
