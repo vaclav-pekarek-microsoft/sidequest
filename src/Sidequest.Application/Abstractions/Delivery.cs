@@ -12,7 +12,18 @@ public sealed record ChangeEnvelope(
     DateTimeOffset OccurredUtc,
     long CalendarRevision = 0,
     string Reason = "",
-    Guid[]? PreviousAttendeeIds = null);
+    Guid[]? PreviousAttendeeIds = null,
+    bool CalendarChanged = false,
+    bool MaterialChange = false);
+
+public static class WorkTypes
+{
+    public const string Change = "sidequest.change.v1";
+    public const string EventCompletion = "event.complete.v1";
+    public const string QuestCompletion = "quest.complete.v1";
+    public const string BulkMembership = "event.bulk-membership.v1";
+    public const string Reminder = "quest.reminder.v1";
+}
 
 public interface IChangeWriter
 {

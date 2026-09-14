@@ -11,7 +11,7 @@ public sealed class ChangeWriter : IChangeWriter
         db.OutboxMessages.Add(new OutboxMessage
         {
             Id = change.ChangeId,
-            Type = "sidequest.change.v1",
+            Type = WorkTypes.Change,
             AggregateId = change.QuestId ?? change.EventId,
             PayloadJson = JsonSerializer.Serialize(change),
             CorrelationId = change.ChangeId.ToString("N"),
