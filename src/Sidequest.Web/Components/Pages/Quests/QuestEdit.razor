@@ -1,0 +1,41 @@
+@page "/quests/create"
+@page "/quests/{Id:guid}/edit"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Sidequest.Web.Components.Quests
+<PageTitle>Quest editor · Sidequest</PageTitle>
+<h1>@(Id is null ? "Create a Quest" : "Edit Quest")</h1>
+<p><a href="/quests">Back to Quests</a></p>
+@if (busy && initial is null)
+{
+    <p role="status">Loading editor…</p>
+}
+@if (error is not null)
+{
+    <p role="alert">@error</p>
+    <FluentButton OnClick="LoadAsync" Disabled="@busy">Reload current version</FluentButton>
+}
+@if (Id is null)
+{
+    <label>Active Event
+        <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@busy">
+            <option value="">Choose an Event</option>
+            @foreach (var item in events)
+            {
+                <option @key="item.Id" value="@item.Id">@item.Name</option>
+            }
+        </select>
+    </label>
+    @if (!busy && events.Count == 0)
+    {
+        <p>You need individual membership in an active Event before creating a Quest.</p>
+    }
+}
+@if (initial is not null)
+{
+    <QuestEditor Initial="initial" ZoneId="@zone" Published="published" Busy="@(busy || conflict)" Save="SaveAsync" />
+    @if (published)
+    {
+        <p>Saving a suspended Quest does not reinstate it or restore calendars. Only an Event owner can reinstate it.</p>
+    }
+}

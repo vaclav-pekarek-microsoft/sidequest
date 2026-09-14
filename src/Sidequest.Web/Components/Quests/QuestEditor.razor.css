@@ -1,0 +1,4 @@
+fieldset { display: grid; gap: 1rem; min-width: 0; border: 0; padding: 0; }
+label { display: grid; gap: .25rem; }
+input, select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+::deep fluent-text-field, ::deep fluent-text-area { width: 100%; min-width: 0; }
