@@ -2043,6 +2043,27 @@ Shared M2 integration contracts:
 
 ### Ownership map
 
+M3 starts from the merged M2 baseline. Media uses `IMediaService` for authorized
+cover upload/removal/read operations, `IImageSanitizer` for bounded actual decode and
+metadata-free re-encoding, and `IPrivateMediaStorage` for private provider I/O outside
+SQL transactions. Uploads retain the previous cover on failure or stale-editor
+conflict. Reads serve only ready, currently assigned covers; explicit moderation
+reads retain the same authorization and audit requirements as Quest content.
+Pending/failed uploads receive durable `media.cleanup.v1` work for their immutable
+24-hour expiry. Cleanup never removes attached covers or implements unapproved
+retention of ready historical assets; final attachment must reject an expired upload.
+The cleanup handler is added to startup verification only when the feature is composed.
+
+The media implementation dependency baseline is Azure.Storage.Blobs 12.29.2 and
+SkiaSharp 4.152.0 with matching SkiaSharp.NativeAssets.Linux.NoDependencies 4.152.0;
+all three published NuGet packages declare MIT licenses. These provide
+.NET 10-compatible private storage and actual cross-platform image
+decoding, not upload validation or provider approval by themselves. Keep image
+processing and Blob SDKs in Infrastructure; no AI package or interface is introduced.
+The integration owner retains startup, navigation, shared contracts, migrations and
+dependency ownership while Media, Administration/templates, and Experience work in
+separate task worktrees. Do not infer completion from the presence of interfaces.
+
 | Work package | Owns | Must not independently change |
 |--------------|------|-------------------------------|
 | Integration owner | Solution/project/package configuration, shared contracts, DbContext composition, migrations, app startup, navigation/layout, CI/Bicep, cross-feature tests | Accepted product behavior without updating this specification |

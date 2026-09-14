@@ -13,4 +13,6 @@ public static class WorkTypes
     public const string BulkMembership = "event.bulk-membership.v1";
     /// <summary>Version-1 attendee reminder work, deduplicated by user, Quest, and start revision.</summary>
     public const string Reminder = "quest.reminder.v1";
+    /// <summary>Version-1 cleanup of an unattached pending or failed media upload after its immutable 24-hour expiry.</summary>
+    public const string MediaCleanup = "media.cleanup.v1";
 }
