@@ -1961,7 +1961,11 @@ Shared M2 integration contracts:
 - `ISidequestDbContext.LockEventAsync` acquires the parent Event lock first within
   an explicit Serializable transaction, before transactional authorization or child
   reads. Resolve immutable parent IDs before starting that transaction. Provider-specific
-  lock hints and SQL deadlock-to-Conflict translation stay in Infrastructure.
+  lock hints and SQL deadlock-to-Conflict translation stay in Infrastructure. Translation
+  covers result-reader consumption as well as command execution, saves, and transaction
+  completion: SQL can report a deadlock while rows are read after execution has returned.
+  Preserve provider cancellation and unrelated failures; never retry a caller-owned
+  transaction or hide its rollback behind a successful result.
 - The Event-owned `IEventLifecycleReconciler` stages overdue parent completion,
   pending membership cleanup, and Quest-side lifecycle effects in the caller's locked
   transaction. It never saves or commits. Persist system reconciliation separately
