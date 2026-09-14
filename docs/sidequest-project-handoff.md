@@ -2050,9 +2050,14 @@ SQL transactions. Uploads retain the previous cover on failure or stale-editor
 conflict. Reads serve only ready, currently assigned covers; explicit moderation
 reads retain the same authorization and audit requirements as Quest content.
 Pending/failed uploads receive durable `media.cleanup.v1` work for their immutable
-24-hour expiry. Cleanup never removes attached covers or implements unapproved
-retention of ready historical assets; final attachment must reject an expired upload.
-The cleanup handler is added to startup verification only when the feature is composed.
+24-hour expiry; final attachment must reject an expired upload. Separately identified
+and audited cleanup intent also handles media removed by an explicitly authorized
+unpublished-Draft deletion, so adding a cover does not permanently disable the
+accepted deletion workflow. Such intent must survive deletion of the Quest and asset
+metadata, rather than relying on foreign keys or later lookup of a removed Blob key.
+Cleanup never removes a currently attached cover or implements unapproved retention
+of ready historical assets. The cleanup handler is added to startup verification only
+when the feature is composed.
 
 The media implementation dependency baseline is Azure.Storage.Blobs 12.29.2 and
 SkiaSharp 4.152.0 with matching SkiaSharp.NativeAssets.Linux.NoDependencies 4.152.0;

@@ -22,8 +22,9 @@ public interface IPrivateMediaStorage
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The private object or storage provider is unavailable.</exception>
     public Task<Stream> OpenReadAsync(string blobName, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes a known expired temporary object idempotently; it is not a general ready-media retention operation.</summary>
-    /// <param name="blobName">Application-generated key of an unattached expired pending or failed upload.</param>
+    /// <summary>Removes an expired temporary object or media from an explicitly deleted unpublished Draft idempotently;
+    /// it is not a general ready-media retention operation.</summary>
+    /// <param name="blobName">Application-generated key from validated expiry or authorized Draft-deletion intent.</param>
     /// <param name="cancellationToken">Cancels the private provider operation.</param>
     /// <returns>A task completing when the object is confirmed deleted or already absent.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The provider cannot establish successful removal.</exception>
