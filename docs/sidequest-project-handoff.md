@@ -2001,10 +2001,19 @@ Shared M2 integration contracts:
   `Cache-Control: no-store` and no range/cached-version processing. Initialize only the
   HTTP request's scoped authentication provider from its middleware-validated principal;
   never capture an HTTP principal in an interactive circuit or renew its session deadline.
-  Forward request cancellation and retain safe error responses. The endpoint mapper is
-  preparatory until the integration owner registers the real notification service and
-  maps it in application startup; passing isolated endpoint tests does not prove that
-  application composition is complete.
+  Forward request cancellation and retain safe error responses. Startup now maps this
+  endpoint and registers the real notification service, recipient calendar renderer,
+  ACS adapter and durable queue dependencies. Passing isolated endpoint or composition
+  tests does not establish full Event/Quest integration. Background processing remains
+  inactive until all feature handlers are registered and combined acceptance is complete.
+- Delivery configuration uses `Delivery:Email` (verified `SenderAddress`, secret-store
+  `ConnectionString` or managed-identity HTTPS `Endpoint`, optional
+  `ManagedIdentityClientId`, and `SubmissionTimeout`) and `Delivery:Work`
+  (`PollInterval`, `LeaseDuration`, `ReminderLateness`, `Concurrency`). Defaults are
+  60-second submissions, 10-second polling, 90-second leases, two-minute maximum reminder
+  lateness and four worker loops. Invalid timing/concurrency settings fail registration.
+  Missing provider configuration never reports successful delivery; secrets belong in
+  user secrets or the deployment secret store, not committed configuration files.
 
 ### Ownership map
 
