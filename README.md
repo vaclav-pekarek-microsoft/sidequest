@@ -5,7 +5,7 @@ decision log are in [the project handoff](docs/sidequest-project-handoff.md).
 
 Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
-M2 Event/Quest workflows and delivery implementations are next. This is not a
+M2 Event/Quest workflows and delivery implementations are in progress. This is not a
 production-ready release; live tenant, email, hosting, and data-policy approval gates
 remain open.
 
