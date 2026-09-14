@@ -145,7 +145,7 @@ public sealed class DeliveryDispatcher(ISidequestDbContextFactory factory, Recip
                 if (!current)
                 {
                     var withdrawalRequired = !canRead || !joined || quest.Status is QuestStatus.Suspended or QuestStatus.Cancelled ||
-                        parent.Status == EventStatus.Cancelled;
+                        (parent.Status == EventStatus.Cancelled && quest.EndUtc > now);
                     if (state.MayHaveBeenDelivered && withdrawalRequired)
                         StageCompensation(db, row, payload, state, quest);
                     allowed = false;
@@ -204,8 +204,12 @@ public sealed class DeliveryDispatcher(ISidequestDbContextFactory factory, Recip
         quest.CalendarRevision = sequence;
         var snapshot = payload.Calendar! with
         {
-            Sequence = sequence, Method = "CANCEL", StampUtc = clock.GetUtcNow(),
-            Title = "Sidequest appointment withdrawn", Description = "", Location = ""
+            Sequence = sequence,
+            Method = "CANCEL",
+            StampUtc = clock.GetUtcNow(),
+            Title = "Sidequest appointment withdrawn",
+            Description = "",
+            Location = ""
         };
         state.IntendedSequence = sequence;
         state.IntendedMethod = "CANCEL";
@@ -213,12 +217,16 @@ public sealed class DeliveryDispatcher(ISidequestDbContextFactory factory, Recip
         state.ChangedUtc = clock.GetUtcNow();
         var change = payload.Change with
         {
-            Kind = NotificationKind.AccessRemoved, CalendarRevision = sequence,
-            RecipientIds = [original.UserId], PreviousAttendeeIds = [original.UserId], AffectedUserIds = [original.UserId]
+            Kind = NotificationKind.AccessRemoved,
+            CalendarRevision = sequence,
+            RecipientIds = [original.UserId],
+            PreviousAttendeeIds = [original.UserId],
+            AffectedUserIds = [original.UserId]
         };
         db.NotificationDeliveries.Add(new NotificationDelivery
         {
-            NotificationId = original.NotificationId, UserId = original.UserId,
+            NotificationId = original.NotificationId,
+            UserId = original.UserId,
             DeduplicationKey = $"calendar:{quest.Id:N}:{original.UserId:N}:{sequence}:CANCEL",
             DueUtc = clock.GetUtcNow(),
             PayloadJson = JsonSerializer.Serialize(new DeliveryPayload(1, change, original.UserId, true, snapshot))

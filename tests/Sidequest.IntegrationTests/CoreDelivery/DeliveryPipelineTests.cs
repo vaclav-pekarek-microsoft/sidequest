@@ -418,9 +418,12 @@ public sealed class DeliveryPipelineTests
         Assert.True(calendar.MayHaveBeenDelivered);
     }
 
-    /// <summary>Completion alone never generates a calendar withdrawal, even when the earlier provider outcome was uncertain.</summary>
-    [Fact]
-    public async Task UncertainCalendarCompletionDoesNotInventWithdrawal()
+    /// <summary>Completion never invents a withdrawal from an uncertain request, including when the parent is subsequently cancelled.</summary>
+    /// <param name="cancelParent">Whether the Event is cancelled after the child has already ended.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UncertainCalendarCompletionDoesNotInventWithdrawal(bool cancelParent)
     {
         await using var s = await DeliveryScenario.CreateAsync();
         await s.AddChangeAsync();
@@ -435,6 +438,8 @@ public sealed class DeliveryPipelineTests
             var quest = await update.Quests.SingleAsync();
             quest.Status = QuestStatus.Completed;
             s.Clock.Now = quest.EndUtc;
+            if (cancelParent)
+                (await update.Events.SingleAsync()).Status = EventStatus.Cancelled;
             await update.SaveChangesAsync();
         }
         var retry = (await s.Queue.ClaimAsync("delivery"))!;
