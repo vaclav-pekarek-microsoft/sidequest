@@ -96,7 +96,11 @@ empty/overlong validation, 1/80-character binding and opening/closing the real F
 components. Live local HTTP verification also exercised SQL-backed Alice sign-in,
 authenticated SSR, antiforgery rejection and logout. Actual Edge keyboard/mobile
 verification was blocked by the managed browser's forced-sign-in policy; no policy
-bypass was attempted. Real-browser and real-Entra release verification remain open.
+bypass was attempted. Subsequent isolated Linux Chromium CI
+[34861029210](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
+passed all seven M1 browser journeys: four persona sign-ins with exact Fluent dialog
+content, unauthenticated redirect, 360px keyboard/no-overflow interaction, and logout.
+Full-product browser acceptance and real-Entra release verification remain open.
 `/health/live` is anonymous process liveness; `/health/ready` returns SQL availability
 only, not migration readiness. Both expose status only. HTTP exception responses use
 a safe HTML page or generic problem details with correlation IDs; never display exception
