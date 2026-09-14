@@ -19,6 +19,17 @@ public interface IQuestService
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
         CancellationToken cancellationToken = default);
+    /// <summary>Lists authorized Quests whose start instants match the optional range, filtering before totals and pagination.</summary>
+    /// <param name="kind">Authorized participation, ownership, discovery, history, or moderation view.</param>
+    /// <param name="eventId">Optional internal parent Event filter; absence never broadens authorization.</param>
+    /// <param name="page">One-based paging input with page size 1 through 100.</param>
+    /// <param name="dates">Inclusive lower and exclusive upper start-instant bounds; null endpoints are unbounded.</param>
+    /// <param name="cancellationToken">Requests cooperative cancellation of the query.</param>
+    /// <returns>A privacy-filtered page and total count computed with the same date and access predicates.</returns>
+    /// <exception cref="Sidequest.Domain.Rules.DomainException">Paging, date bounds, view selection, or authorization is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
+        QuestDateFilter dates, CancellationToken cancellationToken = default);
     /// <summary>Reads authorized Quest detail through ordinary access or the separately audited private moderation path.</summary>
     /// <param name="id">Internal Quest identifier; knowing it grants no access.</param>
     /// <param name="moderation">Requests non-draft Event-owner moderation, which excludes invitation, attendee, and follower rosters.</param>
