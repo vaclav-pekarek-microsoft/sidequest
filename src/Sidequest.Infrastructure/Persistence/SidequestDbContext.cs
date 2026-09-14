@@ -79,6 +79,23 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         CancellationToken cancellationToken = default) => Database.BeginTransactionAsync(isolationLevel, cancellationToken);
 
     /// <inheritdoc />
+    public async Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (eventId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An Event identifier is required.", nameof(eventId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before locking an Event.");
+
+        await Events.FromSqlInterpolated($"SELECT * FROM [Events] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {eventId}")
+            .AsNoTracking().SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.AddInterceptors(SqlConflictCommandInterceptor.Instance, SqlConflictTransactionInterceptor.Instance);
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Ignore<Entity>();
@@ -179,9 +196,9 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         {
             return base.SaveChanges(acceptAllChangesOnSuccess);
         }
-        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        catch (Exception exception) when (SqlServerFailures.TryGetConflict(exception, out var conflict))
         {
-            throw PersistenceConflict(exception);
+            throw conflict;
         }
     }
 
@@ -208,9 +225,9 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         {
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        catch (Exception exception) when (SqlServerFailures.TryGetConflict(exception, out var conflict))
         {
-            throw PersistenceConflict(exception);
+            throw conflict;
         }
     }
 
@@ -224,12 +241,4 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         }
     }
 
-    private static bool IsPersistenceConflict(DbUpdateException exception) =>
-        exception is DbUpdateConcurrencyException ||
-        exception.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 };
-
-    private static DomainException PersistenceConflict(DbUpdateException exception) =>
-        new(ErrorCode.Conflict, exception is DbUpdateConcurrencyException
-            ? "This item changed. Reload and try again."
-            : "This operation conflicts with a change already saved. Reload and try again.");
 }

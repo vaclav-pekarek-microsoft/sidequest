@@ -74,6 +74,10 @@ dependency. Components call application services rather than database or provide
 All synchronous and asynchronous save overloads reject audit/status-history mutation
 and translate stale rowversions and duplicate keys into domain conflicts. Event
 ownership never bypasses active individual membership, including for draft Events.
+Mutations acquire the parent Event lock first inside an explicit Serializable
+transaction; SQL-specific locking stays behind the persistence port. SQL deadlocks
+surface as safe conflicts, not automatic retries of partially executed commands.
+Cancelled unpublished Quests remain owner-only even after archival.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
