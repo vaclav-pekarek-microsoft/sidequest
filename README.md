@@ -64,6 +64,9 @@ every discovered scenario executed and passed; skipped suites do not satisfy the
 Application persistence uses explicit EF Core query/transaction abstractions through
 `ISidequestDbContext`, not a new generic repository framework. Domain has no EF/UI
 dependency. Components call application services rather than database or provider SDKs.
+All synchronous and asynchronous save overloads reject audit/status-history mutation
+and translate stale rowversions and duplicate keys into domain conflicts. Event
+ownership never bypasses active individual membership, including for draft Events.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes

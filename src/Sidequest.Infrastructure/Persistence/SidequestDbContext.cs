@@ -161,36 +161,75 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         modelBuilder.Entity<CalendarDeliveryState>().Property(x => x.Payload).HasColumnType("nvarchar(max)").Metadata.SetMaxLength(null);
     }
 
-    /// <summary>
-    /// Saves tracked changes without permitting audit/history mutation, translating
-    /// stale row versions and duplicate keys into explicit application conflicts.
-    /// </summary>
+    /// <summary>Saves tracked changes and accepts their tracked state without permitting audit/history mutation.</summary>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <remarks>Saving neither commits a caller-owned transaction nor dispatches external notifications.</remarks>
+    public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
+
+    /// <summary>Saves tracked changes with uniform immutable-history and persistence-conflict enforcement.</summary>
+    /// <param name="acceptAllChangesOnSuccess">Whether to accept tracked changes after the database write succeeds.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <remarks>When acceptance is disabled, the caller owns subsequent tracker acceptance. Other database failures propagate.</remarks>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnsureHistoryIsImmutable();
+        try
+        {
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        {
+            throw PersistenceConflict(exception);
+        }
+    }
+
+    /// <summary>Saves tracked changes asynchronously and accepts their tracked state without permitting audit/history mutation.</summary>
     /// <param name="cancellationToken">Cancels the database write.</param>
     /// <returns>The number of state entries written to the database.</returns>
-    /// <exception cref="DomainException">
-    /// An audit/history record was modified or deleted, a row version is stale, or a unique key conflicts.
-    /// </exception>
-    /// <remarks>
-    /// Saving does not commit a caller-owned transaction or dispatch external notifications.
-    /// Other database failures propagate for the application boundary to report.
-    /// </remarks>
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed during the database write.</exception>
+    /// <remarks>Saving neither commits a caller-owned transaction nor dispatches external notifications.</remarks>
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
+
+    /// <summary>Saves tracked changes asynchronously with uniform immutable-history and persistence-conflict enforcement.</summary>
+    /// <param name="acceptAllChangesOnSuccess">Whether to accept tracked changes after the database write succeeds.</param>
+    /// <param name="cancellationToken">Cancels the database write.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed during the database write.</exception>
+    /// <remarks>When acceptance is disabled, the caller owns subsequent tracker acceptance. Other database failures propagate.</remarks>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnsureHistoryIsImmutable();
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        {
+            throw PersistenceConflict(exception);
+        }
+    }
+
+    private void EnsureHistoryIsImmutable()
     {
         if (ChangeTracker.Entries().Any(x =>
             (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory) &&
             (x.State is EntityState.Modified or EntityState.Deleted)))
+        {
             throw new DomainException(ErrorCode.Conflict, "History records are immutable.");
-        try
-        {
-            return await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw new DomainException(ErrorCode.Conflict, "This item changed. Reload and try again.");
-        }
-        catch (DbUpdateException exception) when (exception.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        {
-            throw new DomainException(ErrorCode.Conflict, "This operation conflicts with a change already saved. Reload and try again.");
         }
     }
+
+    private static bool IsPersistenceConflict(DbUpdateException exception) =>
+        exception is DbUpdateConcurrencyException ||
+        exception.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 };
+
+    private static DomainException PersistenceConflict(DbUpdateException exception) =>
+        new(ErrorCode.Conflict, exception is DbUpdateConcurrencyException
+            ? "This item changed. Reload and try again."
+            : "This operation conflicts with a change already saved. Reload and try again.");
 }
