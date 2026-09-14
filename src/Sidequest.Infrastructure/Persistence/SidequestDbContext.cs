@@ -7,39 +7,78 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Infrastructure.Persistence;
 
+/// <summary>
+/// Maps Sidequest's individual memberships, equal ownership, participation, and delivery
+/// records to SQL Server, enforcing persistence uniqueness and optimistic concurrency.
+/// </summary>
+/// <remarks>
+/// Create and dispose a context per application operation. Callers own transaction
+/// boundaries; business changes, audit records, and outbox entries must commit together.
+/// Do not retain a context for a Blazor circuit or call external providers inside its transaction.
+/// Instances are not thread-safe; await each operation before reusing the same context.
+/// </remarks>
+/// <param name="options">The SQL Server provider and connection configuration for this context.</param>
 public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> options)
     : DbContext(options), ISidequestDbContext
 {
+    /// <inheritdoc />
     public DbSet<UserAccount> Users => Set<UserAccount>();
+    /// <inheritdoc />
     public DbSet<Administrator> Administrators => Set<Administrator>();
+    /// <inheritdoc />
     public DbSet<Event> Events => Set<Event>();
+    /// <inheritdoc />
     public DbSet<EventOwner> EventOwners => Set<EventOwner>();
+    /// <inheritdoc />
     public DbSet<EventMembership> EventMemberships => Set<EventMembership>();
+    /// <inheritdoc />
     public DbSet<EventMembershipRequest> MembershipRequests => Set<EventMembershipRequest>();
+    /// <inheritdoc />
     public DbSet<EventInvitation> EventInvitations => Set<EventInvitation>();
+    /// <inheritdoc />
     public DbSet<Quest> Quests => Set<Quest>();
+    /// <inheritdoc />
     public DbSet<QuestOwner> QuestOwners => Set<QuestOwner>();
+    /// <inheritdoc />
     public DbSet<QuestInvitation> QuestInvitations => Set<QuestInvitation>();
+    /// <inheritdoc />
     public DbSet<QuestParticipation> Participations => Set<QuestParticipation>();
+    /// <inheritdoc />
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    /// <inheritdoc />
     public DbSet<EventStatusHistory> EventStatusHistory => Set<EventStatusHistory>();
+    /// <inheritdoc />
     public DbSet<QuestStatusHistory> QuestStatusHistory => Set<QuestStatusHistory>();
+    /// <inheritdoc />
     public DbSet<Notification> Notifications => Set<Notification>();
+    /// <inheritdoc />
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    /// <inheritdoc />
     public DbSet<EventNotificationPreference> EventNotificationPreferences => Set<EventNotificationPreference>();
+    /// <inheritdoc />
     public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    /// <inheritdoc />
     public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
+    /// <inheritdoc />
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    /// <inheritdoc />
     public DbSet<ScheduledWork> ScheduledWork => Set<ScheduledWork>();
+    /// <inheritdoc />
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    /// <inheritdoc />
     public DbSet<CalendarDeliveryState> CalendarDeliveryStates => Set<CalendarDeliveryState>();
+    /// <inheritdoc />
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    /// <inheritdoc />
     public DbSet<BulkMembershipOperation> BulkOperations => Set<BulkMembershipOperation>();
+    /// <inheritdoc />
     public DbSet<BulkMembershipRecipient> BulkRecipients => Set<BulkMembershipRecipient>();
 
+    /// <inheritdoc />
     public Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.Serializable,
         CancellationToken cancellationToken = default) => Database.BeginTransactionAsync(isolationLevel, cancellationToken);
 
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Ignore<Entity>();
@@ -122,23 +161,75 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         modelBuilder.Entity<CalendarDeliveryState>().Property(x => x.Payload).HasColumnType("nvarchar(max)").Metadata.SetMaxLength(null);
     }
 
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    /// <summary>Saves tracked changes and accepts their tracked state without permitting audit/history mutation.</summary>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <remarks>Saving neither commits a caller-owned transaction nor dispatches external notifications.</remarks>
+    public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
+
+    /// <summary>Saves tracked changes with uniform immutable-history and persistence-conflict enforcement.</summary>
+    /// <param name="acceptAllChangesOnSuccess">Whether to accept tracked changes after the database write succeeds.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <remarks>When acceptance is disabled, the caller owns subsequent tracker acceptance. Other database failures propagate.</remarks>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnsureHistoryIsImmutable();
+        try
+        {
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        {
+            throw PersistenceConflict(exception);
+        }
+    }
+
+    /// <summary>Saves tracked changes asynchronously and accepts their tracked state without permitting audit/history mutation.</summary>
+    /// <param name="cancellationToken">Cancels the database write.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed during the database write.</exception>
+    /// <remarks>Saving neither commits a caller-owned transaction nor dispatches external notifications.</remarks>
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
+
+    /// <summary>Saves tracked changes asynchronously with uniform immutable-history and persistence-conflict enforcement.</summary>
+    /// <param name="acceptAllChangesOnSuccess">Whether to accept tracked changes after the database write succeeds.</param>
+    /// <param name="cancellationToken">Cancels the database write.</param>
+    /// <returns>The number of state entries written to the database.</returns>
+    /// <exception cref="DomainException">History mutation, stale row versions, or duplicate keys cause a Conflict failure.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed during the database write.</exception>
+    /// <remarks>When acceptance is disabled, the caller owns subsequent tracker acceptance. Other database failures propagate.</remarks>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnsureHistoryIsImmutable();
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+        {
+            throw PersistenceConflict(exception);
+        }
+    }
+
+    private void EnsureHistoryIsImmutable()
     {
         if (ChangeTracker.Entries().Any(x =>
             (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory) &&
             (x.State is EntityState.Modified or EntityState.Deleted)))
+        {
             throw new DomainException(ErrorCode.Conflict, "History records are immutable.");
-        try
-        {
-            return await base.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw new DomainException(ErrorCode.Conflict, "This item changed. Reload and try again.");
-        }
-        catch (DbUpdateException exception) when (exception.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        {
-            throw new DomainException(ErrorCode.Conflict, "This operation conflicts with a change already saved. Reload and try again.");
         }
     }
+
+    private static bool IsPersistenceConflict(DbUpdateException exception) =>
+        exception is DbUpdateConcurrencyException ||
+        exception.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 };
+
+    private static DomainException PersistenceConflict(DbUpdateException exception) =>
+        new(ErrorCode.Conflict, exception is DbUpdateConcurrencyException
+            ? "This item changed. Reload and try again."
+            : "This operation conflicts with a change already saved. Reload and try again.");
 }

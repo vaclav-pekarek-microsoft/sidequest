@@ -12,9 +12,9 @@ public static class AccessRules
     /// <param name="member">Whether the actor has active individual Event membership.</param>
     /// <param name="owner">Whether the actor is an equal Event owner.</param>
     /// <param name="status">Event lifecycle state.</param>
-    /// <returns>True for eligible owners of Draft Events or eligible members of non-draft Events.</returns>
+    /// <returns>True only for eligible members, with ownership additionally required for Draft Events.</returns>
     public static bool CanReadEvent(bool eligible, bool member, bool owner, EventStatus status) =>
-        eligible && (status == EventStatus.Draft ? owner : member);
+        eligible && member && (status != EventStatus.Draft || owner);
 
     /// <summary>Evaluates ordinary Quest reads, not the separate Event-owner moderation exception.</summary>
     /// <param name="eligible">Whether the actor is currently eligible and not departed.</param>
