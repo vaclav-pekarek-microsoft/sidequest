@@ -22,7 +22,7 @@ public sealed class ChangeWriterTests(SqlTestDatabase database) : IClassFixture<
     private static readonly string[] Properties =
     [
         "ChangeId", "Kind", "EventId", "QuestId", "ActorId", "RecipientIds",
-        "OccurredUtc", "CalendarRevision", "Reason", "PreviousAttendeeIds", "CalendarChanged", "MaterialChange"
+        "OccurredUtc", "CalendarRevision", "Reason", "PreviousAttendeeIds", "CalendarChanged", "MaterialChange", "AffectedUserIds"
     ];
 
     /// <summary>Checks the full literal serialized envelope, work metadata, and staging-only behavior before an explicit save.</summary>
@@ -32,7 +32,8 @@ public sealed class ChangeWriterTests(SqlTestDatabase database) : IClassFixture<
     {
         var envelope = new ChangeEnvelope(Guid.Parse(Change), NotificationKind.QuestUpdated, Guid.Parse(Parent),
             Guid.Parse(Child), Guid.Parse(Actor), [Guid.Parse(RecipientB), Guid.Parse(RecipientA)],
-            FoundationSeed.Now, 4294967301L, Reason, [Guid.Parse(RecipientA), Guid.Parse(RecipientB)]);
+            FoundationSeed.Now, 4294967301L, Reason, [Guid.Parse(RecipientA), Guid.Parse(RecipientB)],
+            AffectedUserIds: [Guid.Parse(RecipientA)]);
         await using (var db = database.CreateContext())
         {
             new ChangeWriter().Append(db, envelope);
@@ -77,7 +78,7 @@ public sealed class ChangeWriterTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(Parent, root.GetProperty("EventId").GetString());
         Assert.Equal(0, root.GetProperty("Kind").GetInt32());
         Assert.Equal("2026-07-15T10:00:00+00:00", root.GetProperty("OccurredUtc").GetString());
-        foreach (var property in new[] { "QuestId", "ActorId", "PreviousAttendeeIds" })
+        foreach (var property in new[] { "QuestId", "ActorId", "PreviousAttendeeIds", "AffectedUserIds" })
             Assert.Equal(JsonValueKind.Null, root.GetProperty(property).ValueKind);
         Assert.Equal(0L, root.GetProperty("CalendarRevision").GetInt64());
         Assert.Equal("", root.GetProperty("Reason").GetString());
@@ -208,19 +209,31 @@ public sealed class ChangeWriterTests(SqlTestDatabase database) : IClassFixture<
         var audit = new AuditEntry
         {
             ResourceKind = quest ? ResourceKind.Quest : ResourceKind.Event,
-            ResourceId = aggregate.Id, ActorId = seed.User.Id, Action = "Published",
-            Reason = "Foundation transaction", CorrelationId = change.ToString("N"), OccurredUtc = FoundationSeed.Now
+            ResourceId = aggregate.Id,
+            ActorId = seed.User.Id,
+            Action = "Published",
+            Reason = "Foundation transaction",
+            CorrelationId = change.ToString("N"),
+            OccurredUtc = FoundationSeed.Now
         };
         Entity history = quest
             ? new QuestStatusHistory
             {
-                QuestId = aggregate.Id, Previous = QuestStatus.Draft, Next = QuestStatus.Active,
-                ActorId = seed.User.Id, Reason = "Foundation transaction", OccurredUtc = FoundationSeed.Now
+                QuestId = aggregate.Id,
+                Previous = QuestStatus.Draft,
+                Next = QuestStatus.Active,
+                ActorId = seed.User.Id,
+                Reason = "Foundation transaction",
+                OccurredUtc = FoundationSeed.Now
             }
             : new EventStatusHistory
             {
-                EventId = aggregate.Id, Previous = EventStatus.Draft, Next = EventStatus.Active,
-                ActorId = seed.User.Id, Reason = "Foundation transaction", OccurredUtc = FoundationSeed.Now
+                EventId = aggregate.Id,
+                Previous = EventStatus.Draft,
+                Next = EventStatus.Active,
+                ActorId = seed.User.Id,
+                Reason = "Foundation transaction",
+                OccurredUtc = FoundationSeed.Now
             };
         await using (var db = database.CreateContext())
         {
@@ -333,6 +346,7 @@ public sealed class ChangeWriterTests(SqlTestDatabase database) : IClassFixture<
         Assert.False(root.GetProperty("MaterialChange").GetBoolean());
         Assert.Equal([RecipientB, RecipientA], root.GetProperty("RecipientIds").EnumerateArray().Select(x => x.GetString()));
         Assert.Equal([RecipientA, RecipientB], root.GetProperty("PreviousAttendeeIds").EnumerateArray().Select(x => x.GetString()));
+        Assert.Equal([RecipientA], root.GetProperty("AffectedUserIds").EnumerateArray().Select(x => x.GetString()));
     }
 
     private static void AssertPropertyNames(JsonElement root) =>
