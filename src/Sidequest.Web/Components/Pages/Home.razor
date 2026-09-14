@@ -1,13 +1,13 @@
 @page "/"
 @inject FoundationAuthenticationSettings Authentication
 
-<PageTitle>Sidequest · Foundation</PageTitle>
+<PageTitle>Sidequest · Events and Quests</PageTitle>
 <h1>Small activities. Shared experiences.</h1>
-<p>Sidequest will help colleagues organize activities during company events.</p>
+<p>Organize activities with colleagues during company Events.</p>
 <FluentCard Class="foundation-card">
-    <h2>Foundation status</h2>
-    <p>The application shell, SQL persistence boundary and sign-in foundation are available.</p>
-    <p>No Events or Quests are available in this milestone. Nothing here is sample product data.</p>
+    <h2>Events and Quests</h2>
+    <p>Join an Event to discover its public Quests, organize an activity, or follow an activity without attending.</p>
+    <p>Private Quests are available only to their owners and invited Event members. Event membership and Quest attendance are separate.</p>
 </FluentCard>
 <h2>Sign-in information</h2>
 @if (Authentication.IsDevelopment)
@@ -21,7 +21,7 @@ else
 <AuthorizeView>
     <Authorized>
         <p>Signed in as <strong>@context.User.Identity?.Name</strong>.</p>
-        <a href="/foundation">Open the Fluent compatibility screen</a>
+        <p><a href="/events">Browse Events</a> · <a href="/quests">My Quests</a> · <a href="/notifications">Notifications</a></p>
     </Authorized>
     <NotAuthorized>
         <a href="/signin" data-enhance-nav="false">View sign-in options</a>

@@ -2004,8 +2004,10 @@ Shared M2 integration contracts:
   Forward request cancellation and retain safe error responses. Startup now maps this
   endpoint and registers the real notification service, recipient calendar renderer,
   ACS adapter and durable queue dependencies. Passing isolated endpoint or composition
-  tests does not establish full Event/Quest integration. Background processing remains
-  inactive until all feature handlers are registered and combined acceptance is complete.
+  tests does not establish full Event/Quest integration. Startup registers real Event
+  and Quest services and lifecycle adapters, then verifies exactly one handler for each
+  supported work type before starting durable background processing. Combined acceptance
+  remains an integration milestone, separate from feature-level evidence.
 - Delivery configuration uses `Delivery:Email` (verified `SenderAddress`, secret-store
   `ConnectionString` or managed-identity HTTPS `Endpoint`, optional
   `ManagedIdentityClientId`, and `SubmissionTimeout`) and `Delivery:Work`
@@ -2014,6 +2016,13 @@ Shared M2 integration contracts:
   lateness and four worker loops. Invalid timing/concurrency settings fail registration.
   Missing provider configuration never reports successful delivery; secrets belong in
   user secrets or the deployment secret store, not committed configuration files.
+- Event resource limits bind from `Events:Limits`. The real Graph adapter binds
+  `Directory:Graph` (tenant, approved workforce extension/value/policy and bounded
+  expansion settings) and `Directory:Credentials` (tenant, client ID and protected client
+  secret). Any configured directory tenant must match the authenticated tenant.
+  Missing policy or credentials fail directory operations explicitly; merely starting
+  the app never approves workforce policy or makes a provider call. No synthetic directory
+  adapter is installed for development.
 
 ### Ownership map
 

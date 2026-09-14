@@ -19,6 +19,7 @@ builder.Services.AddScoped<WorkforceAccounts>();
 builder.Services.AddSidequestApplication();
 builder.Services.AddSidequestInfrastructure(builder.Configuration);
 builder.Services.AddSidequestDelivery(builder.Configuration);
+builder.Services.AddSidequestCoreWorkflows(builder.Configuration, authentication);
 builder.Services.AddFoundationAuthentication(authentication, builder.Configuration);
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery();

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using Sidequest.Web.Components.Quests
+@using Sidequest.Domain.Model
 <PageTitle>Quest · Sidequest</PageTitle>
 <p><a href="/quests">Back to Quests</a></p>
 @if (busy && detail is null)
@@ -20,6 +21,7 @@
 @if (detail is not null)
 {
     <h1>@detail.Summary.Title</h1>
+    <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
     <p role="status"><strong>@detail.Summary.Status</strong> · @detail.Summary.Visibility · @detail.StatusReason</p>
     <QuestTimes ZoneId="@detail.Summary.TimeZoneId" StartUtc="@detail.Summary.StartUtc" EndUtc="@detail.Summary.EndUtc" />
     <p>@detail.Summary.Location</p>
@@ -40,6 +42,10 @@
             <p>Above suggested capacity. Joining is still allowed.</p>
         }
         <QuestParticipationControls Summary="detail.Summary" Busy="@(busy || conflict)" Change="ParticipateAsync" />
+        @if (detail.Summary.Participation == ParticipationStatus.Joined && detail.Summary.Status == QuestStatus.Active)
+        {
+            <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
+        }
         <h2>Attendees</h2>
         @if (detail.Attendees is { Count: > 0 })
         {
