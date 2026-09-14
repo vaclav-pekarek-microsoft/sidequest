@@ -2,10 +2,28 @@ using Sidequest.Domain.Model;
 
 namespace Sidequest.Domain.Rules;
 
+/// <summary>Pure transitions for exclusive None/Following/Joined participation; callers enforce access, lifecycle, persistence, and delivery.</summary>
+/// <remarks>Concurrent calls do not share state. Applying their results to the same persisted participation still requires
+/// transaction/concurrency guards; this calculation does not serialize competing commands.</remarks>
 public static class ParticipationRules
 {
-    public static ParticipationStatus Apply(ParticipationStatus current, ParticipationCommand command) =>
-        (current, command) switch
+    /// <summary>Computes a repeat-safe participation transition without mutating stored state.</summary>
+    /// <param name="current">Existing exclusive participation state.</param>
+    /// <param name="command">Requested transition; joining replaces following, while leaving never restores it.</param>
+    /// <returns>The resulting state, including the unchanged state for an idempotent command.</returns>
+    /// <exception cref="DomainException">An enum value is undefined (Validation), or Follow is requested while Joined (Conflict).</exception>
+    /// <example>
+    /// <code>
+    /// var joined = ParticipationRules.Apply(ParticipationStatus.Following, ParticipationCommand.Join);
+    /// var left = ParticipationRules.Apply(joined, ParticipationCommand.Leave);
+    /// // joined is Joined; left is None, not Following.
+    /// </code>
+    /// </example>
+    public static ParticipationStatus Apply(ParticipationStatus current, ParticipationCommand command)
+    {
+        if (!Enum.IsDefined(current) || !Enum.IsDefined(command))
+            throw new DomainException(ErrorCode.Validation, "Unknown participation state or command.");
+        return (current, command) switch
         {
             (ParticipationStatus.Joined, ParticipationCommand.Follow) =>
                 throw new DomainException(ErrorCode.Conflict, "You already joined this Quest and receive attendee updates."),
@@ -16,4 +34,5 @@ public static class ParticipationRules
             (_, ParticipationCommand.Leave or ParticipationCommand.Unfollow) => current,
             _ => throw new DomainException(ErrorCode.Validation, "Unknown participation command.")
         };
+    }
 }

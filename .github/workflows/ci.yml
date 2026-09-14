@@ -45,13 +45,60 @@ jobs:
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
       - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
+      - name: Install browser test runtime
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: pwsh
+        run: tests/Sidequest.BrowserTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Start synthetic browser-test application
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: bash
+        run: |
+          export SIDEQUEST_SQL_CONNECTION="$SIDEQUEST_TEST_SQL;Database=SidequestBrowserCi"
+          export ConnectionStrings__Sidequest="$SIDEQUEST_SQL_CONNECTION"
+          export ASPNETCORE_ENVIRONMENT=Development
+          export Authentication__Mode=Development
+          dotnet tool restore
+          dotnet ef database update --project src/Sidequest.Infrastructure --startup-project src/Sidequest.Infrastructure --configuration Release --no-build
+          dotnet run --project src/Sidequest.Web --configuration Release --no-build --no-launch-profile -- --urls http://127.0.0.1:5078 > "$RUNNER_TEMP/sidequest-web.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/sidequest-web.pid"
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5078/health/ready >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            echo "The synthetic browser-test application did not become ready."
+            exit 1
+          fi
+      - name: Run real browser checks
+        if: hashFiles('tests/Sidequest.BrowserTests/FoundationBrowser/**/*.cs') != ''
+        shell: pwsh
+        env:
+          SIDEQUEST_BASE_URL: http://127.0.0.1:5078
+        run: |
+          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$result = Get-Content tests/Sidequest.BrowserTests/TestResults/browser.trx
+          if ([int]$result.TestRun.ResultSummary.Counters.total -lt 1) {
+            throw "No browser scenarios were executed."
+          }
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: foundation-test-results
+          name: test-results
           path: "**/TestResults/*.trx"
           if-no-files-found: warn
+      - name: Stop test application
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/sidequest-web.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/sidequest-web.pid")" 2>/dev/null || true
+          fi
       - name: Stop isolated SQL Server
         if: always()
         run: docker rm --force sidequest-test-sql

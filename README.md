@@ -46,8 +46,11 @@ SQL integration tests create uniquely named disposable databases. On Windows the
 default server is LocalDB; CI supplies `SIDEQUEST_TEST_SQL` for an isolated SQL Server
 container. The test login needs permission to create/drop its test databases. Never
 point this setting at a production server.
-The browser test project is reserved for subsequent end-to-end milestones; it is not
-counted as browser verification until real scenarios run.
+Browser checks run against an explicitly started synthetic local app using
+`SIDEQUEST_BASE_URL` (loopback only). CI installs Chromium in its isolated Linux runner,
+starts the development app against a disposable SQL database, and runs the browser
+project. Do not bypass managed local browser policy to run these checks. M1 browser
+compatibility scenarios are not substitutes for later full Event/Quest journeys.
 
 ## Architecture and contribution policy
 
