@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Sidequest.Domain.Model;
+using Sidequest.Domain.Rules;
 
 namespace Sidequest.Application.Abstractions;
 
@@ -67,8 +68,10 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <summary>Persists tracked changes without committing a caller-owned explicit transaction.</summary>
     /// <param name="cancellationToken">Requests cooperative cancellation of database writes.</param>
     /// <returns>The number of state entries written to the database.</returns>
-    /// <exception cref="DbUpdateException">The database rejects a tracked change.</exception>
-    /// <exception cref="DbUpdateConcurrencyException">An optimistic concurrency conflict is detected.</exception>
+    /// <exception cref="DomainException">An optimistic concurrency or duplicate-key conflict is translated to
+    /// <see cref="ErrorCode.Conflict"/>, or an attempted modification/deletion of immutable audit or status-history
+    /// records is rejected with that same code.</exception>
+    /// <exception cref="DbUpdateException">Another database update failure occurs that is not translated to a domain conflict.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     /// <summary>Begins a caller-owned explicit transaction for atomic domain, audit, and durable-work changes.</summary>
