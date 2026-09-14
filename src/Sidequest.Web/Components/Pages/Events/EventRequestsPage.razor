@@ -7,7 +7,7 @@
 <PageTitle>Membership requests · Sidequest</PageTitle>
 <h1>@(Id is null ? "My membership requests" : "Manage membership requests")</h1>
 <a href="/events">Events</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
 @if (Id is not null)
 {

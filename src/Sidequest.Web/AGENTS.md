@@ -11,6 +11,10 @@ The initial scaffold used `dotnet new blazor -int Server -au Individual`; genera
 Identity account pages, SQLite and samples have been removed in favor of Entra.
 Pages use static SSR by default. Only components with `@rendermode InteractiveServer`
 become interactive, with prerendering. Never make `Routes` globally interactive.
+Keep actions and form controls disabled until `RendererInfo.IsInteractive` is true.
+Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
+an early click. Preserve prerendering and server reauthorization rather than adding
+arbitrary client delays or retrying mutations to hide this handoff.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.
@@ -113,5 +117,10 @@ dotnet test tests\Sidequest.UnitTests\Sidequest.UnitTests.csproj --filter FullyQ
 dotnet run --project src\Sidequest.Web --launch-profile http
 ```
 
-Graph, email, Events, Quests, offline caching and delivery adapters are later milestones.
-Do not introduce fake success adapters to satisfy those contracts.
+Graph, email, Event/Quest workflows and durable delivery now have real implementations.
+The host verifies handler completeness before starting its SQL worker; Graph policy and
+provider credentials remain external configuration/approval gates. M2 combined acceptance
+passed in Linux CI34896985551, including actual production composition, real SQL workflows,
+and authenticated Chromium journeys. Uploads, administration and offline caching remain
+later milestones.
+Do not introduce fake success adapters to satisfy external contracts.

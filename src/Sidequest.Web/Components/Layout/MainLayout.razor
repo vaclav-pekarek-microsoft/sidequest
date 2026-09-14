@@ -14,6 +14,10 @@
         <NavLink href="/" Match="NavLinkMatch.All">Home</NavLink>
         <AuthorizeView>
             <Authorized>
+                <NavLink href="/events">Events</NavLink>
+                <NavLink href="/quests">My Quests</NavLink>
+                <NavLink href="/quests?view=Discover">Discover Quests</NavLink>
+                <NavLink href="/notifications">Notifications</NavLink>
                 <NavLink href="/foundation">Compatibility screen</NavLink>
                 <form action="/auth/logout" method="post" data-enhance="false">
                     <AntiforgeryToken />
@@ -36,7 +40,7 @@
         </ErrorContent>
     </ErrorBoundary>
 </main>
-<footer>M1 foundation · Events and Quests are not implemented yet.</footer>
+<footer>Sidequest · Company Events and shared activities.</footer>
 <div id="blazor-error-ui" role="alert">
     The connection or screen encountered an error.
     <a href="" class="reload">Reload</a>

@@ -16,7 +16,7 @@
     <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
 </p>
 <h2>@kind</h2>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
 @if (result is not null)
 {

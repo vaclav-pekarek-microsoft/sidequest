@@ -7,7 +7,7 @@
 <PageTitle>One-time group expansion · Sidequest</PageTitle>
 <h1>One-time group add or invitation</h1>
 <a href="@($"/events/{Id}")">Event</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 @if (authorized)
 {
     <p>This operation expands the full group before changing any memberships. Supported nested groups are included.

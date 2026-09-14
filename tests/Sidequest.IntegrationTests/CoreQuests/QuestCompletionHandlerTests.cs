@@ -44,8 +44,7 @@ public sealed class QuestCompletionHandlerTests(SqlTestDatabase database) : ICla
         scenario.Clock.Now = payload.EndUtc.AddTicks(position == "before" ? -1 : 0);
         var handler = new QuestCompletionHandler(new QuestTestFactory(database), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
         Assert.Equal(WorkTypes.QuestCompletion, handler.WorkType);
-        await handler.ExecuteAsync(work.Id, default);
-        await handler.ExecuteAsync(work.Id, default);
+        await ExecuteTwiceAsync(handler, work.Id, position == "before");
         await using var read = database.CreateContext();
         var quest = await read.Quests.SingleAsync(q => q.Id == id);
         Assert.Equal(position == "at" ? QuestStatus.Completed : QuestStatus.Active, quest.Status);
@@ -101,8 +100,7 @@ public sealed class QuestCompletionHandlerTests(SqlTestDatabase database) : ICla
         }
 
         var handler = new QuestCompletionHandler(new QuestTestFactory(database), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
-        await handler.ExecuteAsync(work.Id, default);
-        await handler.ExecuteAsync(work.Id, default);
+        await ExecuteTwiceAsync(handler, work.Id, position == "early-replay");
 
         await using var read = database.CreateContext();
         var quest = await read.Quests.SingleAsync(q => q.Id == id);
@@ -158,5 +156,22 @@ public sealed class QuestCompletionHandlerTests(SqlTestDatabase database) : ICla
         Assert.Equal(QuestStatus.Active, (await read.Quests.SingleAsync(q => q.Id == scenario.Seed.Quest.Id)).Status);
         Assert.Equal(WorkStatus.Pending, (await read.ScheduledWork.SingleAsync(w => w.Id == work.Id)).Status);
         Assert.Empty(await read.QuestStatusHistory.Where(h => h.QuestId == scenario.Seed.Quest.Id).ToListAsync());
+    }
+
+    private static async Task ExecuteTwiceAsync(QuestCompletionHandler handler, Guid workId, bool premature)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            if (premature)
+            {
+                var failure = await Assert.ThrowsAsync<DomainException>(() => handler.ExecuteAsync(workId, default));
+                Assert.Equal(ErrorCode.Conflict, failure.Code);
+                Assert.Equal("Quest completion is not due yet.", failure.Message);
+            }
+            else
+            {
+                await handler.ExecuteAsync(workId, default);
+            }
+        }
     }
 }

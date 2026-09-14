@@ -7,7 +7,7 @@
 <PageTitle>Event · Sidequest</PageTitle>
 <h1>Event</h1>
 <a href="/events">Events</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
 @if (detail is not null)
 {
@@ -17,7 +17,8 @@
         <section>
             <h2>Description</h2>
             <p class="description">@detail.Description</p>
-            <p><a href="@($"/quests?eventId={Id}")">Quests in this Event</a></p>
+            <p><a href="@($"/quests?view=Discover&eventId={Id}")">Discover Quests in this Event</a></p>
+            <p><a href="@($"/notifications/preferences/{Id}")">Event notification preferences</a></p>
             @if (detail.Summary.Status == EventStatus.Active)
             {
                 <a href="@($"/quests/create?eventId={Id}")">Create Quest</a>
@@ -29,7 +30,7 @@
                     <a href="@($"/events/{Id}/requests")">Membership requests</a> ·
                     <a href="@($"/events/{Id}/invitations")">Event invitations</a> ·
                     <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a> ·
-                    <a href="@($"/quests/moderation?eventId={Id}")">Quest moderation</a>
+                    <a href="@($"/quests?view=Moderation&eventId={Id}")">Quest moderation</a>
                 </p>
                 <EventLifecycle Item="detail.Summary" Changed="LoadAsync" />
             }

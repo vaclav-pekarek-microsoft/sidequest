@@ -1953,6 +1953,19 @@ passed. The browser journeys verify synthetic admission, Fluent binding/dialog c
 Public XML documentation is build-enforced. This establishes the M1 foundation gate,
 not M2 business workflows, M4 full-product acceptance, or live provider approval.
 
+M2 combined acceptance subsequently passed in Linux CI
+[34896985551](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34896985551):
+1,549 unit, 850 real-SQL, and 45 browser-project cases, including 17 actual Chromium
+journeys, all executed with zero failures/skips. The 104 composition cases connect
+actual Event/Quest producers, lifecycle reconciliation, outbox expansion, queue
+ownership, reminder freshness, calendar rendering and delivery. An unchanged regression
+exposed and verifies the correction for premature Quest-completion acknowledgement;
+the original durable job now completes at its immutable cutoff. Real UI acceptance
+also verifies private access/revocation, calendar download, stale-editor input retention,
+and 360px keyboard/no-overflow behavior without lost prerender clicks. This establishes
+the M2 core integration gate, not completion of M3 secondary features, M4 full-product
+acceptance, or any live-provider/release approval.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
@@ -1962,6 +1975,21 @@ Shared M2 integration contracts:
   state. Targeted legacy payloads without this metadata fail explicitly rather than guessing;
   other change kinds may omit it. One UTC operation instant remains required for audit
   consistency, not as a recipient-identity key.
+- `ScheduledWork.DueUtc` is the mutable next execution/retry instant, not a checksum
+  for the original business deadline. Completion payloads retain their captured end
+  instant; handlers validate the work/resource identity and current resource deadline,
+  then apply the current-time guard. Retry backoff and administrator replay may change
+  `DueUtc` without invalidating an otherwise valid completion payload. A premature
+  claim of a still-current completion intent must fail explicitly, not return success:
+  success would let the dispatcher acknowledge unfinished work and lose its future
+  completion. The queue retains bounded retry/dead-letter ownership; handlers never
+  alter leases, attempts or retry scheduling themselves.
+- Event cancellation emits one Event-level status audience plus attendee-only child
+  withdrawal envelopes using `EventCancelled` with a Quest identifier. The parent
+  audience includes registered effective members and affected Quest recipients.
+  Each affected attendee retains a distinct per-Quest calendar withdrawal, while
+  followers, invitees, and non-attending owners do not receive redundant per-child
+  status email. Direct Quest cancellation keeps its full Quest-specific status audience.
 - `ISidequestDbContext.LockEventAsync` acquires the parent Event lock first within
   an explicit Serializable transaction, before transactional authorization or child
   reads. Resolve immutable parent IDs before starting that transaction. Provider-specific
@@ -1983,6 +2011,35 @@ Shared M2 integration contracts:
   bounds to an additional `IQuestService.ListAsync` overload. Apply the same predicates
   before count and paging. Convert date controls using the selected Event zone, or
   visibly labeled UTC for cross-Event lists; do not filter an already-paged result.
+- The calendar recovery HTTP boundary uses authenticated
+  `GET /notifications/calendar/{questId:guid}` and delegates current authorization to
+  `INotificationService.DownloadCalendarAsync`. Return exact UTF-8 calendar content as
+  `text/calendar; charset=utf-8; method=REQUEST`, attachment `sidequest.ics`, with
+  `Cache-Control: no-store` and no range/cached-version processing. Initialize only the
+  HTTP request's scoped authentication provider from its middleware-validated principal;
+  never capture an HTTP principal in an interactive circuit or renew its session deadline.
+  Forward request cancellation and retain safe error responses. Startup now maps this
+  endpoint and registers the real notification service, recipient calendar renderer,
+  ACS adapter and durable queue dependencies. Passing isolated endpoint or composition
+  tests does not establish full Event/Quest integration. Startup registers real Event
+  and Quest services and lifecycle adapters, then verifies exactly one handler for each
+  supported work type before starting durable background processing. Combined acceptance
+  remains an integration milestone, separate from feature-level evidence.
+- Delivery configuration uses `Delivery:Email` (verified `SenderAddress`, secret-store
+  `ConnectionString` or managed-identity HTTPS `Endpoint`, optional
+  `ManagedIdentityClientId`, and `SubmissionTimeout`) and `Delivery:Work`
+  (`PollInterval`, `LeaseDuration`, `ReminderLateness`, `Concurrency`). Defaults are
+  60-second submissions, 10-second polling, 90-second leases, two-minute maximum reminder
+  lateness and four worker loops. Invalid timing/concurrency settings fail registration.
+  Missing provider configuration never reports successful delivery; secrets belong in
+  user secrets or the deployment secret store, not committed configuration files.
+- Event resource limits bind from `Events:Limits`. The real Graph adapter binds
+  `Directory:Graph` (tenant, approved workforce extension/value/policy and bounded
+  expansion settings) and `Directory:Credentials` (tenant, client ID and protected client
+  secret). Any configured directory tenant must match the authenticated tenant.
+  Missing policy or credentials fail directory operations explicitly; merely starting
+  the app never approves workforce policy or makes a provider call. No synthetic directory
+  adapter is installed for development.
 
 ### Ownership map
 

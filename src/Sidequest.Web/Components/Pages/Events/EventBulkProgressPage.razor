@@ -8,7 +8,7 @@
 <PageTitle>Bulk membership progress · Sidequest</PageTitle>
 <h1>Bulk membership progress</h1>
 <a href="/events">Events</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
 @if (progress is not null)
 {

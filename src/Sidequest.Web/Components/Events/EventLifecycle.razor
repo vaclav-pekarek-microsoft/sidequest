@@ -4,7 +4,7 @@
 
 <section aria-label="Owner lifecycle actions">
     <h2>Lifecycle</h2>
-    <EventFeedback Busy="Busy" Error="Error" />
+    <EventFeedback Busy="Busy" Error="@Error" />
     @if (Item.Status == EventStatus.Draft)
     {
         <p>Publishing lists this Event to eligible users and activates the configured individual audience.</p>

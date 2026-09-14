@@ -4,7 +4,7 @@
     <legend>@(Groups ? "Choose a source group" : "Choose a workforce user")</legend>
     <FluentTextField Label="Directory search (at least two characters)" @bind-Value="query" Maxlength="100" />
     <FluentButton OnClick="SearchAsync" Disabled="@(Busy || query.Trim().Length < 2)">Search directory</FluentButton>
-    <EventFeedback Busy="Busy" Error="Error" />
+    <EventFeedback Busy="Busy" Error="@Error" />
     @if (searched && users.Count == 0 && groups.Count == 0 && Error is null)
     {
         <p>No eligible matching directory entries.</p>

@@ -12,7 +12,7 @@
 {
     <p role="alert">@error</p>
 }
-<FluentButton OnClick="LoadAsync" Disabled="@busy">Refresh failures</FluentButton>
+<FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Refresh failures</FluentButton>
 @if (busy)
 {
     <p>Loading delivery state…</p>
@@ -28,7 +28,7 @@ else if (failures is not null)
         {
             <li @key="failure.Id">
                 <p>@failure.Kind · @failure.Attempts attempts · @failure.Error</p>
-                <FluentButton OnClick="@(() => pending = failure)" Disabled="@busy">Review replay</FluentButton>
+                <FluentButton OnClick="@(() => pending = failure)" Disabled="@(busy || !RendererInfo.IsInteractive)">Review replay</FluentButton>
             </li>
         }
     </ul>
@@ -38,7 +38,7 @@ else if (failures is not null)
     <section aria-labelledby="replay-heading">
         <h2 id="replay-heading">Confirm replay</h2>
         <p>Have you corrected the dependency? Replay may submit an uncertain message again. Obsolete content remains suppressed.</p>
-        <FluentButton OnClick="ReplayAsync" Disabled="@busy">Confirm replay</FluentButton>
-        <FluentButton OnClick="@(() => pending = null)" Disabled="@busy">Cancel</FluentButton>
+        <FluentButton OnClick="ReplayAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Confirm replay</FluentButton>
+        <FluentButton OnClick="@(() => pending = null)" Disabled="@(busy || !RendererInfo.IsInteractive)">Cancel</FluentButton>
     </section>
 }

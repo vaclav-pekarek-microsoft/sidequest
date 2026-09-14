@@ -18,6 +18,7 @@ public sealed class NotificationComponentTests : BunitContext
         Services.AddFluentUIComponents();
         Services.AddSingleton<INotificationService>(service);
         JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new("Server", true));
     }
 
     /// <summary>Loading transitions to an explicit empty inbox without displaying raw exception details after an authorization failure.</summary>
