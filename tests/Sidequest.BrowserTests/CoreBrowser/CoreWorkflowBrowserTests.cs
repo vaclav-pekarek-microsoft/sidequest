@@ -121,7 +121,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(first).ToHaveURLAsync(fixture.Settings.At($"/events/{eventId}").AbsoluteUri);
         await secondName.FillAsync(unsaved);
         await second.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
-        await Expect(second.GetByRole(AriaRole.Alert)).ToBeVisibleAsync();
+        await Expect(second.GetByRole(AriaRole.Alert)).ToHaveTextAsync(
+            "This action is no longer allowed or the item changed. Reload and review the current state before retrying.");
         await Expect(secondName).ToHaveValueAsync(unsaved);
         await first.ReloadAsync();
         await Expect(first.GetByRole(AriaRole.Link, new() { Name = winner, Exact = true })).ToBeVisibleAsync();
@@ -197,6 +198,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
         await page.GetByRole(AriaRole.Button, new() { Name = "Publish Event", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Create Quest", Exact = true })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Alert)).ToHaveCountAsync(0);
         return id;
     }
 
@@ -222,7 +224,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await title.FillAsync($"Activity {Guid.NewGuid():N}");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync("Synthetic private-safe activity description.");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync("Test meeting point");
-        await page.GetByLabel("Visibility", new() { Exact = true }).SelectOptionAsync(isPrivate ? "Private" : "Public");
+        await page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Visibility\\b") }).SelectOptionAsync(isPrivate ? "Private" : "Public");
         await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
@@ -233,7 +235,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
     private static async Task ChooseMemberAsync(IPage page, string persona)
     {
-        var select = page.GetByLabel("Event member / current owner", new() { Exact = true });
+        var select = page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member / current owner\\b") });
         var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
         await Expect(option).ToHaveCountAsync(1);
         var value = await option.GetAttributeAsync("value");

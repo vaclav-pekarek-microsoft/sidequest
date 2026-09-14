@@ -8,7 +8,7 @@
 <h1>@(Id is null ? "My Event invitations" : "Manage Event invitations")</h1>
 <a href="/events">Events</a>
 <p>Event invitations require your acceptance. Membership does not join or follow any Quest, including after rejoining an Event.</p>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
 @if (result is not null)
 {

@@ -6,7 +6,7 @@
 <PageTitle>Event membership · Sidequest</PageTitle>
 <h1>Individual members and equal owners</h1>
 <a href="@($"/events/{Id}")">Event</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
 @if (detail?.Summary.IsOwner == true)
 {

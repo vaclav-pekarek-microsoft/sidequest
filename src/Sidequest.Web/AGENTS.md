@@ -113,5 +113,8 @@ dotnet test tests\Sidequest.UnitTests\Sidequest.UnitTests.csproj --filter FullyQ
 dotnet run --project src\Sidequest.Web --launch-profile http
 ```
 
-Graph, email, Events, Quests, offline caching and delivery adapters are later milestones.
-Do not introduce fake success adapters to satisfy those contracts.
+Graph, email, Event/Quest workflows and durable delivery now have real implementations.
+The host verifies handler completeness before starting its SQL worker; Graph policy and
+provider credentials remain external configuration/approval gates. M2 combined acceptance
+is in progress. Uploads, administration and offline caching remain later milestones.
+Do not introduce fake success adapters to satisfy external contracts.

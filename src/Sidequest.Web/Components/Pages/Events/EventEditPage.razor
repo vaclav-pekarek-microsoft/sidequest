@@ -9,7 +9,7 @@
 <PageTitle>Event editor · Sidequest</PageTitle>
 <h1>@(Id is null ? "Create Event" : "Edit Event")</h1>
 <a href="/events">Events</a>
-<EventFeedback Busy="Busy" Error="Error" />
+<EventFeedback Busy="Busy" Error="@Error" />
 @if (input is not null)
 {
     <EventEditor Input="input" Busy="Busy" ZoneLocked="@(detail?.Summary.Status != EventStatus.Draft && Id is not null)" Submitted="SaveAsync" />
