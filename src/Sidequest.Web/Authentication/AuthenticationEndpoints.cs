@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 namespace Sidequest.Web.Authentication;
 
 /// <summary>Maps the HTTP-only authentication flows and their loopback and redirect guards.</summary>
+/// <remarks>Map endpoints only during startup. Guards have no shared state; request contexts must not be shared across requests.</remarks>
 public static class AuthenticationEndpoints
 {
     /// <summary>Checks whether the direct peer address is a loopback address.</summary>
@@ -26,6 +27,14 @@ public static class AuthenticationEndpoints
     /// <param name="app">The application receiving authentication endpoints.</param>
     /// <param name="settings">Validated startup settings selecting the mutually exclusive authentication mode.</param>
     /// <remarks>Synthetic sign-in provisions SQL accounts before issuing a cookie. Entra provisioning occurs during token validation.</remarks>
+    /// <example>
+    /// <code>
+    /// app.UseAuthentication();
+    /// app.UseAuthorization();
+    /// app.UseAntiforgery();
+    /// app.MapFoundationAuthentication(settings);
+    /// </code>
+    /// </example>
     public static void MapFoundationAuthentication(this WebApplication app, FoundationAuthenticationSettings settings)
     {
         if (settings.IsDevelopment)

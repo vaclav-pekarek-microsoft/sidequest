@@ -14,6 +14,7 @@ using Sidequest.Web.Authentication;
 namespace Sidequest.UnitTests.FoundationWeb;
 
 /// <summary>Verifies persistence-boundary conflict retries, context disposal, and non-retryable admission failures.</summary>
+/// <remarks>Each test owns its mutable recorders. The recorders expect sequential provisioning attempts and are not shared across threads.</remarks>
 public sealed class ProvisioningRetryTests
 {
     /// <summary>Verifies a fresh serializable context per conflict retry and a commit only on the final successful attempt.</summary>
@@ -297,14 +298,24 @@ public sealed class ProvisioningRetryTests
         /// <inheritdoc/>
         public void Commit() => Commits++;
         /// <inheritdoc/>
-        public Task CommitAsync(CancellationToken cancellationToken = default) { Commit(); return Task.CompletedTask; }
+        public Task CommitAsync(CancellationToken cancellationToken = default)
+        {
+            Commit();
+            return Task.CompletedTask;
+        }
         /// <inheritdoc/>
-        public void Rollback() { }
+        public void Rollback()
+        {
+        }
         /// <inheritdoc/>
         public Task RollbackAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         /// <inheritdoc/>
         public void Dispose() => Disposed = true;
         /// <inheritdoc/>
-        public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
     }
 }

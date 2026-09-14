@@ -1,5 +1,3 @@
-@using System.ComponentModel.DataAnnotations
-
 <FluentCard Class="foundation-card">
     <EditForm Model="model" OnValidSubmit="ShowPreview" OnInvalidSubmit="ShowValidationError" FormName="compatibility">
         <DataAnnotationsValidator />
@@ -50,11 +48,4 @@
         previewed = true;
     }
 
-    /// <summary>Holds the transient label used to exercise Fluent binding and EditForm validation.</summary>
-    public sealed class PreviewModel
-    {
-        /// <summary>Gets or sets the required preview label, limited to 80 characters and never persisted.</summary>
-        [Required, StringLength(80)]
-        public string Label { get; set; } = "";
-    }
 }

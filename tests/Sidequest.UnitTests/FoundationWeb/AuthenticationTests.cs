@@ -14,6 +14,7 @@ using Sidequest.Web.Operations;
 namespace Sidequest.UnitTests.FoundationWeb;
 
 /// <summary>Verifies startup admission guards, identity boundaries, local redirects, and absolute session expiry.</summary>
+/// <remarks>Each test creates its own principals and mutable configuration; shared fields contain only immutable test values.</remarks>
 public sealed class AuthenticationTests
 {
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
@@ -235,6 +236,32 @@ public sealed class AuthenticationTests
         Assert.True(WorkforceSession.IsCurrent(principal, Now.AddHours(1).AddSeconds(-1)));
         Assert.False(WorkforceSession.IsCurrent(principal, Now.AddHours(1)));
         Assert.False(WorkforceSession.IsCurrent(principal, Now.AddHours(1).AddSeconds(1)));
+    }
+
+    /// <summary>Verifies that session stamping fails with a specific parameter error when the principal has no claims identity.</summary>
+    [Fact]
+    public void SessionStampRequiresPrimaryClaimsIdentity()
+    {
+        var error = Assert.Throws<ArgumentException>(() => WorkforceSession.Stamp(new ClaimsPrincipal(), Now));
+        Assert.Equal("principal", error.ParamName);
+    }
+
+    /// <summary>Verifies fail-fast argument errors for null inputs to identity, contact, configuration, and session boundaries.</summary>
+    [Fact]
+    public void AuthenticationBoundariesRejectNullArguments()
+    {
+        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceSession.Stamp(null!, Now)).ParamName);
+        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceSession.IsCurrent(null!, Now)).ParamName);
+        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceIdentity.Read(null!, Entra)).ParamName);
+        Assert.Equal("settings", Assert.Throws<ArgumentNullException>(() => WorkforceIdentity.Read(Principal(), null!)).ParamName);
+        Assert.Equal("user", Assert.Throws<ArgumentNullException>(() =>
+            WorkforceAccounts.UpdateContact(null!, new(Tenant, ObjectId, "Test", ""), Now)).ParamName);
+        Assert.Equal("identity", Assert.Throws<ArgumentNullException>(() =>
+            WorkforceAccounts.UpdateContact(new UserAccount(), null!, Now)).ParamName);
+        Assert.Equal("configuration", Assert.Throws<ArgumentNullException>(() =>
+            FoundationAuthenticationSettings.Load(null!, new TestEnvironment())).ParamName);
+        Assert.Equal("environment", Assert.Throws<ArgumentNullException>(() =>
+            FoundationAuthenticationSettings.Load(new ConfigurationBuilder().Build(), null!)).ParamName);
     }
 
     /// <summary>Verifies circuit-state identity lookup, expiry rejection, and cancellation before state access.</summary>

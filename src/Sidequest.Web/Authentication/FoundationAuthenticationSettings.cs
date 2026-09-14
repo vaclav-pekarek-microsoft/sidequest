@@ -5,6 +5,7 @@ namespace Sidequest.Web.Authentication;
 /// <param name="TenantId">The only tenant permitted to supply identities.</param>
 /// <param name="WorkforceRole">The exact admission app-role claim value; it grants no database application role.</param>
 /// <param name="BootstrapAdministratorObjectId">The explicitly configured object to bootstrap on first provisioning, or no bootstrap.</param>
+/// <remarks>Validated instances are immutable and safe to share across requests and circuits.</remarks>
 public sealed record FoundationAuthenticationSettings(
     bool IsDevelopment, Guid TenantId, string WorkforceRole, Guid? BootstrapAdministratorObjectId)
 {
@@ -17,9 +18,18 @@ public sealed record FoundationAuthenticationSettings(
     /// <param name="configuration">The merged configuration, including secret-store values for Entra.</param>
     /// <param name="environment">The host environment used to forbid synthetic authentication outside Development.</param>
     /// <returns>Validated settings for one authentication mode and tenant.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="environment"/> is null.</exception>
     /// <exception cref="InvalidOperationException">The mode, tenant/client credentials, workforce role, or bootstrap identity is invalid.</exception>
+    /// <example>
+    /// <code>
+    /// var settings = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
+    /// builder.Services.AddSingleton(settings);
+    /// </code>
+    /// </example>
     public static FoundationAuthenticationSettings Load(IConfiguration configuration, IHostEnvironment environment)
     {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(environment);
         var mode = configuration["Authentication:Mode"] ?? "Entra";
         if (mode is not ("Entra" or "Development"))
             throw new InvalidOperationException("Authentication:Mode must be Entra or Development.");

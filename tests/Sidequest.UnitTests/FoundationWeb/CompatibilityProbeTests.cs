@@ -1,5 +1,4 @@
 using Bunit;
-using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Sidequest.Web.Components;
@@ -7,6 +6,7 @@ using Sidequest.Web.Components;
 namespace Sidequest.UnitTests.FoundationWeb;
 
 /// <summary>Exercises real Fluent components and Blazor validation without relying on browser JavaScript execution.</summary>
+/// <remarks>Each test owns its renderer. UI callbacks run through the renderer dispatcher, not context-free continuations.</remarks>
 public sealed class CompatibilityProbeTests : BunitContext
 {
     /// <summary>Registers Fluent services and permits package-owned JavaScript calls in the bUnit renderer.</summary>

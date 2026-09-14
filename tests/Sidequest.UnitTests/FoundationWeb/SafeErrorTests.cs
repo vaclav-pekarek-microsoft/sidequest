@@ -7,6 +7,7 @@ using Sidequest.Web.Operations;
 namespace Sidequest.UnitTests.FoundationWeb;
 
 /// <summary>Verifies safe HTTP error representations and correlation identifiers for HTML and JSON clients.</summary>
+/// <remarks>Response streams, service providers, and HTTP contexts are isolated per test invocation.</remarks>
 public sealed class SafeErrorTests
 {
     /// <summary>Verifies that unexpected failures preserve HTTP 500 while hiding exception type and private details.</summary>

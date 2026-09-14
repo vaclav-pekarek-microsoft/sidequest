@@ -6,6 +6,7 @@ namespace Sidequest.Web.Authentication;
 /// <summary>Periodically invalidates server circuits whose signed session or persisted account is no longer eligible.</summary>
 /// <param name="loggerFactory">Creates the framework logger for revalidation and failure handling.</param>
 /// <param name="scopes">Creates an independent service scope for each account revalidation.</param>
+/// <remarks>The framework owns the revalidation loop and disposal. Do not share this scoped provider between circuits.</remarks>
 public sealed class WorkforceAuthenticationStateProvider(
     ILoggerFactory loggerFactory, IServiceScopeFactory scopes)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)

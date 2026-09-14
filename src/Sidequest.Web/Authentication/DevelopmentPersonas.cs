@@ -2,16 +2,8 @@ using System.Security.Claims;
 
 namespace Sidequest.Web.Authentication;
 
-/// <summary>Identifies a named synthetic account used exclusively by the development sign-in flow.</summary>
-/// <param name="Name">The display name and local part used for the synthetic contact address.</param>
-/// <param name="ObjectId">The fixed synthetic object identifier, not an identifier for a real workforce account.</param>
-public sealed record DevelopmentPersona(string Name, Guid ObjectId)
-{
-    /// <summary>Gets the lowercase contact address in the reserved <c>sample.invalid</c> domain.</summary>
-    public string Email => $"{Name.ToLowerInvariant()}@sample.invalid";
-}
-
 /// <summary>Defines the documented synthetic tenant and immutable selection of local test personas.</summary>
+/// <remarks>The read-only catalog is safe to share. Each principal returned by this class belongs to its caller.</remarks>
 public static class DevelopmentPersonas
 {
     /// <summary>The fixed tenant identifier shared by all synthetic development personas.</summary>

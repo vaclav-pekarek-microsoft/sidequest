@@ -7,6 +7,7 @@ namespace Sidequest.Web.Operations;
 
 /// <summary>Logs correlation metadata and renders safe HTTP errors without exposing exception content.</summary>
 /// <param name="logger">Records failure types, HTTP outcomes, and correlation identifiers.</param>
+/// <remarks>The handler stores no request state and may serve concurrent requests; each invocation exclusively owns its response context.</remarks>
 public sealed class SafeExceptionHandler(ILogger<SafeExceptionHandler> logger) : IExceptionHandler
 {
     /// <summary>Maps domain and antiforgery failures to HTTP status codes.</summary>

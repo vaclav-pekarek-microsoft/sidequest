@@ -7,6 +7,7 @@ namespace Sidequest.Web.Authentication;
 /// <param name="authenticationState">The scoped provider carrying the circuit's current principal.</param>
 /// <param name="settings">The configured tenant and workforce admission requirements.</param>
 /// <param name="clock">The UTC clock used to reject expired sessions.</param>
+/// <remarks>Use within the owning circuit scope. Authentication-state access retains the caller's renderer context.</remarks>
 public sealed class CircuitCurrentUser(
     AuthenticationStateProvider authenticationState, FoundationAuthenticationSettings settings, TimeProvider clock) : ICurrentUser
 {

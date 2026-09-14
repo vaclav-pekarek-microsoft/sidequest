@@ -4,15 +4,28 @@ using Sidequest.Application.Abstractions;
 namespace Sidequest.Web.Authentication;
 
 /// <summary>Maps validated authentication claims to tenant/object identities without deriving permissions from email.</summary>
+/// <remarks>There is no shared mutable state. Principals must not be mutated concurrently with claim inspection.</remarks>
 public static class WorkforceIdentity
 {
     /// <summary>Enforces configured tenant, object, workforce app-role, and synthetic-mode claim requirements.</summary>
     /// <param name="principal">The authenticated principal whose claims have already been validated by its authentication handler.</param>
     /// <param name="settings">The allowed tenant, admission role, and authentication mode.</param>
     /// <returns>An identity with bounded display/contact fields, or <see langword="null"/> when any admission requirement fails.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="principal"/> or <paramref name="settings"/> is null.</exception>
     /// <remarks>This mapping does not check session expiry or persisted eligibility; callers must perform those checks separately.</remarks>
+    /// <example>
+    /// <code>
+    /// var identity = WorkforceIdentity.Read(principal, settings);
+    /// if (identity is null)
+    /// {
+    ///     throw new DomainException(ErrorCode.Forbidden, "Workforce admission failed.");
+    /// }
+    /// </code>
+    /// </example>
     public static UserIdentity? Read(ClaimsPrincipal principal, FoundationAuthenticationSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(principal);
+        ArgumentNullException.ThrowIfNull(settings);
         if (principal.Identity?.IsAuthenticated != true ||
             !Guid.TryParse(principal.FindFirstValue("tid"), out var tenant) || tenant != settings.TenantId ||
             !Guid.TryParse(principal.FindFirstValue("oid"), out var objectId) || objectId == Guid.Empty ||

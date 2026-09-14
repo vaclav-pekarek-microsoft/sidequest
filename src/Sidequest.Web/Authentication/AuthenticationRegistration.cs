@@ -7,6 +7,7 @@ using Sidequest.Domain.Rules;
 namespace Sidequest.Web.Authentication;
 
 /// <summary>Registers cookie authentication and optional Entra validation with fail-closed account checks.</summary>
+/// <remarks>Configure the service collection on the startup thread before building the host; handlers use request-scoped account services.</remarks>
 public static class AuthenticationRegistration
 {
     /// <summary>Configures mode-isolated cookies, Entra token provisioning, and request-level SQL revalidation.</summary>
@@ -15,6 +16,13 @@ public static class AuthenticationRegistration
     /// <param name="configuration">Configuration containing the Entra registration when Entra mode is selected.</param>
     /// <returns>The same service collection for further registration.</returns>
     /// <remarks>Tokens are not saved in cookies. Cookies have a one-hour non-sliding lifetime.</remarks>
+    /// <example>
+    /// <code>
+    /// var settings = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
+    /// builder.Services.AddSingleton(settings);
+    /// builder.Services.AddFoundationAuthentication(settings, builder.Configuration);
+    /// </code>
+    /// </example>
     public static IServiceCollection AddFoundationAuthentication(this IServiceCollection services,
         FoundationAuthenticationSettings settings, IConfiguration configuration)
     {
