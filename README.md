@@ -5,7 +5,8 @@ decision log are in [the project handoff](docs/sidequest-project-handoff.md).
 
 Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
-M2 Event/Quest workflows and delivery implementations are in progress. This is not a
+M2 Event/Quest workflows and delivery are integrated into the host; combined acceptance
+is in progress. This is not a
 production-ready release; live tenant, email, hosting, and data-policy approval gates
 remain open.
 
@@ -35,6 +36,25 @@ an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 
+The M2 host starts durable SQL processing after checking that every supported work type
+has exactly one handler. Running it can process existing queued work in the configured
+database. Use an explicitly chosen development database, not a shared production catalog.
+Missing email configuration causes explicit delivery failures, not simulated success.
+
+Provider configuration is separate from sign-in configuration:
+
+- `Directory:Graph`: tenant, approved workforce extension/value/policy and expansion limits.
+- `Directory:Credentials`: matching tenant, Graph application client ID and protected secret.
+- `Delivery:Email`: verified sender/organizer, ACS connection string or managed-identity
+  HTTPS endpoint, optional managed identity client ID and submission timeout.
+- `Events:Limits` and `Delivery:Work`: bounded workflow, polling, lease and concurrency settings.
+
+Directory tenants must match the authenticated tenant. Store credentials in user secrets
+or the deployment secret store; never commit them. Missing Graph policy or credentials
+fails directory operations explicitly without preventing existing Event access.
+Calendar downloads require a configured organizer. CI uses a reserved synthetic organizer
+address solely for local calendar rendering, with no ACS credentials or live email calls.
+
 ## Verification
 
 ```powershell
@@ -50,8 +70,10 @@ point this setting at a production server.
 Browser checks run against an explicitly started synthetic local app using
 `SIDEQUEST_BASE_URL` (loopback only). CI installs Chromium in its isolated Linux runner,
 starts the development app against a disposable SQL database, and runs the browser
-project. Do not bypass managed local browser policy to run these checks. M1 browser
-compatibility scenarios are not substitutes for later full Event/Quest journeys.
+project. Do not bypass managed local browser policy to run these checks. The browser
+project includes M1 compatibility scenarios and M2 membership, participation, private
+access, moderation, calendar recovery, stale-editor and mobile interaction journeys.
+Neither synthetic suite establishes approved live-provider or release acceptance.
 Foundation CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
 
