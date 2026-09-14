@@ -12,7 +12,7 @@
   Preserve required assistant attribution trailers.
 - Do not publish changes through a bot, service account, or another user's account.
   All development sub-agents follow these same branch, identity, and PR rules.
-- Leave pull requests open for review unless the user explicitly requests merging;
-  honor configured review and CI requirements.
+- Automatic PR merging is authorized after the change is verified and configured
+  review/CI requirements pass. Never bypass the PR or push changes directly to main.
 - Follow `docs\sidequest-project-handoff.md` for the accepted specification,
   development ownership boundaries, and remaining external approval gates.
