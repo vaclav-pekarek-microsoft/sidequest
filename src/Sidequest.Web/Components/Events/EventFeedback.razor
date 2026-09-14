@@ -1,0 +1,16 @@
+@if (Busy)
+{
+    <p role="status">Loading or saving…</p>
+}
+@if (Error is not null)
+{
+    <p role="alert">@Error</p>
+}
+
+@code {
+    /// <summary>Indicates a pending authorized query or command.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Safe error message supplied by the owning page, or null when no error exists.</summary>
+    [Parameter] public string? Error { get; set; }
+}
