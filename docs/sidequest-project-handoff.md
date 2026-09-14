@@ -1951,6 +1951,13 @@ not M2 business workflows, M4 full-product acceptance, or live provider approval
 
 Shared M2 integration contracts:
 
+- `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
+  observing recipients, and prior attendees. Membership additions/decisions, joins/leaves,
+  attendee removals, and access removals require nonempty targets included in `RecipientIds`.
+  Delivery must never infer targets by joining timestamps or mutable membership/participation
+  state. Targeted legacy payloads without this metadata fail explicitly rather than guessing;
+  other change kinds may omit it. One UTC operation instant remains required for audit
+  consistency, not as a recipient-identity key.
 - `ISidequestDbContext.LockEventAsync` acquires the parent Event lock first within
   an explicit Serializable transaction, before transactional authorization or child
   reads. Resolve immutable parent IDs before starting that transaction. Provider-specific
