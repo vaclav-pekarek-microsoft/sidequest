@@ -1,0 +1,56 @@
+@page "/quests"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Sidequest.Application.Quests
+@using Sidequest.Web.Components.Quests
+<PageTitle>Quests · Sidequest</PageTitle>
+<h1>My Quests</h1>
+<p><a href="/quests/create">Create a Quest</a> · <a href="/quests?view=History">History</a> · <a href="/quests?view=Invited">Private invitations</a></p>
+<label>View
+    <select @bind="kind" @bind:after="ResetAsync" disabled="@loading">
+        @foreach (var value in Enum.GetValues<QuestListKind>())
+        {
+            <option value="@value">@value</option>
+        }
+    </select>
+</label>
+<label>Event
+    <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@loading">
+        <option value="">All my Events</option>
+        @foreach (var item in events)
+        {
+            <option @key="item.Id" value="@item.Id">@item.Name</option>
+        }
+    </select>
+</label>
+<fieldset disabled="@loading">
+    <legend>Quest start dates in @dateZone</legend>
+    <label>From date (inclusive) <input type="date" @bind="fromDate" @bind:after="ResetAsync" /></label>
+    <label>Through date (inclusive) <input type="date" @bind="throughDate" @bind:after="ResetAsync" /></label>
+    <small>Select an Event to use its time zone. Across all Events, these dates use UTC.</small>
+</fieldset>
+@if (loading)
+{
+    <p role="status">Loading authorized Quests…</p>
+}
+else if (error is not null)
+{
+    <p role="alert">@error</p>
+    <FluentButton OnClick="LoadAsync">Reload</FluentButton>
+}
+else if (result is null || result.Items.Count == 0)
+{
+    <p>No Quests in this view. Private invitations grant access immediately; there is nothing to accept.</p>
+}
+else
+{
+    @foreach (var item in result.Items)
+    {
+        <QuestCard @key="item.Id" Item="item" Moderation="@(kind == QuestListKind.Moderation)" />
+    }
+}
+<div>
+    <FluentButton Disabled="@(loading || page == 1)" OnClick="PreviousAsync">Previous</FluentButton>
+    <span>Page @(page)</span>
+    <FluentButton Disabled="@(loading || result is null || page * 25 >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>
+</div>

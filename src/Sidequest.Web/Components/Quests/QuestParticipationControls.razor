@@ -1,0 +1,25 @@
+@using Sidequest.Domain.Model
+<section aria-labelledby="participation-title">
+    <h2 id="participation-title">Your participation: @Summary.Participation</h2>
+    <p>Joining sends required service messages and a calendar invitation. Your calendar app may ask you to accept.
+        Declining there does not change Sidequest attendance: leave here instead. Leaving never restores Following.</p>
+    @if (Summary.Participation == ParticipationStatus.Joined)
+    {
+        <FluentButton Disabled="@Busy" OnClick="@(() => Change.InvokeAsync(ParticipationCommand.Leave))">Leave Quest</FluentButton>
+    }
+    else
+    {
+        @if (Summary.Status == QuestStatus.Active)
+        {
+            <FluentButton Disabled="@Busy" Appearance="Appearance.Accent" OnClick="@(() => Change.InvokeAsync(ParticipationCommand.Join))">Join Quest</FluentButton>
+        }
+        @if (Summary.Participation == ParticipationStatus.Following)
+        {
+            <FluentButton Disabled="@Busy" OnClick="@(() => Change.InvokeAsync(ParticipationCommand.Unfollow))">Unfollow</FluentButton>
+        }
+        else if (Summary.Status == QuestStatus.Active)
+        {
+            <FluentButton Disabled="@Busy" OnClick="@(() => Change.InvokeAsync(ParticipationCommand.Follow))">Follow</FluentButton>
+        }
+    }
+</section>
