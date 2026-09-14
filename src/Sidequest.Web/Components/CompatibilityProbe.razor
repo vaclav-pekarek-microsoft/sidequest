@@ -1,0 +1,58 @@
+@using System.ComponentModel.DataAnnotations
+
+<FluentCard Class="foundation-card">
+    <EditForm Model="model" OnValidSubmit="ShowPreview" OnInvalidSubmit="ShowValidationError" FormName="compatibility">
+        <DataAnnotationsValidator />
+        <FluentTextField Label="Preview label" @bind-Value="model.Label" Required="true" />
+        <ValidationMessage For="() => model.Label" />
+        <p>Enter up to 80 characters to preview a dialog. This value stays in this screen only.</p>
+        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent">Preview dialog</FluentButton>
+    </EditForm>
+    @if (hasValidationError)
+    {
+        <p role="alert" class="error-message">Enter a preview label between 1 and 80 characters.</p>
+    }
+    @if (previewed)
+    {
+        <p role="status">Preview completed. Nothing was saved.</p>
+    }
+</FluentCard>
+<FluentDialog @bind-Hidden="dialogHidden" Modal="true" TrapFocus="true" aria-label="Compatibility preview">
+    <FluentDialogHeader><h2>Compatibility preview</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>@model.Label</p>
+        <p>This dialog has no database side effects.</p>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="ClosePreview">Close preview</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+<FluentDialogProvider />
+<FluentToastProvider />
+
+@code {
+    private readonly PreviewModel model = new();
+    private bool dialogHidden = true;
+    private bool hasValidationError;
+    private bool previewed;
+
+    private void ShowPreview()
+    {
+        hasValidationError = false;
+        dialogHidden = false;
+    }
+
+    private void ShowValidationError() => hasValidationError = true;
+
+    private void ClosePreview()
+    {
+        dialogHidden = true;
+        previewed = true;
+    }
+
+    public sealed class PreviewModel
+    {
+        [Required, StringLength(80)]
+        public string Label { get; set; } = "";
+    }
+}
