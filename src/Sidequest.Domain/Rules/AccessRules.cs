@@ -3,6 +3,8 @@ using Sidequest.Domain.Model;
 namespace Sidequest.Domain.Rules;
 
 /// <summary>Pure read/moderation predicates over previously resolved database authorization facts; no identity lookup or mutation occurs.</summary>
+/// <remarks>Methods use only value inputs and are safe for concurrent calls. Callers are responsible for obtaining a consistent,
+/// current authorization snapshot; thread safety does not make stale access facts authoritative.</remarks>
 public static class AccessRules
 {
     /// <summary>Evaluates full Event read access; discovery summaries require a separate disclosure policy.</summary>

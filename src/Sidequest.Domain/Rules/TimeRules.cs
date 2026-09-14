@@ -3,6 +3,7 @@ using NodaTime;
 namespace Sidequest.Domain.Rules;
 
 /// <summary>Converts IANA-zone local scheduling inputs and enforces Quest containment in inclusive Event dates.</summary>
+/// <remarks>Methods do not mutate shared state and may be called concurrently. Returned zones are immutable TZDB values.</remarks>
 public static class TimeRules
 {
     /// <summary>Resolves a time zone from the bundled TZDB provider.</summary>
@@ -19,6 +20,14 @@ public static class TimeRules
     /// <param name="zoneId">IANA Event zone inherited by its Quests.</param>
     /// <returns>Start-of-day boundaries at the zone's offsets; End is the start of the day after end, not a fixed 24-hour increment.</returns>
     /// <exception cref="DomainException">Dates are invalid, a whole local date is skipped, or the zone is unknown (Validation).</exception>
+    /// <example>
+    /// <code>
+    /// var window = TimeRules.EventWindow(
+    ///     new DateOnly(2026, 3, 29), new DateOnly(2026, 3, 29), "Europe/Prague");
+    /// var duration = window.End - window.Start;
+    /// // The spring daylight-saving date spans 23 hours, not a fixed 24 hours.
+    /// </code>
+    /// </example>
     public static (DateTimeOffset Start, DateTimeOffset End) EventWindow(DateOnly start, DateOnly end, string zoneId)
     {
         if (end < start)
@@ -44,6 +53,14 @@ public static class TimeRules
     /// <param name="selectedOffset">Chosen UTC offset for an overlap, or null when the local time is unambiguous.</param>
     /// <returns>The selected instant normalized to offset zero.</returns>
     /// <exception cref="DomainException">The zone is invalid, time falls in a gap, an overlap lacks an offset, or the selected offset is invalid (Validation).</exception>
+    /// <example>
+    /// <code>
+    /// var local = new DateTime(2026, 10, 25, 2, 30, 0, DateTimeKind.Unspecified);
+    /// var firstOccurrence = TimeRules.ToUtc(local, "Europe/Prague", TimeSpan.FromHours(2));
+    /// var secondOccurrence = TimeRules.ToUtc(local, "Europe/Prague", TimeSpan.FromHours(1));
+    /// // The explicit choices differ by one hour; omitting the offset is invalid.
+    /// </code>
+    /// </example>
     public static DateTimeOffset ToUtc(DateTime local, string zoneId, TimeSpan? selectedOffset = null)
     {
         var zone = Zone(zoneId);
@@ -68,6 +85,14 @@ public static class TimeRules
     /// <param name="eventEnd">Inclusive last Event local date.</param>
     /// <param name="zoneId">Parent Event IANA zone; Quests do not define an independent zone.</param>
     /// <exception cref="DomainException">Duration, containment, Event dates, or zone is invalid (Validation).</exception>
+    /// <example>
+    /// <code>
+    /// var start = TimeRules.ToUtc(new DateTime(2026, 9, 14, 10, 0, 0), "Europe/Prague");
+    /// var end = TimeRules.ToUtc(new DateTime(2026, 9, 14, 11, 0, 0), "Europe/Prague");
+    /// TimeRules.ValidateQuest(start, end, new DateOnly(2026, 9, 14),
+    ///     new DateOnly(2026, 9, 14), "Europe/Prague");
+    /// </code>
+    /// </example>
     public static void ValidateQuest(DateTimeOffset start, DateTimeOffset end, DateOnly eventStart, DateOnly eventEnd, string zoneId)
     {
         var window = EventWindow(eventStart, eventEnd, zoneId);

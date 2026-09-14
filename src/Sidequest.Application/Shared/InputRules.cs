@@ -4,6 +4,8 @@ using Sidequest.Domain.Rules;
 namespace Sidequest.Application.Shared;
 
 /// <summary>Shared input normalization and validation without persistence or authorization side effects.</summary>
+/// <remarks>Text and capacity validation have no shared mutable state. Version checks require an entity and rowversion
+/// array that are not being concurrently modified; they do not replace transactional concurrency enforcement.</remarks>
 public static class InputRules
 {
     /// <summary>Trims text, converts null to empty, and checks inclusive UTF-16 length bounds.</summary>
@@ -40,6 +42,13 @@ public static class InputRules
     /// <param name="entity">Persisted entity containing the current binary rowversion.</param>
     /// <param name="expected">Client's Base64-encoded rowversion; null, blank, malformed, and non-eight-byte values are invalid.</param>
     /// <exception cref="DomainException">Token format is invalid (Validation), or its bytes differ from the entity's version (Conflict).</exception>
+    /// <example>
+    /// <code>
+    /// // persistedEntity was freshly loaded and authorized in the current operation.
+    /// InputRules.Version(persistedEntity, submittedVersion);
+    /// // Apply the edit only after this check; EF still detects changes racing the eventual save.
+    /// </code>
+    /// </example>
     public static void Version(Entity entity, string? expected)
     {
         Span<byte> decoded = stackalloc byte[8];
