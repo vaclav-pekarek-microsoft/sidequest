@@ -235,7 +235,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
     private static async Task ChooseMemberAsync(IPage page, string persona)
     {
-        var select = page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member / current owner\\b") });
+        var select = page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member\\b") });
         var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
         await Expect(option).ToHaveCountAsync(1);
         var value = await option.GetAttributeAsync("value");
@@ -282,8 +282,16 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private static async Task NoOverflowAsync(IPage page)
     {
         Assert.Equal(360, await page.EvaluateAsync<int>("window.innerWidth"));
-        Assert.False(await page.EvaluateAsync<bool>(
-            "() => document.documentElement.scrollWidth > document.documentElement.clientWidth || document.body.scrollWidth > document.documentElement.clientWidth"),
-            "The composed product page must not scroll horizontally at a 360px viewport.");
+        var overflows = await page.EvaluateAsync<bool>(
+            "() => document.documentElement.scrollWidth > document.documentElement.clientWidth || document.body.scrollWidth > document.documentElement.clientWidth");
+        var diagnostic = overflows
+            ? await page.EvaluateAsync<string>("""
+                () => JSON.stringify(Array.from(document.querySelectorAll('main *'))
+                    .filter(element => element.getBoundingClientRect().right > document.documentElement.clientWidth)
+                    .slice(0, 12).map(element => ({tag: element.tagName, width: element.getBoundingClientRect().width,
+                        text: element.textContent.slice(0, 120)})))
+                """)
+            : "";
+        Assert.False(overflows, $"The composed product page must not scroll horizontally at a 360px viewport. {diagnostic}");
     }
 }
