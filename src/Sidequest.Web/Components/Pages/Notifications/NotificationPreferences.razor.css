@@ -1,0 +1,17 @@
+fieldset, section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    max-width: 40rem;
+    min-width: 0;
+    margin-block: 1rem;
+}
+
+input, ::deep fluent-text-field {
+    max-width: 100%;
+}
+
+label, p {
+    overflow-wrap: anywhere;
+}

@@ -1,0 +1,22 @@
+nav, .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-block: 1rem;
+}
+
+.notifications {
+    list-style: none;
+    padding: 0;
+}
+
+.notifications li {
+    border-block-end: 1px solid var(--neutral-stroke-rest);
+    padding-block: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.notifications a {
+    margin-inline-end: 1rem;
+}
