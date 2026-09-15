@@ -10,10 +10,10 @@ DECLARE @buffer xml = (
     SELECT CAST(target.target_data AS xml)
     FROM sys.dm_xe_session_targets AS target
     INNER JOIN sys.dm_xe_sessions AS session ON target.event_session_address = session.address
-    WHERE session.name = N'system_health' AND target.target_name = N'ring_buffer'
+    WHERE session.name = N'SidequestBrowserDiagnostics' AND target.target_name = N'ring_buffer'
 );
 IF @buffer IS NULL
-    THROW 50000, 'The system_health ring buffer is unavailable for diagnostics.', 1;
+    THROW 50000, 'The isolated browser ring buffer is unavailable for diagnostics.', 1;
 
 SELECT @buffer.query('<deadlocks reports="{count(/RingBufferTarget/event[@name="xml_deadlock_report"])}" truncated="{/RingBufferTarget/@truncated}">{
     /RingBufferTarget/event[@name="xml_deadlock_report"]/data/value/deadlock[
