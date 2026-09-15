@@ -37,6 +37,13 @@ an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 
+If native sign-in starts before browser initialization, successful authentication can
+reach a completion page without a device generation. That page deliberately shows
+guidance and requires **Continue to Sidequest** rather than activating device storage
+or navigating automatically. This is distinct from a failed authentication request
+or a rejected nonempty generation; neither should be hidden by an automatic retry
+or a generic continuation fallback.
+
 The composed host starts durable SQL processing after checking that every supported work type
 has exactly one handler. Running it can process existing queued work in the configured
 database. Use an explicitly chosen development database, not a shared production catalog.
