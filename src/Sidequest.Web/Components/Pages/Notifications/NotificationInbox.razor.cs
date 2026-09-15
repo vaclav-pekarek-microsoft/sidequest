@@ -1,73 +1,57 @@
 using Microsoft.AspNetCore.Components;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Notifications;
-using Sidequest.Domain.Rules;
 
 namespace Sidequest.Web.Components.Pages.Notifications;
 
-/// <summary>Interactive recipient inbox; protected display state is cleared before every reauthorized service request.</summary>
-public partial class NotificationInbox : IAsyncDisposable
+/// <summary>Recipient inbox whose list and unread count are refreshed together before reconnect reveals protected content.</summary>
+public partial class NotificationInbox
 {
     [Inject] private INotificationService Service { get; set; } = default!;
-    private readonly CancellationTokenSource lifetime = new();
     private PageResult<NotificationSummary>? items;
     private int unread;
     private int page = 1;
-    private bool busy;
-    private string? error;
-    private string status = "";
 
-    /// <inheritdoc/>
-    protected override Task OnInitializedAsync() => RefreshAsync();
-
-    private async Task RefreshAsync()
+    /// <inheritdoc />
+    protected override async Task QueryAsync(CancellationToken token)
     {
-        if (busy)
-            return;
-        busy = true;
         items = null;
         unread = 0;
-        error = null;
-        try
-        {
-            var loaded = await Service.ListAsync(new(page), lifetime.Token);
-            var count = await Service.UnreadCountAsync(lifetime.Token);
-            items = loaded;
-            unread = count;
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (DomainException) { error = "Notifications are unavailable or your session no longer has access."; }
-        catch (Exception) { error = "Notifications could not be loaded. Try again shortly."; }
-        finally { busy = false; }
+        var loaded = await Service.ListAsync(new(page), token);
+        token.ThrowIfCancellationRequested();
+        var count = await Service.UnreadCountAsync(token);
+        token.ThrowIfCancellationRequested();
+        items = loaded;
+        unread = count;
     }
 
-    private async Task MarkAsync(Guid? id)
+    private Task MarkAsync(Guid? id)
     {
-        if (busy)
-            return;
-        items = null;
-        try
+        if (id is null ? unread == 0 : items?.Items.Any(item => item.Id == id && !item.IsRead) != true)
+            return Task.CompletedTask;
+        return MutateAsync(async token =>
         {
-            busy = true;
-            await Service.MarkReadAsync(id, lifetime.Token);
-            status = "Read state saved.";
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { status = "Read state was not saved. Refresh to check access and retry."; }
-        finally { busy = false; }
-        await RefreshAsync();
+            items = null;
+            unread = 0;
+            await Service.MarkReadAsync(id, token);
+            token.ThrowIfCancellationRequested();
+            Status = "Read state saved.";
+            await QueryAsync(token);
+        });
     }
 
-    private async Task MoveAsync(int delta)
+    private Task MoveAsync(int delta)
     {
+        if (ControlsDisabled || (delta < 0 ? page == 1 : items is null || page * 25 >= items.TotalCount))
+            return Task.CompletedTask;
         page += delta;
-        await RefreshAsync();
+        return RetryAsync();
     }
 
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
     {
-        await lifetime.CancelAsync();
-        lifetime.Dispose();
+        items = null;
+        unread = 0;
     }
 }

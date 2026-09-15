@@ -2,37 +2,38 @@
 @page "/notifications/preferences/{EventId:guid}"
 @attribute [Authorize]
 @rendermode InteractiveServer
+@inherits Sidequest.Web.Components.Notifications.NotificationViewBase
 
 <PageTitle>Notification preferences · Sidequest</PageTitle>
 <h1>Notification preferences</h1>
 <a href="/notifications">Back to notifications</a>
 <p>Required invitations, access decisions, service messages and calendar updates cannot be disabled here.</p>
 <p>Calendar clients may ask you to accept changes. Declining in Outlook does not change Sidequest attendance: leave in Sidequest.</p>
-<div role="status" aria-live="polite">@status</div>
-@if (error is not null)
+<div role="status" aria-live="polite">@Status</div>
+@if (Error is not null)
 {
-    <p role="alert">@error</p>
+    <p role="alert">@Error</p>
 }
-@if (model is null)
+@if (!CanDisplayProtectedState || model is null)
 {
-    <p>@(busy ? "Loading preferences…" : "Preferences are unavailable.")</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Retry</FluentButton>
+    <p>@(Busy ? "Loading preferences…" : "Preferences are unavailable.")</p>
+    <FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Retry</FluentButton>
 }
 else
 {
     <EditForm Model="model" OnValidSubmit="SaveAsync" FormName="notification-preferences">
         <DataAnnotationsValidator />
         <ValidationSummary />
-        <fieldset disabled="@(busy || !RendererInfo.IsInteractive)">
+        <fieldset disabled="@ControlsDisabled">
             <legend>Optional communications</legend>
-            <FluentCheckbox @bind-Value="model.NewQuestEmail" Disabled="@(busy || !RendererInfo.IsInteractive)">Email me about new public Quests</FluentCheckbox>
-            <FluentCheckbox @bind-Value="model.ActivityEmail" Disabled="@(busy || !RendererInfo.IsInteractive)">Email me optional joined/followed Quest activity</FluentCheckbox>
-            <FluentCheckbox @bind-Value="model.RemindersEnabled" Disabled="@(busy || !RendererInfo.IsInteractive)">Enable attendee reminders (email and in-app)</FluentCheckbox>
+            <FluentCheckbox @bind-Value="model.NewQuestEmail" Disabled="@ControlsDisabled">Email me about new public Quests</FluentCheckbox>
+            <FluentCheckbox @bind-Value="model.ActivityEmail" Disabled="@ControlsDisabled">Email me optional joined/followed Quest activity</FluentCheckbox>
+            <FluentCheckbox @bind-Value="model.RemindersEnabled" Disabled="@ControlsDisabled">Enable attendee reminders (email and in-app)</FluentCheckbox>
             <label for="reminder-hours">Remind me this many hours before start (0.01–168, up to two decimal places)</label>
             <InputNumber id="reminder-hours" @bind-Value="model.ReminderHours" min="0.01" max="168" step="0.01" />
             <ValidationMessage For="@(() => model.ReminderHours)" />
-            <FluentTextField Label="Preferred IANA time zone (optional)" @bind-Value="model.TimeZoneId" Disabled="@(busy || !RendererInfo.IsInteractive)" />
-            <FluentButton Type="ButtonType.Submit" Disabled="@(busy || !RendererInfo.IsInteractive)">Save preferences</FluentButton>
+            <FluentTextField Label="Preferred IANA time zone (optional)" @bind-Value="model.TimeZoneId" Disabled="@ControlsDisabled" />
+            <FluentButton Type="ButtonType.Submit" Disabled="@ControlsDisabled">Save preferences</FluentButton>
         </fieldset>
     </EditForm>
     @if (EventId is not null)
@@ -40,8 +41,8 @@ else
         <section aria-labelledby="event-preference-heading">
             <h2 id="event-preference-heading">This Event's new-Quest email</h2>
             <p>This explicit override replaces your default for this Event only. Current Event membership is required.</p>
-            <FluentCheckbox @bind-Value="eventEnabled" Disabled="@(busy || !RendererInfo.IsInteractive)">Enable new-Quest email for this Event</FluentCheckbox>
-            <FluentButton OnClick="SaveEventAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Save Event override</FluentButton>
+            <FluentCheckbox @bind-Value="eventEnabled" Disabled="@ControlsDisabled">Enable new-Quest email for this Event</FluentCheckbox>
+            <FluentButton OnClick="SaveEventAsync" Disabled="@ControlsDisabled">Save Event override</FluentButton>
         </section>
     }
 }
