@@ -3,7 +3,7 @@ import vm from "node:vm";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const source = await readFile(new URL("../FoundationBrowser/FoundationCompatibilityTests.cs", import.meta.url), "utf8");
+const source = await readFile(new URL("./SyntheticLoginDiagnostics.cs", import.meta.url), "utf8");
 const match = source.match(/private const string LoginDiagnosticsScript = """\r?\n([\s\S]*?)\r?\n\s*""";/);
 assert.ok(match, "Execute the exact failure-only Foundation diagnostic projection.");
 
