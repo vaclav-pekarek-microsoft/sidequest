@@ -26,9 +26,13 @@ permission.
 Parameters require an approved region, operational owner, non-overlapping network
 ranges, workforce tenant/application/role and explicit bootstrap administrator,
 an Entra SQL administrator group, and data/log recovery-retention windows.
-The deployment tenant and workforce tenant must be verified to match. Real GUID
-validation, environment approval enforcement and network-range validation belong
-to the forthcoming deployment preflight, not this compiler check.
+The deployment tenant and workforce tenant must be verified to match. The
+[offline parameter preflight](deployment/README.md) validates GUID syntax, tenant
+equality, template limits and canonical non-overlapping IPv4 ranges, and emits
+only disabled-application ARM parameters. Its account context must come from the
+authenticated deployment job, not untrusted PR inputs. It proves neither actual
+identity/group existence nor approval, network suitability or runtime availability.
+Environment approval enforcement and live Azure validation remain unfinished.
 
 No SQL password administrator or public data-service firewall exception is
 created. An approved runner with private network/DNS access must bootstrap the
