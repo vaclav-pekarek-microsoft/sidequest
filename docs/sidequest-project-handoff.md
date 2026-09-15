@@ -1991,6 +1991,26 @@ SQL/Blob restore evidence, operational-owner assignment or production deployment
 M4 must still establish those release requirements; bounded provisioning conflicts
 are reported, not claimed to have been eliminated.
 
+M4 implementation now includes a disabled Azure infrastructure baseline, offline
+deployment-parameter preflight, opt-in managed-identity encrypted Data Protection,
+privacy-scoped operational metric export, migration-history-aware readiness and
+sequential queue sampling. Operational SQL remains in Infrastructure behind focused
+Application contracts. Missing, failed and stale observations are unavailable, not
+healthy zero backlogs. The preflight emits disabled-only ARM parameters and is not
+deployment authorization or proof of real identities/network suitability.
+
+The monitoring-enabled host passed
+[CI 34978801478](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978801478):
+1,922 unit, 1,032 real-SQL and 97 browser-project cases, all executed and passed.
+This includes a controlled Quest-reason input journey with the later Fluent change
+event withheld; reason capture no longer depends on that event. The offline preflight
+also passed its 29 cases in
+[infrastructure CI 34978440069](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978440069).
+These are bounded implementation results, not completion of M4: approval-gated OIDC
+deployment, private-runner SQL bootstrap/migrations, remaining operational signals
+and alerts, live provider/identity/device checks, measured load and actual recovery
+evidence remain unfinished. No Azure resources or deployment approvals were created.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
