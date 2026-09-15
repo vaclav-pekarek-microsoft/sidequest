@@ -182,8 +182,40 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = unsaved, Exact = true })).ToBeVisibleAsync();
     }
 
-    /// <summary>Checks that anonymous access to every core entry surface is challenged before protected UI is shown.</summary>
-    /// <param name="route">A protected Event, Quest or notification entry route.</param>
+    /// <summary>Verifies real administration navigation and loaded controls without changing shared settings, while ordinary workforce users cannot read protected forms or assignments.</summary>
+    /// <returns>A task completing after an administrator visits all four screens and a nonadministrator is denied on each route.</returns>
+    [Fact]
+    public async Task AdministrationNavigationLoadsRealServicesAndDeniesOrdinaryWorkforce()
+    {
+        await using var administratorContext = await fixture.CreateContextAsync();
+        await using var memberContext = await fixture.CreateContextAsync();
+        var administrator = await SignedInAsync(administratorContext, "Admin");
+        var member = await SignedInAsync(memberContext, "Alice");
+        await administrator.GetByRole(AriaRole.Link, new() { Name = "Administration", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByRole(AriaRole.Heading, new() { Name = "Administrators", Exact = true })).ToBeVisibleAsync();
+        await Expect(administrator.GetByLabel("Search directory-maintained display names (2–100 characters)", new() { Exact = true })).ToBeEditableAsync();
+        await Expect(administrator.GetByText("Admin — Eligible administrator", new() { Exact = false })).ToBeVisibleAsync();
+
+        var navigation = administrator.GetByRole(AriaRole.Navigation, new() { Name = "Administration", Exact = true });
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Business email", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Message brand (1–80 characters)", new() { Exact = true })).ToHaveValueAsync("Sidequest");
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Email templates", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Subject (1–200 single-line characters)", new() { Exact = true })).ToBeEditableAsync();
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Ownership recovery", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Resource ID", new() { Exact = true })).ToBeEditableAsync();
+        await Expect(administrator.GetByRole(AriaRole.Alert)).ToHaveCountAsync(0);
+
+        foreach (var route in new[] { "/administration", "/administration/email", "/administration/templates", "/administration/recovery" })
+        {
+            await member.GotoAsync(route);
+            await Expect(member.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Administrator access is required.");
+            await Expect(member.Locator("#admin-search, #email-brand, #template-subject, #recovery-id")).ToHaveCountAsync(0);
+            await Expect(member.GetByText("Admin — Eligible administrator", new() { Exact = false })).ToHaveCountAsync(0);
+        }
+    }
+
+    /// <summary>Checks that anonymous access to every core and administration entry surface is challenged before protected UI is shown.</summary>
+    /// <param name="route">A protected Event, Quest, notification or administration entry route.</param>
     /// <returns>A task completing after sign-in redirection and absent product actions are checked.</returns>
     [Theory]
     [InlineData("/events")]
@@ -192,6 +224,10 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     [InlineData("/quests/create")]
     [InlineData("/notifications")]
     [InlineData("/notifications/preferences")]
+    [InlineData("/administration")]
+    [InlineData("/administration/email")]
+    [InlineData("/administration/templates")]
+    [InlineData("/administration/recovery")]
     public async Task AnonymousCoreRoutesRequireSignIn(string route)
     {
         await using var context = await fixture.CreateContextAsync();
