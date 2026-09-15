@@ -2004,6 +2004,14 @@ Shared M2 integration contracts:
   completion: SQL can report a deadlock while rows are read after execution has returned.
   Preserve provider cancellation and unrelated failures; never retry a caller-owned
   transaction or hide its rollback behind a successful result.
+- Pending completion scheduling uses
+  `ISidequestDbContext.HasPendingScheduledWorkForUpdateAsync` to reserve the
+  deduplication-prefix range with write intent in that same Serializable transaction.
+  A shared existence read followed by insertion can deadlock independent Quest
+  publications on an empty or sparsely populated schedule index. The persistence
+  boundary owns SQL lock hints; it neither saves nor commits. Pending/Processing
+  matching, immutable completion deadlines, and explicit conflict recovery remain
+  unchanged. This does not serialize tests or automatically replay user commands.
 - The Event-owned `IEventLifecycleReconciler` stages overdue parent completion,
   pending membership cleanup, and Quest-side lifecycle effects in the caller's locked
   transaction. It never saves or commits. Persist system reconciliation separately

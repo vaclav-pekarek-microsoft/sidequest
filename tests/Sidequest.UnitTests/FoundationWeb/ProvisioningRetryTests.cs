@@ -357,6 +357,10 @@ public sealed class ProvisioningRetryTests
             throw new NotSupportedException("Account provisioning does not acquire Event locks.");
 
         /// <inheritdoc/>
+        public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not schedule completion work.");
+
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             Disposed = true;

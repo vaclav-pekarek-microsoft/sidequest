@@ -131,6 +131,10 @@ Cancelled unpublished Quests remain owner-only even after archival.
 Ordinary Quest-owner authorization short-circuits the history lookup it does not
 need, avoiding history-range locks during independent lifecycle writes. Moderation
 and nonowner access still check retained unpublished-cancellation history.
+Completion scheduling reserves its pending-work key range with write intent before
+insertion in the same transaction. This avoids compatible shared-range reads turning
+into competing insert conversions during concurrent Quest publication; it does not
+change completion deadlines, retry user commands, or commit outside the caller.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes

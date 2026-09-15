@@ -96,6 +96,7 @@ internal static class ExperienceBrowserSupport
         await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
         await ConfirmAsync(page, "Publish draft");
+        await Expect(page.Locator("p[role='status'] > strong")).ToHaveTextAsync("Active");
         return id;
     }
 
