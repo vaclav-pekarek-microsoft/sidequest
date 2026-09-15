@@ -1,0 +1,16 @@
+@if (Error is not null)
+{
+    <p role="alert">@Error</p>
+}
+<p role="status" aria-live="polite">@(Busy ? "Loading or saving administration data…" : Status)</p>
+
+@code {
+    /// <summary>Safe dynamic error text; never include provider exceptions or protected resource content.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>Whether a current server operation is in progress.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Screen-reader-announced outcome of the last successful operation.</summary>
+    [Parameter] public string Status { get; set; } = "";
+}

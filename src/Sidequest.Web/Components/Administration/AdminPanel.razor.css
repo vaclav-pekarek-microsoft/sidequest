@@ -1,0 +1,57 @@
+.admin-panel {
+    max-width: 52rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-block: 1rem;
+}
+
+.admin-panel ::deep fieldset {
+    min-width: 0;
+    margin-block: 1rem;
+}
+
+.admin-panel ::deep label {
+    display: block;
+    margin-top: .75rem;
+}
+
+.admin-panel ::deep input,
+.admin-panel ::deep select,
+.admin-panel ::deep textarea,
+.admin-panel ::deep fluent-text-field {
+    box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
+}
+
+.admin-panel ::deep textarea {
+    min-height: 8rem;
+}
+
+.admin-panel ::deep pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.admin-panel ::deep fluent-button {
+    margin: .25rem;
+    max-width: 100%;
+    height: auto;
+}
+
+.admin-panel ::deep fluent-button::part(control),
+.admin-panel ::deep fluent-button::part(content) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.admin-panel ::deep :focus-visible {
+    outline: 3px solid var(--accent-fill-rest, #005a9e);
+    outline-offset: 3px;
+}
