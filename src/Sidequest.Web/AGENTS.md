@@ -38,6 +38,15 @@ shadow input disabled after the fieldset becomes enabled.
   reload after version conflicts. Event pages retain their scoped circuit revalidation.
   Authentication changes clear/block device state before submission; storage failure
   must remain visible without preventing sign-out.
+- Before enabling a surviving circuit, the session check must match the current
+  HTTP cookie to a server-protected proof of that circuit's tenant/object identity,
+  unique sign-in instance and deadline. A different authenticated cookie is not a
+  successful reconnect. Keep this proof in bridge memory and the no-store check
+  header, never offline storage; it cannot authenticate independently. Older
+  tickets without a sign-in identifier require fresh sign-in.
+- Administration navigation is available to authenticated users, but each screen
+  and operation rechecks the persisted administrator assignment. Neither a visible
+  link nor an Entra admission role grants administration or private resource access.
 
 ## Production / real Entra configuration
 Default mode is Entra; invalid or absent configuration fails startup. There is no fallback.
