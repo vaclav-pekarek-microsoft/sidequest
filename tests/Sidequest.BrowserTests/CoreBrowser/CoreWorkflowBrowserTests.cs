@@ -98,6 +98,34 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         Assert.DoesNotContain(title, await calendar.TextAsync(), StringComparison.Ordinal);
     }
 
+    /// <summary>Proves reasoned commands consume input events even when the later Fluent change event is withheld.</summary>
+    /// <returns>A task completing after a real confirmed cancellation and verification that the change-event barrier executed.</returns>
+    [Fact]
+    public async Task QuestReasonInputDoesNotDependOnBlurChangeDelivery()
+    {
+        await using var context = await fixture.CreateContextAsync();
+        var owner = await SignedInAsync(context, "Alice");
+        var eventId = await CreateEventAsync(owner);
+        await CreateQuestAsync(owner, eventId);
+        var reason = owner.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
+        await reason.EvaluateAsync("""
+            element => {
+                const host = element.getRootNode().host ?? element;
+                if (host.localName !== "fluent-text-area")
+                    throw new Error("Expected the actual Fluent reason input.");
+                window.sidequestBlockedReasonChanges = 0;
+                host.addEventListener("change", event => {
+                    window.sidequestBlockedReasonChanges++;
+                    event.stopImmediatePropagation();
+                }, { capture: true });
+            }
+            """);
+
+        await ConfirmQuestActionAsync(owner, "Cancel Quest");
+        await Expect(owner.GetByText("Cancelled", new() { Exact = true })).ToBeVisibleAsync();
+        Assert.True(await owner.EvaluateAsync<int>("window.sidequestBlockedReasonChanges") > 0);
+    }
+
     /// <summary>Proves a stale Event editor cannot overwrite a committed winner and retains unsaved form input for explicit recovery.</summary>
     /// <returns>A task completing after both editor contexts and a persisted reload are inspected.</returns>
     [Fact]

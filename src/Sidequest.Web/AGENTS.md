@@ -18,6 +18,9 @@ arbitrary client delays or retrying mutations to hide this handoff.
 Bind Fluent input components' `Disabled` parameters explicitly as well as their
 native fieldset. Fieldset-only transitions can leave the web component and its
 shadow input disabled after the fieldset becomes enabled.
+Quest management reasons bind on input with no debounce, before confirmation can
+dispatch a command. Do not depend solely on a later Fluent blur/change event to
+capture required reasons; server validation still applies.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.
