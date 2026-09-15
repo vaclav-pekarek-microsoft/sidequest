@@ -20,9 +20,11 @@ public partial class EmailTemplates
     private RenderedBusinessEmail? preview;
 
     /// <inheritdoc />
-    protected override Task OnInitializedAsync() => LoadSelectedAsync();
+    protected override Task OnInitializedAsync() => InitializeAsync(LoadSelectedCoreAsync);
 
-    private Task LoadSelectedAsync() => RunAsync(async () =>
+    private Task LoadSelectedAsync() => RunAsync(LoadSelectedCoreAsync);
+
+    private async Task LoadSelectedCoreAsync()
     {
         var loaded = await Service.GetHistoryAsync(selectedKey, Lifetime, allowInvalidForEditing: true);
         loadedKey = selectedKey;
@@ -32,7 +34,23 @@ public partial class EmailTemplates
         historyPage = 1;
         CopyWording(loaded[0]);
         BusinessEmailRules.ValidateTemplate(loaded[0]);
-    });
+    }
+
+    /// <inheritdoc />
+    protected override async Task RefreshAfterReconnectAsync()
+    {
+        var latest = await Service.GetHistoryAsync(loadedKey, Lifetime, allowInvalidForEditing: true);
+        if (history is null)
+        {
+            revision = latest[0].Revision;
+            CopyWording(latest[0]);
+        }
+        history = latest;
+        latestRevision = latest[0].Revision;
+        historyPage = 1;
+        InvalidatePreview();
+        ValidateLoadedConfiguration(() => BusinessEmailRules.ValidateTemplate(latest[0]));
+    }
 
     private void CopyWording(EmailTemplate template)
     {
@@ -77,6 +95,7 @@ public partial class EmailTemplates
 
     private void AcceptLatestVersion()
     {
+        if (Disabled) return;
         if (history is not null) revision = latestRevision;
         InvalidatePreview();
     }
@@ -84,6 +103,7 @@ public partial class EmailTemplates
     private Task SaveAsync() => RunAsync(async () =>
     {
         revision = await Service.SaveTemplateAsync(Draft(), Lifetime);
+        Lifetime.ThrowIfCancellationRequested();
         history = await Service.GetHistoryAsync(loadedKey, Lifetime, allowInvalidForEditing: true);
         latestRevision = history[0].Revision;
         historyPage = 1;
@@ -98,5 +118,11 @@ public partial class EmailTemplates
         history = null;
         preview = null;
         confirming = false;
+        subject = "";
+        html = "";
+        text = "";
+        selectedKey = loadedKey = "quest.invitation";
+        revision = latestRevision = 0;
+        historyPage = 1;
     }
 }

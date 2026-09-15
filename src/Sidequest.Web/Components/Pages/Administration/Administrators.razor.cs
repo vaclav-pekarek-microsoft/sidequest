@@ -15,23 +15,29 @@ public partial class Administrators
     private int pageNumber = 1;
 
     /// <inheritdoc />
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override Task OnInitializedAsync() => InitializeAsync(RefreshAfterReconnectAsync);
 
-    private Task LoadAsync() => RunAsync(async () =>
+    private Task LoadAsync() => RunAsync(RefreshAfterReconnectAsync);
+
+    /// <inheritdoc />
+    protected override async Task RefreshAfterReconnectAsync()
     {
         assignments = await Service.ListAsync(Lifetime, new(pageNumber));
+        choices = null;
         pendingRemoval = null;
         pendingAddition = null;
-    });
+    }
 
     private async Task PreviousAsync()
     {
+        if (Disabled) return;
         pageNumber = Math.Max(1, pageNumber - 1);
         await LoadAsync();
     }
 
     private async Task NextAsync()
     {
+        if (Disabled) return;
         pageNumber++;
         await LoadAsync();
     }
@@ -42,6 +48,7 @@ public partial class Administrators
     {
         if (pendingAddition is null) return;
         await Service.AddAsync(pendingAddition.Id, pendingAddition.Version, Lifetime);
+        Lifetime.ThrowIfCancellationRequested();
         pendingAddition = null;
         assignments = await Service.ListAsync(Lifetime, new(pageNumber));
         Status = "Administrator added and audited.";
@@ -51,6 +58,7 @@ public partial class Administrators
     {
         if (pendingRemoval is null) return;
         await Service.RemoveAsync(pendingRemoval.UserId, pendingRemoval.Version, Lifetime);
+        Lifetime.ThrowIfCancellationRequested();
         pendingRemoval = null;
         assignments = await Service.ListAsync(Lifetime, new(pageNumber));
         Status = "Administrator removed and audited. Login does not restore this role.";
@@ -63,5 +71,7 @@ public partial class Administrators
         choices = null;
         pendingRemoval = null;
         pendingAddition = null;
+        query = "";
+        pageNumber = 1;
     }
 }
