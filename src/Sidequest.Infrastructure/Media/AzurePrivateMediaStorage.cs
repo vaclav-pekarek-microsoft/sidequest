@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net.Http.Headers;
 using Azure;
 using Azure.Identity;
 using Azure.Storage;
@@ -12,12 +14,15 @@ namespace Sidequest.Infrastructure.Media;
 /// <param name="options">Deployment configuration copied on construction; missing configuration fails operations, not service resolution.</param>
 /// <param name="clientOptions">Optional Azure SDK pipeline configuration, for example a deterministic transport in adapter tests.
 /// Null uses the SDK's normal HTTPS transport. The adapter always applies bounded retries and network timeouts.</param>
+/// <param name="clock">UTC clock for HTTP-date retry windows; null uses the system clock.</param>
 /// <remarks>The container must be provisioned privately outside this adapter; it never creates a container or emits a URL/SAS.
 /// Operators must also disable account-level anonymous Blob access to prevent a policy change racing a request.
 /// SDK content logging is disabled even for an injected pipeline. Known invalid configuration, public-container policy and
 /// definite HTTP 400/401/403/404 failures require operator correction; outages, throttling and timeouts remain retryable.</remarks>
-public sealed class AzurePrivateMediaStorage(PrivateMediaOptions options, BlobClientOptions? clientOptions = null) : IPrivateMediaStorage
+public sealed class AzurePrivateMediaStorage(PrivateMediaOptions options, BlobClientOptions? clientOptions = null,
+    TimeProvider? clock = null) : IPrivateMediaStorage
 {
+    private readonly TimeProvider time = clock ?? TimeProvider.System;
     private readonly Uri? serviceUri = options.ServiceUri;
     private readonly string? connectionString = options.ConnectionString;
     private readonly string? identityClientId = options.ManagedIdentityClientId;
@@ -113,19 +118,19 @@ public sealed class AzurePrivateMediaStorage(PrivateMediaOptions options, BlobCl
         }
         catch (RequestFailedException error)
         {
-            throw Unavailable(permanent: IsConfigurationStatus(error.Status));
+            throw Unavailable(permanent: IsConfigurationStatus(error.Status), retryAfter: RequestedRetryAfter(error));
         }
         catch (AuthenticationFailedException error)
         {
             // Credential acquisition can also fail during an outage. Only definite provider responses prove configuration failure.
-            throw Unavailable(permanent: IsPermanentProviderFailure(error));
+            throw Unavailable(permanent: IsPermanentProviderFailure(error), retryAfter: RequestedRetryAfter(error));
         }
         catch (AggregateException error) when (error.Flatten().InnerExceptions is { Count: > 0 } failures &&
             failures.All(failure => failure is RequestFailedException or AuthenticationFailedException or HttpRequestException or
                 IOException or OperationCanceledException))
         {
             token.ThrowIfCancellationRequested();
-            throw Unavailable(permanent: failures.All(IsPermanentProviderFailure));
+            throw Unavailable(permanent: failures.All(IsPermanentProviderFailure), retryAfter: RequestedRetryAfter(error));
         }
         catch (HttpRequestException)
         {
@@ -188,6 +193,33 @@ public sealed class AzurePrivateMediaStorage(PrivateMediaOptions options, BlobCl
 
     private static bool IsConfigurationStatus(int status) => status is 400 or 401 or 403 or 404;
 
+    private TimeSpan? RequestedRetryAfter(Exception error)
+    {
+        if (error is AggregateException aggregate)
+            return aggregate.Flatten().InnerExceptions.Select(RequestedRetryAfter).Max();
+        if (error is AuthenticationFailedException { InnerException: { } inner })
+            return RequestedRetryAfter(inner);
+        if (error is not RequestFailedException provider || provider.GetRawResponse() is not { } response)
+            return null;
+        if (response.Headers.TryGetValue("Retry-After", out var header) &&
+            RetryConditionHeaderValue.TryParse(header, out var retry))
+        {
+            if (retry.Delta is { } delta)
+                return delta;
+            if (retry.Date is { } date)
+            {
+                var now = time.GetUtcNow();
+                return date > now ? date - now : TimeSpan.Zero;
+            }
+        }
+        if (response.Headers.TryGetValue("x-ms-retry-after-ms", out var milliseconds) &&
+            long.TryParse(milliseconds, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+            return value <= TimeSpan.MaxValue.Ticks / TimeSpan.TicksPerMillisecond
+                ? TimeSpan.FromTicks(value * TimeSpan.TicksPerMillisecond)
+                : TimeSpan.MaxValue;
+        return null;
+    }
+
     private static bool IsPermanentProviderFailure(Exception failure) => failure switch
     {
         RequestFailedException response => IsConfigurationStatus(response.Status),
@@ -197,6 +229,6 @@ public sealed class AzurePrivateMediaStorage(PrivateMediaOptions options, BlobCl
 
     private static DomainException Configuration() => new(ErrorCode.DependencyUnavailable,
         "Private media configuration is missing or invalid.", isPermanentDependencyFailure: true);
-    private static DomainException Unavailable(bool permanent = false) => new(ErrorCode.DependencyUnavailable,
-        "Private media storage is unavailable.", isPermanentDependencyFailure: permanent);
+    private static DomainException Unavailable(bool permanent = false, TimeSpan? retryAfter = null) => new(ErrorCode.DependencyUnavailable,
+        "Private media storage is unavailable.", isPermanentDependencyFailure: permanent, retryAfter: retryAfter);
 }

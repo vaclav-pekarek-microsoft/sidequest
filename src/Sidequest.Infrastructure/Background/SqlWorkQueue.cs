@@ -89,7 +89,13 @@ public sealed class SqlWorkQueue(ISidequestDbContextFactory factory, TimeProvide
             DomainException { Code: ErrorCode.DependencyUnavailable, IsPermanentDependencyFailure: true };
         var dead = permanent || lease.Attempts >= 8;
         var delay = RetryDelay(lease.Attempts, lease.Id);
-        if (failure is DeliveryTransportException { RetryAfter: { } retryAfter } && retryAfter > delay)
+        TimeSpan? requestedDelay = failure switch
+        {
+            DeliveryTransportException transport => transport.RetryAfter,
+            DomainException { Code: ErrorCode.DependencyUnavailable } dependency => dependency.RetryAfter,
+            _ => null
+        };
+        if (requestedDelay is { } retryAfter && retryAfter > delay)
         {
             // Do not retry earlier than an excessive provider delay; require an operator instead of unbounded automatic scheduling.
             dead |= retryAfter > TimeSpan.FromHours(24);

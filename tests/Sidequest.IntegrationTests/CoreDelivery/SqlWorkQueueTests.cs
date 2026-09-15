@@ -151,6 +151,54 @@ public sealed class SqlWorkQueueTests
         }
     }
 
+    /// <summary>Honors provider minimum waits without exceeding the existing automatic retry horizon.</summary>
+    /// <param name="seconds">The dependency's requested minimum delay.</param>
+    /// <param name="expectedStatus">Whether retry remains automatic or requires manual recovery.</param>
+    /// <param name="expectedDelay">The independently specified persisted delay in seconds.</param>
+    /// <returns>A task completing after exact due-time, immutable intent and early-claim rejection assertions.</returns>
+    [Theory]
+    [InlineData(0, WorkStatus.Pending, 5)]
+    [InlineData(4, WorkStatus.Pending, 5)]
+    [InlineData(5, WorkStatus.Pending, 5)]
+    [InlineData(6, WorkStatus.Pending, 6)]
+    [InlineData(120, WorkStatus.Pending, 120)]
+    [InlineData(86399, WorkStatus.Pending, 86399)]
+    [InlineData(86400, WorkStatus.Pending, 86400)]
+    [InlineData(86401, WorkStatus.DeadLetter, 86400)]
+    public async Task DependencyRetryAfter_PreservesWindowAndBoundedHorizon(int seconds, WorkStatus expectedStatus, int expectedDelay)
+    {
+        await using var scenario = await DeliveryScenario.CreateAsync();
+        var work = new ScheduledWork
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000654"),
+            Type = WorkTypes.MediaCleanup,
+            DeduplicationKey = "dependency-retry-window",
+            DueUtc = scenario.Clock.Now,
+            PayloadJson = "{\"intent\":\"unchanged\"}"
+        };
+        await FoundationSeed.PersistAsync(scenario.Database, work);
+        var lease = Assert.IsType<WorkLease>(await scenario.Queue.ClaimAsync("scheduled"));
+        Assert.True(await scenario.Queue.FailAsync(lease,
+            new DomainException(ErrorCode.DependencyUnavailable, "Provider detail.", retryAfter: TimeSpan.FromSeconds(seconds))));
+        await using var read = scenario.Database.CreateContext();
+        var row = await read.ScheduledWork.AsNoTracking().SingleAsync();
+        Assert.Equal(expectedStatus, row.Status);
+        Assert.Equal(scenario.Clock.Now.AddSeconds(expectedDelay), row.DueUtc);
+        Assert.Equal(work.PayloadJson, row.PayloadJson);
+        Assert.Equal(work.DeduplicationKey, row.DeduplicationKey);
+        Assert.Equal(1, row.Attempts);
+        Assert.Null(row.LeaseId);
+        Assert.Null(row.LeaseUntilUtc);
+        scenario.Clock.Now = row.DueUtc.AddTicks(-1);
+        Assert.Null(await scenario.Queue.ClaimAsync("scheduled"));
+        scenario.Clock.Now = row.DueUtc;
+        var retry = await scenario.Queue.ClaimAsync("scheduled");
+        if (expectedStatus == WorkStatus.DeadLetter)
+            Assert.Null(retry);
+        else
+            Assert.Equal(work.Id, Assert.IsType<WorkLease>(retry).Id);
+    }
+
     /// <summary>A Retry-After beyond the bounded automatic horizon is held for investigation rather than retried before the provider permits it.</summary>
     [Fact]
     public async Task ExcessiveRetryAfterRequiresManualRecoveryRatherThanEarlyRetry()
