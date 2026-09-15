@@ -96,6 +96,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
             request => request.IsNavigationRequest && request.Method == "POST");
         Assert.True(fixture.Settings.IsSameOrigin(request.Url));
         Assert.Equal("POST", request.Method);
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(signOut).ToHaveCountAsync(0);
         // A new protected navigation with the same browser cookies must require login again.
         await page.GotoAsync("/foundation");
@@ -117,7 +118,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await select.SelectOptionAsync(value!);
         await Expect(select).ToHaveValueAsync(value!);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
-        // Wait for the login POST/navigation to finish before issuing another navigation.
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
         await page.GotoAsync("/foundation");
         await Expect(page).ToHaveURLAsync(fixture.Settings.At("/foundation").AbsoluteUri);
