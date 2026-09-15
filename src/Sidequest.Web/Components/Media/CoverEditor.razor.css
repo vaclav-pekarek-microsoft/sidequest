@@ -1,0 +1,21 @@
+.cover-editor {
+    display: grid;
+    gap: .75rem;
+    max-width: 36rem;
+    min-width: 0;
+}
+
+.cover-editor label {
+    display: grid;
+    gap: .25rem;
+    min-width: 0;
+}
+
+.cover-editor ::deep input {
+    width: 100%;
+    min-width: 0;
+}
+
+.cover-editor button {
+    justify-self: start;
+}

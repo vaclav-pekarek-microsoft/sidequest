@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Sidequest.Application.Abstractions;
 using Sidequest.Application.Notifications.Implementation;
 using Sidequest.Domain.Model;
+using Sidequest.Domain.Rules;
+using Sidequest.Infrastructure.Background;
 using Sidequest.IntegrationTests.FoundationPersistence;
 
 namespace Sidequest.IntegrationTests.CoreDelivery;
@@ -78,7 +81,9 @@ public sealed class SqlWorkQueueTests
         await using var scenario = await DeliveryScenario.CreateAsync();
         await FoundationSeed.PersistAsync(scenario.Database, new ScheduledWork
         {
-            Type = "unknown.v9", DeduplicationKey = "poison", DueUtc = scenario.Clock.Now
+            Type = "unknown.v9",
+            DeduplicationKey = "poison",
+            DueUtc = scenario.Clock.Now
         });
         var lease = (await scenario.Queue.ClaimAsync("scheduled"))!;
         Assert.True(await scenario.Queue.FailAsync(lease, new DeliveryTransportException(TransportOutcome.Permanent, "invalid")));
@@ -87,6 +92,111 @@ public sealed class SqlWorkQueueTests
         Assert.Equal(WorkStatus.DeadLetter, row.Status);
         Assert.Equal(1, row.Attempts);
         Assert.Null(row.LeaseId);
+    }
+
+    /// <summary>Dead-letters a marked dependency on its first claim while unmarked outages retain actual retry eligibility and immutable intent.</summary>
+    /// <param name="permanent">Whether operator correction is required before replay.</param>
+    /// <param name="expectedStatus">The independently specified immediate persisted work outcome.</param>
+    /// <returns>A task completing after exact state, redaction, identity, lease and subsequent-claim assertions.</returns>
+    [Theory]
+    [InlineData(false, WorkStatus.Pending)]
+    [InlineData(true, WorkStatus.DeadLetter)]
+    public async Task DependencyFailureMarker_PreservesCategoryAndControlsFirstAttemptRetry(bool permanent, WorkStatus expectedStatus)
+    {
+        await using var scenario = await DeliveryScenario.CreateAsync();
+        var work = new ScheduledWork
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000321"),
+            Type = WorkTypes.MediaCleanup,
+            DeduplicationKey = "media-cleanup-classification",
+            PayloadJson = "{\"immutableIntent\":\"preserve\"}",
+            DueUtc = scenario.Clock.Now
+        };
+        await FoundationSeed.PersistAsync(scenario.Database, work);
+        var lease = Assert.IsType<WorkLease>(await scenario.Queue.ClaimAsync("scheduled"));
+        var failure = new DomainException(ErrorCode.DependencyUnavailable, "secret-marker must not persist.", "Storage",
+            isPermanentDependencyFailure: permanent);
+
+        Assert.True(await scenario.Queue.FailAsync(lease, failure));
+
+        Assert.Equal(ErrorCode.DependencyUnavailable, failure.Code);
+        Assert.Equal("Storage", failure.Field);
+        await using var read = scenario.Database.CreateContext();
+        var row = await read.ScheduledWork.AsNoTracking().SingleAsync();
+        Assert.Equal(work.Id, row.Id);
+        Assert.Equal(work.Type, row.Type);
+        Assert.Equal(work.DeduplicationKey, row.DeduplicationKey);
+        Assert.Equal(work.PayloadJson, row.PayloadJson);
+        Assert.Equal(expectedStatus, row.Status);
+        Assert.Equal(1, row.Attempts);
+        Assert.Equal(scenario.Clock.Now.AddSeconds(5), row.DueUtc);
+        Assert.Null(row.LeaseId);
+        Assert.Null(row.LeaseUntilUtc);
+        Assert.Equal(permanent
+            ? "Permanent dependency/configuration or payload failure; correct before replay."
+            : "Retryable processing failure; inspect correlation-safe operational diagnostics.", row.LastError);
+        Assert.False(await scenario.Queue.FailAsync(lease, failure));
+        Assert.False(await scenario.Queue.CompleteAsync(lease));
+
+        scenario.Clock.Now = row.DueUtc;
+        var next = await scenario.Queue.ClaimAsync("scheduled");
+        if (permanent)
+            Assert.Null(next);
+        else
+        {
+            var retry = Assert.IsType<WorkLease>(next);
+            Assert.Equal(work.Id, retry.Id);
+            Assert.Equal(2, retry.Attempts);
+            Assert.NotEqual(lease.Token, retry.Token);
+        }
+    }
+
+    /// <summary>Honors provider minimum waits without exceeding the existing automatic retry horizon.</summary>
+    /// <param name="seconds">The dependency's requested minimum delay.</param>
+    /// <param name="expectedStatus">Whether retry remains automatic or requires manual recovery.</param>
+    /// <param name="expectedDelay">The independently specified persisted delay in seconds.</param>
+    /// <returns>A task completing after exact due-time, immutable intent and early-claim rejection assertions.</returns>
+    [Theory]
+    [InlineData(0, WorkStatus.Pending, 5)]
+    [InlineData(4, WorkStatus.Pending, 5)]
+    [InlineData(5, WorkStatus.Pending, 5)]
+    [InlineData(6, WorkStatus.Pending, 6)]
+    [InlineData(120, WorkStatus.Pending, 120)]
+    [InlineData(86399, WorkStatus.Pending, 86399)]
+    [InlineData(86400, WorkStatus.Pending, 86400)]
+    [InlineData(86401, WorkStatus.DeadLetter, 86400)]
+    public async Task DependencyRetryAfter_PreservesWindowAndBoundedHorizon(int seconds, WorkStatus expectedStatus, int expectedDelay)
+    {
+        await using var scenario = await DeliveryScenario.CreateAsync();
+        var work = new ScheduledWork
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000654"),
+            Type = WorkTypes.MediaCleanup,
+            DeduplicationKey = "dependency-retry-window",
+            DueUtc = scenario.Clock.Now,
+            PayloadJson = "{\"intent\":\"unchanged\"}"
+        };
+        await FoundationSeed.PersistAsync(scenario.Database, work);
+        var lease = Assert.IsType<WorkLease>(await scenario.Queue.ClaimAsync("scheduled"));
+        Assert.True(await scenario.Queue.FailAsync(lease,
+            new DomainException(ErrorCode.DependencyUnavailable, "Provider detail.", retryAfter: TimeSpan.FromSeconds(seconds))));
+        await using var read = scenario.Database.CreateContext();
+        var row = await read.ScheduledWork.AsNoTracking().SingleAsync();
+        Assert.Equal(expectedStatus, row.Status);
+        Assert.Equal(scenario.Clock.Now.AddSeconds(expectedDelay), row.DueUtc);
+        Assert.Equal(work.PayloadJson, row.PayloadJson);
+        Assert.Equal(work.DeduplicationKey, row.DeduplicationKey);
+        Assert.Equal(1, row.Attempts);
+        Assert.Null(row.LeaseId);
+        Assert.Null(row.LeaseUntilUtc);
+        scenario.Clock.Now = row.DueUtc.AddTicks(-1);
+        Assert.Null(await scenario.Queue.ClaimAsync("scheduled"));
+        scenario.Clock.Now = row.DueUtc;
+        var retry = await scenario.Queue.ClaimAsync("scheduled");
+        if (expectedStatus == WorkStatus.DeadLetter)
+            Assert.Null(retry);
+        else
+            Assert.Equal(work.Id, Assert.IsType<WorkLease>(retry).Id);
     }
 
     /// <summary>A Retry-After beyond the bounded automatic horizon is held for investigation rather than retried before the provider permits it.</summary>

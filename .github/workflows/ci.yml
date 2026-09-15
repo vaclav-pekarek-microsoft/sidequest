@@ -43,6 +43,8 @@ jobs:
           fi
       - run: dotnet restore Sidequest.slnx
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
+      - name: Check offline and authentication lifecycle JavaScript
+        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs
       - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
       - name: Install browser test runtime
@@ -72,6 +74,14 @@ jobs:
             echo "The synthetic browser-test application did not become ready."
             exit 1
           fi
+      - name: Start isolated browser diagnostics
+        id: browser_diagnostics
+        shell: bash
+        run: |
+          docker exec -i sidequest-test-sql bash -c '
+            export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
+            exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b
+          ' < .github/sql/start-browser-diagnostics.sql
       - name: Run real browser checks
         shell: pwsh
         env:
@@ -95,12 +105,23 @@ jobs:
               throw "Every scenario must execute and pass in $path; empty or skipped suites are not acceptance evidence."
             }
           }
+      - name: Capture isolated browser database deadlocks
+        if: failure() && steps.browser_diagnostics.outcome == 'success'
+        shell: bash
+        run: |
+          docker exec -i sidequest-test-sql bash -c '
+            export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
+            exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -y 0
+          ' < .github/sql/browser-deadlocks.sql > "$RUNNER_TEMP/sidequest-deadlocks.xml"
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: "**/TestResults/*.trx"
+          path: |
+            **/TestResults/*.trx
+            ${{ runner.temp }}/sidequest-web.log
+            ${{ runner.temp }}/sidequest-deadlocks.xml
           if-no-files-found: warn
       - name: Stop test application
         if: always()

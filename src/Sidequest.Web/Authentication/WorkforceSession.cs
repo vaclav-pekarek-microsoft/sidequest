@@ -10,7 +10,10 @@ public static class WorkforceSession
     /// <summary>The claim type holding the session deadline as invariant Unix time in seconds.</summary>
     public const string ExpiresClaim = "sidequest:session-expires";
 
-    /// <summary>Replaces deadline claims on the primary claims identity with a one-hour deadline.</summary>
+    /// <summary>The protected-cookie claim identifying one sign-in, including distinct sign-ins by the same account in the same second.</summary>
+    public const string IdClaim = "sidequest:session-id";
+
+    /// <summary>Replaces the primary identity's deadline and sign-in identifier with a one-hour deadline and a fresh random identifier.</summary>
     /// <param name="principal">The newly admitted principal whose primary identity is a <see cref="ClaimsIdentity"/>.</param>
     /// <param name="now">The UTC issuance instant used to calculate expiry.</param>
     /// <exception cref="ArgumentNullException"><paramref name="principal"/> is null.</exception>
@@ -31,7 +34,9 @@ public static class WorkforceSession
             throw new ArgumentException("A primary claims identity is required to stamp a session.", nameof(principal));
         }
         foreach (var claim in identity.FindAll(ExpiresClaim).ToArray()) identity.RemoveClaim(claim);
+        foreach (var claim in identity.FindAll(IdClaim).ToArray()) identity.RemoveClaim(claim);
         identity.AddClaim(new(ExpiresClaim, now.AddHours(1).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)));
+        identity.AddClaim(new(IdClaim, Guid.NewGuid().ToString("D")));
     }
 
     /// <summary>Checks the protected session deadline without extending it.</summary>

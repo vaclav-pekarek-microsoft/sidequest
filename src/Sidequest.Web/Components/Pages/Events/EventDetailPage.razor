@@ -72,7 +72,7 @@
         token.ThrowIfCancellationRequested();
         detail = loaded;
     });
-    private Task RequestAsync() => RunAsync(async token =>
+    private Task RequestAsync() => RunMutationAsync(async token =>
     {
         await Events.RequestMembershipAsync(Id, token);
         var loaded = await Events.GetAsync(Id, token);
@@ -80,7 +80,7 @@
         detail = loaded;
         requested = !loaded.Summary.IsMember;
     });
-    private Task LeaveAsync() => RunAsync(async token =>
+    private Task LeaveAsync() => RunMutationAsync(async token =>
     {
         await Events.LeaveAsync(Id, token);
         detail = null;

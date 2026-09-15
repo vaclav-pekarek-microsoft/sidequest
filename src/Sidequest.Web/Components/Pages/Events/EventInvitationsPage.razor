@@ -59,7 +59,7 @@
         token.ThrowIfCancellationRequested();
         result = loaded;
     }
-    private Task ActAsync(Guid invitation, bool? accept) => RunAsync(async token =>
+    private Task ActAsync(Guid invitation, bool? accept) => RunMutationAsync(async token =>
     {
         if (accept is { } decision)
             await Events.RespondToInvitationAsync(invitation, decision, token);

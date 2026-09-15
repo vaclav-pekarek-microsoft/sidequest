@@ -147,8 +147,75 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await NoOverflowAsync(page);
     }
 
-    /// <summary>Checks that anonymous access to every core entry surface is challenged before protected UI is shown.</summary>
-    /// <param name="route">A protected Event, Quest or notification entry route.</param>
+    /// <summary>Exercises the real upload circuit, image decoder and explicit unconfigured-provider failure without discarding unsaved text.</summary>
+    /// <returns>A task completing after keyboard-reachable mobile upload, truthful failure and successful ordinary text persistence.</returns>
+    [Fact]
+    public async Task MobileCoverUpload_UnconfiguredProviderPreservesTextAndDoesNotReportSuccess()
+    {
+        await using var context = await fixture.CreateContextAsync(360);
+        var page = await SignedInAsync(context, "Alice");
+        var eventId = await CreateEventAsync(page);
+        var questId = await CreateQuestAsync(page, eventId);
+        await page.GetByRole(AriaRole.Link, new() { Name = "Edit content", Exact = true }).ClickAsync();
+        var title = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
+        await Expect(title).ToBeEditableAsync();
+        var unsaved = $"Cover failure preserves {Guid.NewGuid():N}";
+        await title.FillAsync(unsaved);
+        var upload = page.GetByLabel("Upload cover", new() { Exact = true });
+        await Expect(upload).ToBeEnabledAsync();
+        await TabToAsync(page, upload);
+        await NoOverflowAsync(page);
+        await upload.SetInputFilesAsync(new FilePayload
+        {
+            Name = "synthetic-cover.png",
+            MimeType = "image/png",
+            Buffer = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY2BIYfgPAAIwAWT+qwLNAAAAAElFTkSuQmCC")
+        });
+        await Expect(page.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Private media configuration is missing or invalid.");
+        await Expect(title).ToHaveValueAsync(unsaved);
+        await Expect(page.GetByText("Cover updated.", new() { Exact = true })).ToHaveCountAsync(0);
+        await Expect(page.Locator(".cover-editor img")).ToHaveCountAsync(0);
+        await NoOverflowAsync(page);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true }).ClickAsync();
+        await Expect(page).ToHaveURLAsync(fixture.Settings.At($"/quests/{questId}").AbsoluteUri);
+        await page.ReloadAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = unsaved, Exact = true })).ToBeVisibleAsync();
+    }
+
+    /// <summary>Verifies real administration navigation and loaded controls without changing shared settings, while ordinary workforce users cannot read protected forms or assignments.</summary>
+    /// <returns>A task completing after an administrator visits all four screens and a nonadministrator is denied on each route.</returns>
+    [Fact]
+    public async Task AdministrationNavigationLoadsRealServicesAndDeniesOrdinaryWorkforce()
+    {
+        await using var administratorContext = await fixture.CreateContextAsync();
+        await using var memberContext = await fixture.CreateContextAsync();
+        var administrator = await SignedInAsync(administratorContext, "Admin");
+        var member = await SignedInAsync(memberContext, "Alice");
+        await administrator.GetByRole(AriaRole.Link, new() { Name = "Administration", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByRole(AriaRole.Heading, new() { Name = "Administrators", Exact = true })).ToBeVisibleAsync();
+        await Expect(administrator.GetByLabel("Search directory-maintained display names (2–100 characters)", new() { Exact = true })).ToBeEditableAsync();
+        await Expect(administrator.GetByText("Admin — Eligible administrator", new() { Exact = false })).ToBeVisibleAsync();
+
+        var navigation = administrator.GetByRole(AriaRole.Navigation, new() { Name = "Administration", Exact = true });
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Business email", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Message brand (1–80 characters)", new() { Exact = true })).ToHaveValueAsync("Sidequest");
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Email templates", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Subject (1–200 single-line characters)", new() { Exact = true })).ToBeEditableAsync();
+        await navigation.GetByRole(AriaRole.Link, new() { Name = "Ownership recovery", Exact = true }).ClickAsync();
+        await Expect(administrator.GetByLabel("Resource ID", new() { Exact = true })).ToBeEditableAsync();
+        await Expect(administrator.GetByRole(AriaRole.Alert)).ToHaveCountAsync(0);
+
+        foreach (var route in new[] { "/administration", "/administration/email", "/administration/templates", "/administration/recovery" })
+        {
+            await member.GotoAsync(route);
+            await Expect(member.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Administrator access is required.");
+            await Expect(member.Locator("#admin-search, #email-brand, #template-subject, #recovery-id")).ToHaveCountAsync(0);
+            await Expect(member.GetByText("Admin — Eligible administrator", new() { Exact = false })).ToHaveCountAsync(0);
+        }
+    }
+
+    /// <summary>Checks that anonymous access to every core and administration entry surface is challenged before protected UI is shown.</summary>
+    /// <param name="route">A protected Event, Quest, notification or administration entry route.</param>
     /// <returns>A task completing after sign-in redirection and absent product actions are checked.</returns>
     [Theory]
     [InlineData("/events")]
@@ -157,6 +224,10 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     [InlineData("/quests/create")]
     [InlineData("/notifications")]
     [InlineData("/notifications/preferences")]
+    [InlineData("/administration")]
+    [InlineData("/administration/email")]
+    [InlineData("/administration/templates")]
+    [InlineData("/administration/recovery")]
     public async Task AnonymousCoreRoutesRequireSignIn(string route)
     {
         await using var context = await fixture.CreateContextAsync();
@@ -171,22 +242,46 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private async Task<IPage> SignedInAsync(IBrowserContext context, string persona)
     {
         var page = await context.NewPageAsync();
-        await page.GotoAsync("/signin");
-        var select = page.Locator("select#persona");
-        await Expect(select).ToBeVisibleAsync();
-        var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
-        var value = await option.GetAttributeAsync("value");
-        Assert.False(string.IsNullOrEmpty(value));
-        await select.SelectOptionAsync(value!);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
+        await Sidequest.BrowserTests.SecondaryExperience.SyntheticLoginDiagnostics.ObserveAsync(
+            page, fixture.Settings, "Core", async () =>
+            {
+                await page.GotoAsync("/signin");
+                var select = page.Locator("select#persona");
+                await Expect(select).ToBeVisibleAsync();
+                var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
+                var value = await option.GetAttributeAsync("value");
+                Assert.False(string.IsNullOrEmpty(value));
+                await select.SelectOptionAsync(value!);
+                await Sidequest.BrowserTests.SecondaryExperience.SyntheticSignInSupport.WaitForInterceptorAsync(page);
+                await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+                await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
+            });
         return page;
     }
 
     private async Task<Guid> CreateEventAsync(IPage page)
     {
         await page.GotoAsync("/events/create");
-        await Expect(NameInput(page)).ToBeEditableAsync();
+        await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
+        try
+        {
+            await Expect(NameInput(page)).ToBeEditableAsync();
+        }
+        catch (PlaywrightException)
+        {
+            Console.WriteLine(await page.EvaluateAsync<string>("""
+                () => JSON.stringify({
+                  connection: document.querySelector('[data-connection]')?.textContent,
+                  fieldsets: [...document.querySelectorAll('fieldset')].map(x => x.disabled),
+                  fields: [...document.querySelectorAll('fluent-text-field')].map(x => ({
+                    disabled: x.hasAttribute('disabled'),
+                    nativeDisabled: x.shadowRoot?.querySelector('input')?.disabled
+                  }))
+                })
+                """));
+            throw;
+        }
         await NameInput(page).FillAsync($"Journey {Guid.NewGuid():N}");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Discovery summary (visible to eligible users)", Exact = true }).FillAsync("A synthetic browser acceptance Event.");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (members only; plain text)", Exact = true }).FillAsync("Member-only browser acceptance description.");

@@ -7,7 +7,7 @@ namespace Sidequest.Infrastructure.Background;
 
 /// <summary>Routes opaque claimed work IDs to exactly one registered versioned handler and renews leases during execution.</summary>
 /// <param name="queue">Atomic SQL queue.</param>
-/// <param name="handlers">Feature-owned completion/bulk handlers plus delivery-owned change/reminder handlers.</param>
+/// <param name="handlers">Feature-owned completion, bulk and media-cleanup handlers plus delivery-owned change/reminder handlers.</param>
 /// <param name="delivery">Per-recipient transport dispatcher.</param>
 /// <param name="execution">Scoped current lease proof.</param>
 /// <param name="clock">Delay and UTC time seam.</param>
@@ -38,7 +38,7 @@ public sealed class DurableWorkRunner(SqlWorkQueue queue, IEnumerable<IBackgroun
             {
                 if ((category == "outbox" && lease.Type != WorkTypes.Change) ||
                     (category == "scheduled" && lease.Type is not (WorkTypes.EventCompletion or WorkTypes.QuestCompletion
-                        or WorkTypes.BulkMembership or WorkTypes.Reminder)))
+                        or WorkTypes.BulkMembership or WorkTypes.Reminder or WorkTypes.MediaCleanup)))
                     throw new DeliveryTransportException(TransportOutcome.Permanent, "Unsupported work version or queue category.");
                 var matches = handlers.Where(x => string.Equals(x.WorkType, lease.Type, StringComparison.Ordinal)).ToArray();
                 if (matches.Length != 1)

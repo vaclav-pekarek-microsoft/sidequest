@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject FoundationAuthenticationSettings Authentication
+@using Sidequest.Web.Components.Experience
 
 <a class="skip-link" href="#main">Skip to main content</a>
 @if (Authentication.IsDevelopment)
@@ -17,10 +18,14 @@
                 <NavLink href="/events">Events</NavLink>
                 <NavLink href="/quests">My Quests</NavLink>
                 <NavLink href="/quests?view=Discover">Discover Quests</NavLink>
+                <NavLink href="/quests?view=Invited">Invited Quests</NavLink>
                 <NavLink href="/notifications">Notifications</NavLink>
+                <NavLink href="/administration">Administration</NavLink>
                 <NavLink href="/foundation">Compatibility screen</NavLink>
-                <form action="/auth/logout" method="post" data-enhance="false">
+                <a href="/signin" data-enhance-nav="false" data-authentication-change>Switch account</a>
+                <form action="/auth/logout" method="post" data-enhance="false" data-authentication-change>
                     <AntiforgeryToken />
+                    <input type="hidden" name="experienceClearFailed" value="true" />
                     <button type="submit">Sign out</button>
                 </form>
             </Authorized>
@@ -30,7 +35,19 @@
         </AuthorizeView>
     </nav>
 </header>
-<main id="main" tabindex="-1">
+<noscript>
+    <p>JavaScript is unavailable. Sign-out ends the server session but cannot clear saved device basics. Clear this site's data in browser settings before sharing the device.</p>
+</noscript>
+<p data-authentication-warning role="alert" hidden="@(!DeviceClearFailed)">
+    Device basics could not be cleared. Sign-out is still available. Close other Sidequest tabs and clear this site's data in browser settings before sharing this device.
+</p>
+<ConnectionStatus @rendermode="InteractiveServer" />
+<div id="components-reconnect-modal" class="components-reconnect-hide" role="status" aria-live="polite">
+    <p data-reconnect-message>Connection interrupted. Online actions are unavailable; unsaved input is kept.</p>
+    <button type="button" data-reconnect-retry>Retry connection</button>
+    <button type="button" data-reconnect-reload>Reload page (discards unsaved input)</button>
+</div>
+<main id="main" tabindex="-1" data-online-actions data-protected-experience data-requires-session="@(HttpContext?.User.Identity?.IsAuthenticated == true ? "true" : "false")">
     <ErrorBoundary>
         <ChildContent>@Body</ChildContent>
         <ErrorContent>
@@ -45,3 +62,10 @@
     The connection or screen encountered an error.
     <a href="" class="reload">Reload</a>
 </div>
+
+@code {
+    /// <summary>Gets the current static HTTP render context; it is never used from an interactive circuit.</summary>
+    [CascadingParameter] public HttpContext? HttpContext { get; set; }
+
+    private bool DeviceClearFailed => HttpContext?.Request.Query["deviceClearFailed"].ToString() == "true";
+}

@@ -1,0 +1,15 @@
+<section class="admin-panel">
+    <nav aria-label="Administration">
+        <a href="/administration">Administrators</a>
+        <a href="/administration/recovery">Ownership recovery</a>
+        <a href="/administration/email">Business email</a>
+        <a href="/administration/templates">Email templates</a>
+        <a href="/notifications/failures">Delivery failures and replay</a>
+    </nav>
+    @ChildContent
+</section>
+
+@code {
+    /// <summary>Focused administration content, rendered within the responsive navigation and layout boundary.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

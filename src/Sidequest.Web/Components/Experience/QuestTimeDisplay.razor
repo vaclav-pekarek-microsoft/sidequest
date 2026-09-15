@@ -1,0 +1,17 @@
+<p>
+    <strong>Event time (@ZoneId)</strong>:
+    <time datetime="@StartUtc.ToString("O")">@Local(StartUtc, ZoneId)</time>
+    – <time datetime="@EndUtc.ToString("O")">@Local(EndUtc, ZoneId)</time>
+</p>
+@if (deviceZone is not null && deviceZone != ZoneId)
+{
+    <p>Your device time (@deviceZone): @Local(StartUtc, deviceZone) – @Local(EndUtc, deviceZone)</p>
+}
+else if (deviceZone is null)
+{
+    <small>Device time zone unavailable; using the inherited Event time zone.</small>
+}
+else
+{
+    <small>Your device time zone matches the Event time zone.</small>
+}

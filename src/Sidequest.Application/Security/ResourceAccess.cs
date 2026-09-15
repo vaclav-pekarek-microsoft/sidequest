@@ -60,9 +60,8 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
             throw Unavailable();
         var parent = await RequireEventAsync(db, item.EventId, userId, cancellationToken: cancellationToken).ConfigureAwait(false);
         var owner = await db.QuestOwners.AnyAsync(x => x.QuestId == questId && x.UserId == userId, cancellationToken).ConfigureAwait(false);
-        var cancelledUnpublished = await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
-            x.Previous == QuestStatus.Draft && x.Next == QuestStatus.Cancelled, cancellationToken).ConfigureAwait(false);
-        if (cancelledUnpublished && (moderation || !owner))
+        if ((moderation || !owner) && await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
+            x.Previous == QuestStatus.Draft && x.Next == QuestStatus.Cancelled, cancellationToken).ConfigureAwait(false))
             throw Unavailable();
         var invited = await db.QuestInvitations.AnyAsync(
             x => x.QuestId == questId && x.UserId == userId && x.Status == QuestInvitationStatus.Active, cancellationToken).ConfigureAwait(false);

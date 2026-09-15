@@ -1,0 +1,22 @@
+.quest-cover {
+    margin: 0;
+    max-width: 36rem;
+}
+
+.quest-cover img {
+    display: block;
+    width: 100%;
+    max-height: 24rem;
+    object-fit: contain;
+}
+
+.default-cover {
+    border: 1px solid currentColor;
+    border-radius: .5rem;
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+.default-cover span {
+    display: block;
+}

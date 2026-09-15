@@ -96,6 +96,20 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         optionsBuilder.AddInterceptors(SqlConflictCommandInterceptor.Instance, SqlConflictTransactionInterceptor.Instance);
 
     /// <inheritdoc />
+    public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(deduplicationPrefix) || deduplicationPrefix.Length > 300)
+            throw new DomainException(ErrorCode.Validation, "A work key prefix of 1 to 300 characters is required.", nameof(deduplicationPrefix));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving scheduled work.");
+
+        return ScheduledWork.FromSqlRaw("SELECT * FROM [ScheduledWork] WITH (UPDLOCK, HOLDLOCK)")
+            .AsNoTracking().AnyAsync(x => x.DeduplicationKey.StartsWith(deduplicationPrefix) &&
+            (x.Status == WorkStatus.Pending || x.Status == WorkStatus.Processing), cancellationToken);
+    }
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Ignore<Entity>();
@@ -234,7 +248,7 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     private void EnsureHistoryIsImmutable()
     {
         if (ChangeTracker.Entries().Any(x =>
-            (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory) &&
+            (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory or NotificationTemplate) &&
             (x.State is EntityState.Modified or EntityState.Deleted)))
         {
             throw new DomainException(ErrorCode.Conflict, "History records are immutable.");

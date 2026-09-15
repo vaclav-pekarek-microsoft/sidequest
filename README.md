@@ -7,7 +7,8 @@ Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
 M2 Event/Quest workflows and delivery are integrated into the host and have passed
 combined workflow and browser acceptance. Uploads, administration/templates, and
-dashboard/PWA/offline basics remain M3 work. This is not a production-ready release;
+dashboard/PWA/offline basics have passed combined M3 acceptance, including reconnect
+and access hardening. M4 release hardening remains. This is not a production-ready release;
 live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
@@ -36,7 +37,14 @@ an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 
-The M2 host starts durable SQL processing after checking that every supported work type
+If native sign-in starts before browser initialization, successful authentication can
+reach a completion page without a device generation. That page deliberately shows
+guidance and requires **Continue to Sidequest** rather than activating device storage
+or navigating automatically. This is distinct from a failed authentication request
+or a rejected nonempty generation; neither should be hidden by an automatic retry
+or a generic continuation fallback.
+
+The composed host starts durable SQL processing after checking that every supported work type
 has exactly one handler. Running it can process existing queued work in the configured
 database. Use an explicitly chosen development database, not a shared production catalog.
 Missing email configuration causes explicit delivery failures, not simulated success.
@@ -48,6 +56,13 @@ Provider configuration is separate from sign-in configuration:
 - `Delivery:Email`: verified sender/organizer, ACS connection string or managed-identity
   HTTPS endpoint, optional managed identity client ID and submission timeout.
 - `Events:Limits` and `Delivery:Work`: bounded workflow, polling, lease and concurrency settings.
+- `Media:Storage`: private `ContainerName`, HTTPS `ServiceUri`, optional
+  `ManagedIdentityClientId`, and `OperationTimeout`, or a secret-store `ConnectionString`.
+  Preprovision the private container and disable account-level anonymous Blob access.
+  Missing storage configuration causes explicit upload failure, not simulated success.
+- `Administration:DepartureRecovery`: disabled by default. Enabling it requires an
+  externally approved `ProcedureReference` and separately verified departure evidence;
+  configuration does not constitute approval or create that evidence.
 
 Directory tenants must match the authenticated tenant. Store credentials in user secrets
 or the deployment secret store; never commit them. Missing Graph policy or credentials
@@ -73,6 +88,10 @@ starts the development app against a disposable SQL database, and runs the brows
 project. Do not bypass managed local browser policy to run these checks. The browser
 project includes M1 compatibility scenarios and M2 membership, participation, private
 access, moderation, calendar recovery, stale-editor and mobile interaction journeys.
+The shared browser fixture blocks service workers by default. Dedicated M3 offline
+scenarios can explicitly opt in without changing other contexts or their origin
+routing. That harness option alone is not evidence that offline behavior is complete.
+CI also runs the client lifecycle regressions with Node's built-in test runner.
 Neither synthetic suite establishes approved live-provider or release acceptance.
 CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
@@ -92,6 +111,20 @@ unfinished Quest: the original work completes at its immutable deadline. Browser
 journeys verify real authorized navigation, private access, calendar recovery,
 concurrency feedback, and 360px keyboard flows with prerender-safe controls.
 
+The [M3 combined acceptance run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852)
+passed 1,845 unit cases, 1,019 real-SQL cases, 96 browser-project cases and 54 Node
+regressions, with zero failures or skips. It covers the composed media,
+administration/templates, dashboard and bounded offline features, current-cookie
+reconnect verification, retained-view reauthorization and unsaved-input preservation.
+The controlled native-startup journey actually exercised the missing-generation
+completion guidance and explicit continuation, separately from initialized sign-in.
+Real SQL also verifies write-intent scheduling before insertion, unchanged work
+deduplication and caller-owned commit/rollback.
+
+This evidence does not establish live Entra/Graph/ACS or Outlook approval, physical
+device/screen-reader certification, the 300-user load target, SQL/Blob recovery
+targets, operational ownership, or production deployment. Those remain M4 gates.
+
 ## Architecture and contribution policy
 
 - `Sidequest.Domain`: entity/state vocabulary and pure access, participation, and time rules.
@@ -102,13 +135,20 @@ concurrency feedback, and 360px keyboard flows with prerender-safe controls.
 Application persistence uses explicit EF Core query/transaction abstractions through
 `ISidequestDbContext`, not a new generic repository framework. Domain has no EF/UI
 dependency. Components call application services rather than database or provider SDKs.
-All synchronous and asynchronous save overloads reject audit/status-history mutation
+All synchronous and asynchronous save overloads reject audit/status-history and template-revision mutation
 and translate stale rowversions and duplicate keys into domain conflicts. Event
 ownership never bypasses active individual membership, including for draft Events.
 Mutations acquire the parent Event lock first inside an explicit Serializable
 transaction; SQL-specific locking stays behind the persistence port. SQL deadlocks
 surface as safe conflicts, not automatic retries of partially executed commands.
 Cancelled unpublished Quests remain owner-only even after archival.
+Ordinary Quest-owner authorization short-circuits the history lookup it does not
+need, avoiding history-range locks during independent lifecycle writes. Moderation
+and nonowner access still check retained unpublished-cancellation history.
+Completion scheduling reserves its pending-work key range with write intent before
+insertion in the same transaction. This avoids compatible shared-range reads turning
+into competing insert conversions during concurrent Quest publication; it does not
+change completion deadlines, retry user commands, or commit outside the caller.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes

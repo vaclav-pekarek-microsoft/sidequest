@@ -14,6 +14,23 @@ public sealed class CompatibilityProbeTests : BunitContext
     {
         Services.AddFluentUIComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
+        Renderer.SetRendererInfo(new("Server", true));
+    }
+
+    /// <summary>Prevents input and submission before interactive handlers exist, without delaying the interactive compatibility probe.</summary>
+    /// <param name="interactive">Whether the renderer has live event handlers.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ControlsRemainDisabledUntilInteractiveHandlersExist(bool interactive)
+    {
+        Renderer.SetRendererInfo(new(interactive ? "Server" : "Static", interactive));
+        var component = Render<CompatibilityProbe>();
+        Assert.Equal(!interactive, component.FindComponent<FluentTextField>().Instance.Disabled);
+        var buttons = component.FindComponents<FluentButton>();
+        Assert.Equal(!interactive, buttons.Single(x => x.Markup.Contains("Preview dialog")).Instance.Disabled);
+        Assert.Equal(!interactive, buttons.Single(x => x.Markup.Contains("Close preview")).Instance.Disabled);
+        Assert.True(component.FindComponent<FluentDialog>().Instance.Hidden);
     }
 
     /// <summary>Verifies that an empty submission displays required-field errors and leaves the dialog closed.</summary>

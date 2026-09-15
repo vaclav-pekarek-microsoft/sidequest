@@ -1,0 +1,15 @@
+@page "/install"
+<PageTitle>Install and device privacy · Sidequest</PageTitle>
+<h1>Install Sidequest</h1>
+<p>Use Sidequest over HTTPS in deployment. If your browser offers Install or Add to Home Screen, use that option. In Safari on iPhone or iPad, look in the Share menu for Add to Home Screen. In Edge or Chrome, check the address bar or browser menu.</p>
+<p>Installation availability depends on the browser, operating system and organization-managed device policy. No installation or persistent storage is guaranteed. You can continue using Sidequest in your browser.</p>
+<h2>Online actions, limited offline basics</h2>
+<p>Creation, editing, joining, leaving and other actions always require an online server authorization check. A disconnected circuit does not queue or retry your actions. Keep unsaved input while reconnecting; do not assume a failed request succeeded.</p>
+<p><a href="/experience/offline.html" data-enhance-nav="false">Open read-only saved joined basics</a>. Only previously saved titles, locations, dates, inherited Event zones and last-known status are available, not full Quest details.</p>
+<h2>Your device and private Quests</h2>
+<p>Successful authorized refreshes may store basic joined public and private Quest details for the last signed-in account in this browser profile. No descriptions, covers, participant contacts, invitations, notifications or tokens are saved. Following, invited-only and owned-only Quests are not saved.</p>
+<p>Anyone able to use this browser profile may read the saved basics. Account association is not encryption or offline authentication. A remote sign-out or revoked invitation cannot immediately erase a disconnected device's old copy.</p>
+<p>Saved basics expire exactly 24 hours after the last successful authorized refresh and are purged when next checked. A failed refresh never resets freshness. Browser storage may be denied or evicted sooner. Local sign-out or account switching clears the old copy; you can also clear it on the offline page or in browser site-data settings.</p>
+<p>Saving is limited to 1,000 joined records and a 2 MiB refresh response. Oversized or malformed replacements are not partially saved. If a successful authorization response cannot safely replace the old copy, the old basics are removed where storage permits. Storage errors are shown, not reported as successful saves.</p>
+<p>Times, status and access may have changed. Organizational employee-data and device-policy approval remains required before production use.</p>
+<p><a href="/">Return to Sidequest</a></p>

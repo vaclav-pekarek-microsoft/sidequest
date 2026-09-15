@@ -1,8 +1,8 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-09-14.
-**Implementation:** M1 foundation verified; M2 core modules in progress. No production deployment.
+**Last revised:** 2026-09-15.
+**Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
 Sections 48–61 form the **accepted V1 baseline** and are authoritative if an earlier
@@ -1748,6 +1748,12 @@ work to a visible dead-letter state. Permanent invalid-recipient/configuration e
 dead-letter immediately and raise an actionable alert. An administrator can inspect a
 redacted error and replay after correction using the same logical delivery key. Replays
 still apply current authorization, lifecycle, preference, and calendar ordering rules.
+Provider adapters can mark a known operator-correctable dependency failure with
+`DomainException.IsPermanentDependencyFailure` while retaining `DependencyUnavailable`
+for HTTP/UI presentation. The marker is valid only for that category and defaults to
+false, preserving ordinary transient outage retries. The queue dead-letters marked
+failures on their first failed claim without persisting raw provider messages; handlers
+still do not own lease, attempt or work-status updates.
 
 Leases expire within two minutes and are renewed for long-running jobs. On restart,
 claim expired work and reconcile missed completion/reminder jobs against current time;
@@ -1966,6 +1972,25 @@ and 360px keyboard/no-overflow behavior without lost prerender clicks. This esta
 the M2 core integration gate, not completion of M3 secondary features, M4 full-product
 acceptance, or any live-provider/release approval.
 
+M3 combined acceptance passed in Linux CI
+[34967281852](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852):
+1,845 unit, 1,019 real-SQL, 96 browser-project cases and 54 Node regressions,
+all executed with zero failures/skips. The composed host includes private covers
+and cleanup, administration/template delivery, the dashboard and bounded offline
+basics. Browser acceptance includes real transport reconnect, current-cookie
+identity checks, unsaved-input preservation, private-access refresh and the
+controlled native-sign-in missing-generation continuation. Administration and
+notification projections also reauthorize before becoming usable after reconnect.
+SQL regressions prove completion work reserves its key range before insertion,
+preserving the existing Event-first Serializable transaction and explicit conflict
+policy without automatic mutation replay.
+
+This is application-level combined acceptance, not a live tenant/provider approval,
+supported Outlook or physical-device certification, measured 300-user release load,
+SQL/Blob restore evidence, operational-owner assignment or production deployment.
+M4 must still establish those release requirements; bounded provisioning conflicts
+are reported, not claimed to have been eliminated.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
@@ -1998,6 +2023,14 @@ Shared M2 integration contracts:
   completion: SQL can report a deadlock while rows are read after execution has returned.
   Preserve provider cancellation and unrelated failures; never retry a caller-owned
   transaction or hide its rollback behind a successful result.
+- Pending completion scheduling uses
+  `ISidequestDbContext.HasPendingScheduledWorkForUpdateAsync` to reserve the
+  deduplication-prefix range with write intent in that same Serializable transaction.
+  A shared existence read followed by insertion can deadlock independent Quest
+  publications on an empty or sparsely populated schedule index. The persistence
+  boundary owns SQL lock hints; it neither saves nor commits. Pending/Processing
+  matching, immutable completion deadlines, and explicit conflict recovery remain
+  unchanged. This does not serialize tests or automatically replay user commands.
 - The Event-owned `IEventLifecycleReconciler` stages overdue parent completion,
   pending membership cleanup, and Quest-side lifecycle effects in the caller's locked
   transaction. It never saves or commits. Persist system reconciliation separately
@@ -2043,6 +2076,37 @@ Shared M2 integration contracts:
 
 ### Ownership map
 
+M3 starts from the merged M2 baseline. Media uses `IMediaService` for authorized
+cover upload/removal/read operations, `IImageSanitizer` for bounded actual decode and
+metadata-free re-encoding, and `IPrivateMediaStorage` for private provider I/O outside
+SQL transactions. Uploads retain the previous cover on failure or stale-editor
+conflict. Reads serve only ready, currently assigned covers; explicit moderation
+reads retain the same authorization and audit requirements as Quest content.
+Pending/failed uploads receive durable `media.cleanup.v1` work for their immutable
+24-hour expiry; final attachment must reject an expired upload. Separately identified
+and audited cleanup intent also handles media removed by an explicitly authorized
+unpublished-Draft deletion, so adding a cover does not permanently disable the
+accepted deletion workflow. Such intent must survive deletion of the Quest and asset
+metadata, rather than relying on foreign keys or later lookup of a removed Blob key.
+Cleanup never removes a currently attached cover or implements unapproved retention
+of ready historical assets. The cleanup handler is added to startup verification only
+when the feature is composed. The integration owner then registers
+`WorkHandlerRequirements(RequireMediaCleanup: true)` alongside the Media handler:
+startup requires exactly one of all six handlers. Core-only composition still
+requires its original five and rejects an undeclared Media handler; declaring Media
+without its handler also fails before polling. Validation resolves and disposes an
+isolated scope without executing work.
+
+The media implementation dependency baseline is Azure.Storage.Blobs 12.29.2 and
+SkiaSharp 4.152.0 with matching SkiaSharp.NativeAssets.Linux.NoDependencies 4.152.0;
+all three published NuGet packages declare MIT licenses. These provide
+.NET 10-compatible private storage and actual cross-platform image
+decoding, not upload validation or provider approval by themselves. Keep image
+processing and Blob SDKs in Infrastructure; no AI package or interface is introduced.
+The integration owner retains startup, navigation, shared contracts, migrations and
+dependency ownership while Media, Administration/templates, and Experience work in
+separate task worktrees. Do not infer completion from the presence of interfaces.
+
 | Work package | Owns | Must not independently change |
 |--------------|------|-------------------------------|
 | Integration owner | Solution/project/package configuration, shared contracts, DbContext composition, migrations, app startup, navigation/layout, CI/Bicep, cross-feature tests | Accepted product behavior without updating this specification |
@@ -2086,6 +2150,12 @@ unsynchronized edits in a shared working tree. Never let two agents own the same
 at once; serially integrate changes to shared pages/components.
 Only the integration owner generates/applies migrations and merges the EF model snapshot.
 Feature agents supply mapping changes and migration requirements for coordinated integration.
+Notification template revisions are append-only through every synchronous/asynchronous
+EF save overload, including calls that disable state acceptance; correction appends a
+new revision rather than rewriting history. Delivery payloads already use
+`nvarchar(max)` in both the model and initial migration. Larger rendered snapshots
+need real persistence evidence, not an unnecessary widening migration inferred from
+the model's earlier blanket string-length default.
 
 Contract changes are proposed to the integration owner, recorded here or in a directly
 related architecture decision, and accepted before dependents change. No speculative

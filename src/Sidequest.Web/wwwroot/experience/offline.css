@@ -1,0 +1,11 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; color: #172b26; background: #f7faf8; }
+body { margin: 0; }
+main { max-width: 56rem; padding: 1rem; margin: auto; }
+article { background: white; border: 1px solid #748c84; border-radius: .5rem; padding: 1rem; margin-block: 1rem; }
+h1 { font-size: clamp(1.7rem, 6vw, 2.5rem); }
+h2 { font-size: 1.3rem; }
+p, h1, h2 { overflow-wrap: anywhere; }
+a { color: #075b48; }
+button { padding: .75rem; font: inherit; white-space: normal; max-width: 100%; }
+:focus-visible { outline: 3px solid #875900; outline-offset: 3px; }
+#failure { font-weight: 600; color: #8b1c13; }
