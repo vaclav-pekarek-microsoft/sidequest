@@ -250,6 +250,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         Assert.False(string.IsNullOrEmpty(value));
         await select.SelectOptionAsync(value!);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
         return page;
     }
