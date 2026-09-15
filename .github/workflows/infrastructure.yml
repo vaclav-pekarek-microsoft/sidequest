@@ -41,3 +41,5 @@ jobs:
         env:
           SIDEQUEST_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-infrastructure.json
         run: node --test infra/tests/template.test.mjs
+      - name: Verify offline deployment parameter preflight
+        run: node --test infra/deployment/tests/*.test.mjs
