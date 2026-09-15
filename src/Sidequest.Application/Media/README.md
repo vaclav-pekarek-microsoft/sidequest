@@ -1,9 +1,10 @@
 # Private Quest covers
 
 The Media service implements validated uploads, authorized current-cover reads,
-removal, and durable cleanup. Host and existing Quest-page composition are separate
-integration steps; registering packages or calling the service in a test is not
-live Azure or complete browser acceptance.
+removal, and durable cleanup. Quest cards and detail views display authorized covers;
+the editor composes upload/removal alongside the text form. Host composition remains
+a separate integration step; registering packages or calling the service in a test
+is not live Azure or complete browser acceptance.
 
 ## Composition
 
@@ -15,7 +16,9 @@ the scheduled category.
 `QuestCover` displays an authorized asset. `CoverEditor` reports `CoverChanged`,
 `BusyChanged`, and `AccessLost`: update only the cover/version after a successful
 upload, retain unsaved text, block competing mutations, and clear protected
-parent content after access loss. A new Quest must be saved before uploading.
+parent content after access loss. `ConflictDetected` blocks further changes until
+an explicit reload, preserving unsaved text beforehand. Stale callbacks cannot
+alter another route or reauthorized editor. A new Quest must be saved before uploading.
 
 ## Storage configuration
 

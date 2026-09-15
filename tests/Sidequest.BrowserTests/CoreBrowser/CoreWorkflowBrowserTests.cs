@@ -147,6 +147,41 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await NoOverflowAsync(page);
     }
 
+    /// <summary>Exercises the real upload circuit, image decoder and explicit unconfigured-provider failure without discarding unsaved text.</summary>
+    /// <returns>A task completing after keyboard-reachable mobile upload, truthful failure and successful ordinary text persistence.</returns>
+    [Fact]
+    public async Task MobileCoverUpload_UnconfiguredProviderPreservesTextAndDoesNotReportSuccess()
+    {
+        await using var context = await fixture.CreateContextAsync(360);
+        var page = await SignedInAsync(context, "Alice");
+        var eventId = await CreateEventAsync(page);
+        var questId = await CreateQuestAsync(page, eventId);
+        await page.GetByRole(AriaRole.Link, new() { Name = "Edit content", Exact = true }).ClickAsync();
+        var title = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
+        await Expect(title).ToBeEditableAsync();
+        var unsaved = $"Cover failure preserves {Guid.NewGuid():N}";
+        await title.FillAsync(unsaved);
+        var upload = page.GetByLabel("Upload cover", new() { Exact = true });
+        await Expect(upload).ToBeEnabledAsync();
+        await TabToAsync(page, upload);
+        await NoOverflowAsync(page);
+        await upload.SetInputFilesAsync(new FilePayload
+        {
+            Name = "synthetic-cover.png",
+            MimeType = "image/png",
+            Buffer = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY2BIYfgPAAIwAWT+qwLNAAAAAElFTkSuQmCC")
+        });
+        await Expect(page.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Private media configuration is missing or invalid.");
+        await Expect(title).ToHaveValueAsync(unsaved);
+        await Expect(page.GetByText("Cover updated.", new() { Exact = true })).ToHaveCountAsync(0);
+        await Expect(page.Locator(".cover-editor img")).ToHaveCountAsync(0);
+        await NoOverflowAsync(page);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true }).ClickAsync();
+        await Expect(page).ToHaveURLAsync(fixture.Settings.At($"/quests/{questId}").AbsoluteUri);
+        await page.ReloadAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = unsaved, Exact = true })).ToBeVisibleAsync();
+    }
+
     /// <summary>Checks that anonymous access to every core entry surface is challenged before protected UI is shown.</summary>
     /// <param name="route">A protected Event, Quest or notification entry route.</param>
     /// <returns>A task completing after sign-in redirection and absent product actions are checked.</returns>

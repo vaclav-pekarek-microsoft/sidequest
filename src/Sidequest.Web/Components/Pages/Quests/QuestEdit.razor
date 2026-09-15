@@ -3,6 +3,7 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using Sidequest.Web.Components.Quests
+@using Sidequest.Web.Components.Media
 <PageTitle>Quest editor · Sidequest</PageTitle>
 <h1>@(Id is null ? "Create a Quest" : "Edit Quest")</h1>
 <p><a href="/quests">Back to Quests</a></p>
@@ -13,7 +14,7 @@
 @if (error is not null)
 {
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Reload current version</FluentButton>
+    <FluentButton OnClick="LoadAsync" Disabled="@(busy || coverBusy || !RendererInfo.IsInteractive)">Reload current version (discards unsaved text)</FluentButton>
 }
 @if (Id is null)
 {
@@ -33,7 +34,13 @@
 }
 @if (initial is not null)
 {
-    <QuestEditor Initial="initial" ZoneId="@zone" Published="published" Busy="@(busy || conflict || !RendererInfo.IsInteractive)" Save="SaveAsync" />
+    var generation = editorGeneration;
+    <QuestEditor Initial="initial" ZoneId="@zone" Published="published" Busy="@(busy || coverBusy || conflict || !RendererInfo.IsInteractive)" Save="SaveAsync" />
+    <CoverEditor @key="generation" QuestId="@(Id ?? Guid.Empty)" Version="@version" AssetId="coverAssetId"
+                 QuestTitle="@(string.IsNullOrWhiteSpace(initial.Title) ? "New Quest" : initial.Title)"
+                 IsBusy="@(busy || conflict || !RendererInfo.IsInteractive)"
+                 CoverChanged="update => UpdateCover(generation, update)" BusyChanged="value => SetCoverBusy(generation, value)"
+                 AccessLost="code => CoverAccessLost(generation, code)" ConflictDetected="() => CoverConflict(generation)" />
     @if (published)
     {
         <p>Saving a suspended Quest does not reinstate it or restore calendars. Only an Event owner can reinstate it.</p>

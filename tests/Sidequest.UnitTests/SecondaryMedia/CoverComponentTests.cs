@@ -71,15 +71,17 @@ public sealed class CoverComponentTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new("Server", true));
         var callbacks = 0;
+        var conflicts = 0;
         var component = Render<CoverEditor>(parameters => parameters.Add(x => x.QuestId, Guid.NewGuid())
             .Add(x => x.Version, "old-version").Add(x => x.QuestTitle, "Unsaved draft")
-            .Add(x => x.CoverChanged, _ => callbacks++));
+            .Add(x => x.CoverChanged, _ => callbacks++).Add(x => x.ConflictDetected, () => conflicts++));
         await component.InvokeAsync(() => component.FindComponent<InputFile>().Instance.OnChange
             .InvokeAsync(new InputFileChangeEventArgs([new BrowserImage()])));
         Assert.Contains("Your text has been kept", component.Find("[role=alert]").TextContent);
         Assert.Equal("old-version", component.Instance.Version);
         Assert.Equal("Unsaved draft", component.Instance.QuestTitle);
         Assert.Equal(0, callbacks);
+        Assert.Equal(1, conflicts);
         Assert.False(component.Find("input").HasAttribute("disabled"));
         Assert.DoesNotContain("Cover updated.", component.Markup);
     }

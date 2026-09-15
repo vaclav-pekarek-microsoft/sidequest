@@ -44,6 +44,9 @@ public partial class CoverEditor : IAsyncDisposable
     /// <summary>Reports current access loss so the parent can clear its protected Quest fields; the editor also hides its cover.</summary>
     [Parameter] public EventCallback<ErrorCode> AccessLost { get; set; }
 
+    /// <summary>Reports a stale version so the parent can block further mutations and offer explicit reload without discarding unsaved text automatically.</summary>
+    [Parameter] public EventCallback ConflictDetected { get; set; }
+
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
@@ -103,6 +106,8 @@ public partial class CoverEditor : IAsyncDisposable
                 error = exception.Code == ErrorCode.Conflict
                     ? $"{exception.Message} Your text has been kept; check the current state before retrying."
                     : exception.Message;
+                if (exception.Code == ErrorCode.Conflict)
+                    await ConflictDetected.InvokeAsync();
                 if (exception.Code is ErrorCode.NotFound or ErrorCode.Forbidden)
                 {
                     unavailable = true;

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using Sidequest.Web.Components.Quests
+@using Sidequest.Web.Components.Media
 @using Sidequest.Domain.Model
 <PageTitle>Quest · Sidequest</PageTitle>
 <p><a href="/quests">Back to Quests</a></p>
@@ -21,6 +22,7 @@
 @if (detail is not null)
 {
     <h1>@detail.Summary.Title</h1>
+    <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" Moderation="Moderation" />
     <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
     <p role="status"><strong>@detail.Summary.Status</strong> · @detail.Summary.Visibility · @detail.StatusReason</p>
     <QuestTimes ZoneId="@detail.Summary.TimeZoneId" StartUtc="@detail.Summary.StartUtc" EndUtc="@detail.Summary.EndUtc" />

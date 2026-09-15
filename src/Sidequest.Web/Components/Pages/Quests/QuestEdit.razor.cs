@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using NodaTime;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
+using Sidequest.Application.Media;
 using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
@@ -23,6 +24,9 @@ public partial class QuestEdit : IAsyncDisposable
     private bool conflict;
     private string? error;
     private int navigationVersion;
+    private int editorGeneration;
+    private Guid? coverAssetId;
+    private bool coverBusy;
 
     /// <summary>Existing Quest identifier, or null for draft creation.</summary>
     [Parameter] public Guid? Id { get; set; }
@@ -37,13 +41,16 @@ public partial class QuestEdit : IAsyncDisposable
     protected override Task OnParametersSetAsync()
     {
         navigationVersion++;
+        coverBusy = false;
         return LoadAsync();
     }
 
     private async Task LoadAsync()
     {
+        if (coverBusy)
+            return;
         var requestVersion = navigationVersion;
-        initial = null;
+        ClearEditor();
         conflict = false;
         await RunAsync(async () =>
         {
@@ -59,6 +66,7 @@ public partial class QuestEdit : IAsyncDisposable
                     throw new DomainException(ErrorCode.Conflict, "This Quest is read-only.");
                 zone = summary.TimeZoneId;
                 version = summary.Version;
+                coverAssetId = summary.CoverAssetId;
                 published = summary.Status != QuestStatus.Draft;
                 var start = Instant.FromDateTimeOffset(summary.StartUtc).InZone(TimeRules.Zone(zone));
                 var end = Instant.FromDateTimeOffset(summary.EndUtc).InZone(TimeRules.Zone(zone));
@@ -105,20 +113,67 @@ public partial class QuestEdit : IAsyncDisposable
         initial = new("", "", "", null, start, start.AddHours(1), null, null, QuestVisibility.Public);
     }
 
-    private Task SaveAsync(QuestEditorModel model) => RunAsync(async () =>
+    private async Task SaveAsync(QuestEditorModel model)
     {
-        var input = model.ToInput();
-        if (Id is null)
+        if (busy || coverBusy || conflict || !RendererInfo.IsInteractive)
+            return;
+        await RunAsync(async () =>
         {
-            var id = await Quests.CreateAsync(Guid.Parse(selectedEvent), input, lifetime.Token);
-            Navigation.NavigateTo($"/quests/{id}");
-        }
-        else
-        {
-            await Quests.EditAsync(Id.Value, version, input, lifetime.Token);
-            Navigation.NavigateTo($"/quests/{Id}");
-        }
-    });
+            var input = model.ToInput();
+            if (Id is null)
+            {
+                var id = await Quests.CreateAsync(Guid.Parse(selectedEvent), input, lifetime.Token);
+                Navigation.NavigateTo($"/quests/{id}");
+            }
+            else
+            {
+                await Quests.EditAsync(Id.Value, version, input, lifetime.Token);
+                Navigation.NavigateTo($"/quests/{Id}");
+            }
+        });
+    }
+
+    private void UpdateCover(int generation, CoverUpdate update)
+    {
+        if (generation != editorGeneration || initial is null || lifetime.IsCancellationRequested)
+            return;
+        coverAssetId = update.AssetId;
+        version = update.Version;
+    }
+
+    private void SetCoverBusy(int generation, bool value)
+    {
+        if (generation == editorGeneration && !lifetime.IsCancellationRequested)
+            coverBusy = value;
+    }
+
+    private void CoverConflict(int generation)
+    {
+        if (generation != editorGeneration || lifetime.IsCancellationRequested)
+            return;
+        conflict = true;
+        error = "The Quest changed during the cover operation. Your text is kept. Reload the current version before making further changes.";
+    }
+
+    private void CoverAccessLost(int generation, ErrorCode code)
+    {
+        if (generation != editorGeneration || lifetime.IsCancellationRequested)
+            return;
+        ClearEditor();
+        error = code == ErrorCode.Forbidden ? "Your access to this Quest has changed." : "This Quest is unavailable.";
+    }
+
+    private void ClearEditor()
+    {
+        editorGeneration++;
+        initial = null;
+        events = [];
+        coverBusy = false;
+        coverAssetId = null;
+        version = "";
+        zone = "";
+        published = false;
+    }
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -133,14 +188,12 @@ public partial class QuestEdit : IAsyncDisposable
             conflict = failure.Code == ErrorCode.Conflict;
             if (failure.Code is ErrorCode.Forbidden or ErrorCode.NotFound)
             {
-                initial = null;
-                events = [];
+                ClearEditor();
             }
         }
         catch (Exception failure) when (requestVersion == navigationVersion)
         {
-            initial = null;
-            events = [];
+            ClearEditor();
             var correlationId = Guid.NewGuid().ToString("N");
             Logger.LogError(failure, "Quest editor operation failed. Correlation {CorrelationId}.", correlationId);
             error = $"The operation failed. Reload before trying again. Reference: {correlationId}.";
