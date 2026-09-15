@@ -356,7 +356,7 @@ public sealed class ReminderCompositionTests
     /// <summary>Preserves the immutable scheduled instant despite retry-due changes, at the exact lateness edge, one tick later and the start cutoff.</summary>
     /// <param name="stage">Whether the delayed gate is handler execution or final dispatch after earlier staging.</param>
     /// <param name="boundary">Exact lateness edge, adjacent tick, or exact Quest start.</param>
-    /// <returns>A task completing after source-specific outcomes and unchanged business payload assertions.</returns>
+    /// <returns>A task completing after source-specific outcomes, unchanged source intent and exact authorized email-preparation snapshot assertions.</returns>
     [Theory]
     [InlineData("handler", "exact")]
     [InlineData("handler", "after")]
@@ -425,7 +425,27 @@ public sealed class ReminderCompositionTests
             Assert.Equal(eligible ? "synthetic-provider-receipt" : null, delivery.ProviderMessageId);
             Assert.Equal(instant, delivery.DueUtc);
             if (originalDelivery is not null)
-                Assert.Equal(originalDelivery.PayloadJson, delivery.PayloadJson);
+            {
+                if (eligible)
+                {
+                    var originalIntent = CoreCompositionScenario.Payload<DeliveryPayload>(originalDelivery.PayloadJson);
+                    Assert.Null(originalIntent.BusinessEmail);
+                    var expectedPrepared = originalIntent with
+                    {
+                        BusinessEmail = new("quest.reminder", 0, "Sidequest notification",
+                            "<p><strong>Sidequest</strong></p><p>Your joined Quest starts soon. Check Sidequest for current details.</p>" +
+                            "<p>Calendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.</p>",
+                            "Sidequest\nYour joined Quest starts soon. Check Sidequest for current details.\n" +
+                            "Calendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.",
+                            null)
+                    };
+                    Assert.Equal(JsonSerializer.Serialize(expectedPrepared), delivery.PayloadJson);
+                }
+                else
+                {
+                    Assert.Equal(originalDelivery.PayloadJson, delivery.PayloadJson);
+                }
+            }
         }
         else
             Assert.Empty(deliveries);

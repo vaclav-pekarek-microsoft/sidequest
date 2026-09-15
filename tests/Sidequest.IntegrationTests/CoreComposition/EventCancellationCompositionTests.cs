@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Sidequest.Application.Abstractions;
@@ -405,13 +404,21 @@ public sealed class EventCancellationCompositionTests
         }
     }
 
+    /// <summary>Checks complete M3 default-branded bodies against literal business wording, independently of the production template engine.</summary>
+    /// <param name="message">Actual single-recipient gateway submission.</param>
+    /// <param name="recipient">Expected trusted destination.</param>
+    /// <param name="summary">Literal safe business summary specified by the calling scenario.</param>
     internal static void AssertEmail(EmailMessage message, string recipient, string summary)
     {
-        var text = summary + "\nCalendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.";
+        var text = "Sidequest\n" + summary +
+            "\nCalendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.";
+        var html = "<p><strong>Sidequest</strong></p><p>" + summary +
+            "</p><p>Calendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.</p>";
         Assert.Equal(recipient, message.Recipient);
         Assert.Equal("Sidequest notification", message.Subject);
         Assert.Equal(text, message.TextBody);
-        Assert.Equal(WebUtility.HtmlEncode(text), message.HtmlBody);
+        Assert.Equal(html, message.HtmlBody);
+        Assert.Null(message.ReplyTo);
     }
 
     internal static void AssertCalendar(EmailMessage message, Guid questId, long sequence, string method,
