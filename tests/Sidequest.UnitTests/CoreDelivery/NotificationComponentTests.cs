@@ -2,8 +2,11 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Sidequest.Application.Abstractions;
+using Sidequest.Application.Events;
 using Sidequest.Application.Notifications;
+using Sidequest.UnitTests.SecondaryExperience;
 using Sidequest.Web.Components.Pages.Notifications;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreDelivery;
 
@@ -11,20 +14,25 @@ namespace Sidequest.UnitTests.CoreDelivery;
 public sealed class NotificationComponentTests : BunitContext
 {
     private readonly NotificationUiService service = new();
+    private readonly ExperienceCoordinator experience = new();
 
     /// <summary>Registers the existing Fluent stack and a deterministic application boundary for rendering tests.</summary>
     public NotificationComponentTests()
     {
         Services.AddFluentUIComponents();
         Services.AddSingleton<INotificationService>(service);
+        Services.AddSingleton(experience);
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((_, _) => throw new NotSupportedException()));
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new("Server", true));
     }
 
     /// <summary>Loading transitions to an explicit empty inbox without displaying raw exception details after an authorization failure.</summary>
+    /// <returns>Completion after the held load and a subsequent denied refresh have updated the rendered inbox.</returns>
     [Fact]
     public async Task InboxLoadingEmptyAndDeniedStatesAreSafe()
     {
+        await experience.ReportConnectionAsync(true, null);
         service.Inbox = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var component = Render<NotificationInbox>();
         Assert.Contains("Loading notifications", component.Markup);
@@ -39,9 +47,11 @@ public sealed class NotificationComponentTests : BunitContext
     }
 
     /// <summary>Arbitrary decimal hours are accepted while precision errors remain visible and mandatory communication cannot be opted out.</summary>
+    /// <returns>Completion after invalid precision is rejected and the corrected preference value is persisted.</returns>
     [Fact]
-    public void PreferencesValidateExactHoursAndExplainMandatoryMessages()
+    public async Task PreferencesValidateExactHoursAndExplainMandatoryMessages()
     {
+        await experience.ReportConnectionAsync(true, null);
         var component = Render<NotificationPreferences>();
         Assert.Contains("calendar updates cannot be disabled", component.Markup);
         Assert.Contains("Declining in Outlook does not change Sidequest attendance", component.Markup);
@@ -56,9 +66,11 @@ public sealed class NotificationComponentTests : BunitContext
     }
 
     /// <summary>Replay requires an explicit second action and passes only the redacted record identity/category to the service.</summary>
+    /// <returns>Completion after confirmation queues exactly one replay and reports its non-delivery guarantee.</returns>
     [Fact]
     public async Task FailureReplayRequiresConfirmation()
     {
+        await experience.ReportConnectionAsync(true, null);
         var id = Guid.NewGuid();
         service.Failures = [new(id, "delivery", "Configuration requires correction.", 1, DateTimeOffset.UnixEpoch)];
         var component = Render<NotificationFailures>();

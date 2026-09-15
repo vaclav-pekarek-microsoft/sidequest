@@ -3,57 +3,54 @@ using Sidequest.Application.Notifications;
 
 namespace Sidequest.Web.Components.Pages.Notifications;
 
-/// <summary>Redacted administrator failure view and explicit replay confirmation backed only by application services.</summary>
-public partial class NotificationFailures : IAsyncDisposable
+/// <summary>Redacted delivery recovery that rechecks persisted administrator access and discards stale replay confirmations.</summary>
+public partial class NotificationFailures
 {
     [Inject] private INotificationService Service { get; set; } = default!;
-    private readonly CancellationTokenSource lifetime = new();
     private IReadOnlyList<DeliveryFailure>? failures;
     private DeliveryFailure? pending;
-    private bool busy;
-    private string? error;
-    private string status = "";
 
-    /// <inheritdoc/>
-    protected override Task OnInitializedAsync() => LoadAsync();
-
-    private async Task LoadAsync()
+    /// <inheritdoc />
+    protected override async Task QueryAsync(CancellationToken token)
     {
-        if (busy)
-            return;
-        busy = true;
         failures = null;
         pending = null;
-        error = null;
-        try { failures = await Service.FailedDeliveriesAsync(lifetime.Token); }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { error = "Delivery recovery is unavailable. A current administrator assignment is required."; }
-        finally { busy = false; }
+        var loaded = await Service.FailedDeliveriesAsync(token);
+        token.ThrowIfCancellationRequested();
+        failures = loaded;
     }
 
-    private async Task ReplayAsync()
+    private void Review(DeliveryFailure failure)
     {
-        if (busy || pending is null)
-            return;
-        var selected = pending;
-        pending = null;
-        failures = null;
-        busy = true;
-        try
+        if (!ControlsDisabled && failures?.Contains(failure) == true)
+            pending = failure;
+    }
+
+    private void CancelReview()
+    {
+        if (!ControlsDisabled)
+            pending = null;
+    }
+
+    private Task ReplayAsync()
+    {
+        if (pending is not { } selected)
+            return Task.CompletedTask;
+        return MutateAsync(async token =>
         {
-            await Service.ReplayAsync(selected.Id, selected.Kind, lifetime.Token);
-            status = "Replay was queued, not delivered. Current eligibility and ordering will be checked.";
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { status = "Replay was not queued. Refresh to check authorization and current work state."; }
-        finally { busy = false; }
-        await LoadAsync();
+            pending = null;
+            failures = null;
+            await Service.ReplayAsync(selected.Id, selected.Kind, token);
+            token.ThrowIfCancellationRequested();
+            Status = "Replay was queued, not delivered. Current eligibility and ordering will be checked.";
+            await QueryAsync(token);
+        });
     }
 
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
     {
-        await lifetime.CancelAsync();
-        lifetime.Dispose();
+        failures = null;
+        pending = null;
     }
 }

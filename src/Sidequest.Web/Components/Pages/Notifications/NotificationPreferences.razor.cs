@@ -1,81 +1,83 @@
 using Microsoft.AspNetCore.Components;
+using Sidequest.Application.Events;
 using Sidequest.Application.Notifications;
 using Sidequest.Domain.Rules;
 using Sidequest.Web.Components.Notifications;
 
 namespace Sidequest.Web.Components.Pages.Notifications;
 
-/// <summary>Per-page interactive optional settings; every save calls the authorized application boundary.</summary>
-public partial class NotificationPreferences : IAsyncDisposable
+/// <summary>Optional settings whose current access is rechecked on reconnect without overwriting valid unsaved input.</summary>
+public partial class NotificationPreferences
 {
     [Inject] private INotificationService Service { get; set; } = default!;
-    /// <summary>Optional Event context for explicitly setting its publication-email override; does not grant membership.</summary>
+    [Inject] private IEventService Events { get; set; } = default!;
+
+    /// <summary>Optional Event context for an explicit publication-email override; current membership is required.</summary>
     [Parameter] public Guid? EventId { get; set; }
-    private readonly CancellationTokenSource lifetime = new();
+
     private NotificationPreferenceForm? model;
-    private bool busy;
     private bool eventEnabled;
-    private string? error;
-    private string status = "";
 
-    /// <inheritdoc/>
-    protected override Task OnInitializedAsync() => LoadAsync();
+    /// <inheritdoc />
+    protected override Guid? ContextId => EventId;
 
-    private async Task LoadAsync()
+    /// <inheritdoc />
+    protected override async Task QueryAsync(CancellationToken token)
     {
-        busy = true;
+        var requestedEvent = EventId;
+        var preferences = await Service.GetPreferencesAsync(token);
+        token.ThrowIfCancellationRequested();
+        if (requestedEvent != EventId)
+            return;
+        if (requestedEvent is { } eventId)
+        {
+            var current = await Events.GetAsync(eventId, token);
+            token.ThrowIfCancellationRequested();
+            if (requestedEvent != EventId)
+                return;
+            if (!current.Summary.IsMember)
+                throw new DomainException(ErrorCode.NotFound, "This Event is unavailable.");
+        }
+        model ??= new()
+        {
+            NewQuestEmail = preferences.NewQuestEmail,
+            ActivityEmail = preferences.ActivityEmail,
+            RemindersEnabled = preferences.RemindersEnabled,
+            ReminderHours = preferences.ReminderHours,
+            TimeZoneId = preferences.TimeZoneId
+        };
+    }
+
+    private Task SaveAsync()
+    {
+        if (model is not { } edited)
+            return Task.CompletedTask;
+        return MutateAsync(async token =>
+        {
+            Status = "";
+            await Service.SavePreferencesAsync(new(edited.NewQuestEmail, edited.ActivityEmail, edited.RemindersEnabled,
+                edited.ReminderHours, string.IsNullOrWhiteSpace(edited.TimeZoneId) ? null : edited.TimeZoneId.Trim()), token);
+            token.ThrowIfCancellationRequested();
+            Status = "Preferences saved. Obsolete reminders were replaced; required service delivery remains enabled.";
+        });
+    }
+
+    private Task SaveEventAsync()
+    {
+        if (EventId is not { } eventId)
+            return Task.CompletedTask;
+        return MutateAsync(async token =>
+        {
+            await Service.SetEventNewQuestEmailAsync(eventId, eventEnabled, token);
+            token.ThrowIfCancellationRequested();
+            Status = "Event override saved.";
+        });
+    }
+
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
         model = null;
-        error = null;
-        try
-        {
-            var p = await Service.GetPreferencesAsync(lifetime.Token);
-            model = new() { NewQuestEmail = p.NewQuestEmail, ActivityEmail = p.ActivityEmail,
-                RemindersEnabled = p.RemindersEnabled, ReminderHours = p.ReminderHours, TimeZoneId = p.TimeZoneId };
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { error = "Preferences are unavailable. Check your session and retry."; }
-        finally { busy = false; }
-    }
-
-    private async Task SaveAsync()
-    {
-        if (busy || model is null)
-            return;
-        busy = true;
-        error = null;
-        status = "";
-        try
-        {
-            await Service.SavePreferencesAsync(new(model.NewQuestEmail, model.ActivityEmail, model.RemindersEnabled,
-                model.ReminderHours, string.IsNullOrWhiteSpace(model.TimeZoneId) ? null : model.TimeZoneId.Trim()), lifetime.Token);
-            status = "Preferences saved. Obsolete reminders were replaced; required service delivery remains enabled.";
-        }
-        catch (DomainException e) when (e.Code == ErrorCode.Validation) { error = e.Message; }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { model = null; error = "Preferences were not saved. Reload to check current access."; }
-        finally { busy = false; }
-    }
-
-    private async Task SaveEventAsync()
-    {
-        if (busy || EventId is not Guid eventId)
-            return;
-        busy = true;
-        error = null;
-        try
-        {
-            await Service.SetEventNewQuestEmailAsync(eventId, eventEnabled, lifetime.Token);
-            status = "Event override saved.";
-        }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { model = null; error = "Event override was not saved. Current Event access is required."; }
-        finally { busy = false; }
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        await lifetime.CancelAsync();
-        lifetime.Dispose();
+        eventEnabled = false;
     }
 }
