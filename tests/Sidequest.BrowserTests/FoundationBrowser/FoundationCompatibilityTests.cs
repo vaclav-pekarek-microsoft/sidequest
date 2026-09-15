@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
@@ -10,6 +11,24 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
 {
     private const string Completion = "Preview completed. Nothing was saved.";
     private static readonly Regex SyntheticBanner = new("SYNTHETIC DEVELOPMENT");
+    private const string LoginDiagnosticsScript = """
+        () => {
+            const completion = document.querySelector('[data-authentication-completion]');
+            const form = document.querySelector('form[data-authentication-change]');
+            const result = completion?.querySelector('[data-authentication-result]')?.textContent ?? '';
+            return JSON.stringify({
+                readyState: document.readyState,
+                formPresent: form !== null,
+                formGenerationPresent: Boolean(form?.querySelector('input[name="experienceEpoch"]')?.value),
+                completionPresent: completion !== null,
+                completionGenerationPresent: Boolean(completion?.dataset.authenticationCompletion),
+                completionState: !completion ? 'absent' :
+                    result === 'Checking the device-clearing boundary before opening Sidequest.' ? 'checking' :
+                    result.startsWith('Sign-in succeeded, but device saving could not be activated') ? 'blocked' : 'other',
+                clearWarningVisible: document.querySelector('[data-authentication-warning]')?.hidden === false
+            });
+        }
+        """;
 
     /// <summary>Checks each synthetic sign-in path, actual Fluent label binding into the dialog, and its exact no-save completion message.</summary>
     /// <param name="persona">The Alice, Bob, Admin, or Carol option selected through the synthetic login form.</param>
@@ -106,6 +125,70 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
     }
 
     private async Task LoginAsync(IPage page, string persona)
+    {
+        var transport = new ConcurrentQueue<string>();
+        var observations = 0;
+        void Record(IRequest request, string state)
+        {
+            var path = LoginDiagnosticPath(request.Url);
+            if (path is "<other>" or "<off-origin>") return;
+            if (Interlocked.Increment(ref observations) <= 48)
+                transport.Enqueue($"{(request.Method is "GET" or "POST" ? request.Method : "<other>")} {path} {state}");
+        }
+        void Requested(object? sender, IRequest request) => Record(request, "requested");
+        void Responded(object? sender, IResponse response) => Record(response.Request, $"HTTP {response.Status}");
+        void Finished(object? sender, IRequest request) => Record(request, "finished");
+        void Failed(object? sender, IRequest request) => Record(request, "failed");
+        page.Request += Requested;
+        page.Response += Responded;
+        page.RequestFinished += Finished;
+        page.RequestFailed += Failed;
+        try
+        {
+            await CompleteLoginAsync(page, persona);
+        }
+        catch (Exception error) when (error is PlaywrightException or TimeoutException)
+        {
+            await Console.Out.WriteLineAsync(
+                $"Foundation login failed: path={LoginDiagnosticPath(page.Url)}; HTTP=[{string.Join("; ", transport)}]; truncated={observations > 48}");
+            try
+            {
+                var state = await page.EvaluateAsync<string>(LoginDiagnosticsScript).WaitAsync(TimeSpan.FromSeconds(2));
+                await Console.Out.WriteLineAsync($"Foundation login completion state: {state}");
+            }
+            catch (Exception diagnosticError) when (diagnosticError is PlaywrightException or TimeoutException)
+            {
+                await Console.Out.WriteLineAsync(
+                    $"Foundation login completion state unavailable ({diagnosticError.GetType().Name}); original failure retained.");
+            }
+            throw;
+        }
+        finally
+        {
+            page.Request -= Requested;
+            page.Response -= Responded;
+            page.RequestFinished -= Finished;
+            page.RequestFailed -= Failed;
+        }
+    }
+
+    private string LoginDiagnosticPath(string url)
+    {
+        if (!fixture.Settings.IsSameOrigin(url)) return "<off-origin>";
+        var path = new Uri(url).AbsolutePath;
+        return path switch
+        {
+            "/" or "/signin" or "/foundation" or "/auth/development" or "/auth/complete" or
+                "/Sidequest.Web.lib.module.js" or "/Components/App.razor.js" or
+                "/Components/Experience/ConnectionStatus.razor.js" or "/experience/snapshot-store.js" or
+                "/experience/refresh.js" => path,
+            _ when path.StartsWith("/_framework/blazor.", StringComparison.Ordinal) &&
+                path.EndsWith(".js", StringComparison.Ordinal) => "<framework-script>",
+            _ => "<other>"
+        };
+    }
+
+    private async Task CompleteLoginAsync(IPage page, string persona)
     {
         await page.GotoAsync("/signin");
         await Expect(page).ToHaveURLAsync(SignInUrl());
