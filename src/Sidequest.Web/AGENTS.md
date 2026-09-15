@@ -135,7 +135,8 @@ bypass was attempted. Subsequent isolated Linux Chromium CI
 [34861029210](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
 passed all seven M1 browser journeys: four persona sign-ins with exact Fluent dialog
 content, unauthenticated redirect, 360px keyboard/no-overflow interaction, and logout.
-Full-product browser acceptance and real-Entra release verification remain open.
+These historical compatibility checks do not establish full release acceptance
+or real-Entra verification.
 `/health/live` is anonymous process liveness; `/health/ready` returns SQL availability
 only, not migration readiness. Both expose status only. HTTP exception responses use
 a safe HTML page or generic problem details with correlation IDs; never display exception
@@ -153,6 +154,12 @@ The host verifies handler completeness before starting its SQL worker; Graph pol
 provider credentials remain external configuration/approval gates. M2 combined acceptance
 passed in Linux CI34896985551, including actual production composition, real SQL workflows,
 and authenticated Chromium journeys. Media and Administration backends are integrated;
-M3 dashboard, cover UI, authentication/reconnect and bounded offline composition remain
-under combined browser acceptance. This is not live-provider or device-policy approval.
+M3 dashboard, cover UI, authentication/reconnect and bounded offline composition passed
+[combined Linux acceptance 34967281852](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852):
+1,845 unit, 1,019 real-SQL, 96 browser-project cases and 54 Node regressions.
+Ordinary browser sign-in helpers observe initialized connection UI; a separate
+controlled native-startup journey verifies missing-generation guidance and explicit
+continuation. Route barriers must resolve fingerprinted assets through the rendered
+import map and use Playwright-compatible regular-expression options.
+This is not live-provider, device-policy, load/restore or production release approval.
 Do not introduce fake success adapters to satisfy external contracts.

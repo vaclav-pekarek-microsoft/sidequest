@@ -7,8 +7,8 @@ Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
 M2 Event/Quest workflows and delivery are integrated into the host and have passed
 combined workflow and browser acceptance. Uploads, administration/templates, and
-dashboard/PWA/offline basics are composed; final M3 reconnect and access-hardening
-acceptance remains in progress. This is not a production-ready release;
+dashboard/PWA/offline basics have passed combined M3 acceptance, including reconnect
+and access hardening. M4 release hardening remains. This is not a production-ready release;
 live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
@@ -110,6 +110,20 @@ boundaries. They also verify that an early completion claim cannot acknowledge a
 unfinished Quest: the original work completes at its immutable deadline. Browser
 journeys verify real authorized navigation, private access, calendar recovery,
 concurrency feedback, and 360px keyboard flows with prerender-safe controls.
+
+The [M3 combined acceptance run](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852)
+passed 1,845 unit cases, 1,019 real-SQL cases, 96 browser-project cases and 54 Node
+regressions, with zero failures or skips. It covers the composed media,
+administration/templates, dashboard and bounded offline features, current-cookie
+reconnect verification, retained-view reauthorization and unsaved-input preservation.
+The controlled native-startup journey actually exercised the missing-generation
+completion guidance and explicit continuation, separately from initialized sign-in.
+Real SQL also verifies write-intent scheduling before insertion, unchanged work
+deduplication and caller-owned commit/rollback.
+
+This evidence does not establish live Entra/Graph/ACS or Outlook approval, physical
+device/screen-reader certification, the 300-user load target, SQL/Blob recovery
+targets, operational ownership, or production deployment. Those remain M4 gates.
 
 ## Architecture and contribution policy
 

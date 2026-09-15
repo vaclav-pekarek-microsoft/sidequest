@@ -3,7 +3,8 @@
 The Media service implements validated uploads, authorized current-cover reads,
 removal, and durable cleanup. Quest cards and detail views display authorized covers;
 the editor composes upload/removal alongside the text form. The host registers the
-real Media service and mediated endpoint. Combined M3 acceptance remains in progress;
+real Media service and mediated endpoint. Combined M3 acceptance passed in
+[Linux CI 34967281852](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852);
 registering packages or calling the service in a test is not live Azure approval.
 
 ## Composition
@@ -73,6 +74,7 @@ authorized never-published Draft stages separate audited cleanup that survives
 removal of Quest/asset metadata, including unfinished provider writes. This is not
 a general retention policy or authorization to delete published content.
 
-Linux codec/worker CI, composed UI/browser behavior, provider throttling/load
-behavior and live Azure/device-data approvals remain separate acceptance gates.
+Linux codec/worker CI and composed UI/browser acceptance passed in the linked run.
+Live provider throttling/load behavior and Azure/device-data approvals remain
+separate release gates.
 Offline caching must exclude `/media/**` entirely.
