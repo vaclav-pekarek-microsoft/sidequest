@@ -95,6 +95,15 @@ recheck persisted access independently. Cookies/circuits last at most one hour w
 sliding renewal; Entra assignment changes require fresh sign-in to fetch fresh role claims.
 Immediate workforce departure enforcement uses the persisted eligibility/departure fields.
 Persist/protect Data Protection keys for hosting; review affinity/shared keys before scale-out.
+`AddSidequestAzureHosting` is explicitly enabled by `Hosting:Azure:Enabled`; it rejects
+Development/synthetic authentication. The Hosting folder owns stable application-name
+validation, private native Blob/Key Vault endpoints, and the versionless wrapping key.
+The system-assigned identity persists and wraps the key ring; failures must not fall
+back to local/plaintext keys. Metrics-only export uses named Azure Monitor options,
+managed identity and no local spool or automatic trace/log exporter. Require the
+Statsbeat/customer SDK statistics opt-outs in the actual process environment, not
+just IConfiguration, before constructing the exporter. Keep telemetry
+privacy and actual cloud permissions/ingestion as separate release gates.
 No automatic database creation/migration runs on startup.
 
 ## Local synthetic development

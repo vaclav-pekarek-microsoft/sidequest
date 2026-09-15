@@ -9,9 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.4" />
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.4" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.9.0" />
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.14.4" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" PrivateAssets="all" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
     <ProjectReference Include="..\Sidequest.Application\Sidequest.Application.csproj" />
     <ProjectReference Include="..\Sidequest.Infrastructure\Sidequest.Infrastructure.csproj" />
   </ItemGroup>

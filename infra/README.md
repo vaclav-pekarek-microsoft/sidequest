@@ -1,10 +1,11 @@
 # Azure infrastructure
 
 **M4 draft, not deployment-ready.** `main.bicep` compiles and its compiled ARM
-contracts are checked without an Azure login. Azure-hosted Data Protection,
-authenticated telemetry export, provider settings, SQL identity/migration
-bootstrap and the approval-gated OIDC deployment workflow still require host and
-deployment integration. Do not enable or deploy this draft as a release.
+contracts are checked without an Azure login. Azure-hosted Data Protection and
+metrics-only managed-identity export are wired behind explicit opt-in. Queue
+sampling composition, provider settings, SQL identity/migration bootstrap and the
+approval-gated OIDC deployment workflow remain unfinished. Do not enable or deploy
+this draft as a release.
 
 The template defines one Linux .NET 10 App Service instance with WebSockets,
 Always On and affinity; private-endpoint-only SQL, Blob and Key Vault; separate
@@ -41,17 +42,40 @@ endpoint/sender and managed-identity grant must be wired before those features
 are considered operational. Never put secret values or cloud login credentials
 in parameter files, source, command output or workflow artifacts.
 
-The template emits `Hosting:DataProtection:ApplicationName`, `:BlobUri` and
-`:KeyUri` for forthcoming host registration. The application name must remain
+The template enables `Hosting:Azure:Enabled` and emits
+`Hosting:DataProtection:ApplicationName`, `:BlobUri` and `:KeyUri` for
+`AddSidequestAzureHosting`. Ordinary hosts do not opt in automatically, and
+Development or synthetic-authentication hosts cannot enable Azure hosting.
+The application name must remain
 stable across deployment restarts; the key URI is versionless. Retain old wrapping
-key versions needed for decryption. Provisioning a key or container alone does
-not make the application's key ring durable or encrypted.
+key versions needed for decryption. Key-ring persistence uses the private Blob SDK
+provider and the Key Vault XML encryptor with system-assigned managed identity,
+not SAS or a developer credential chain. Native HTTPS endpoints without
+credentials, query strings or fragments are required. Denied storage or wrapping
+does not fall back to local/plaintext keys.
 
 The monitoring flag is intended to enable the release sampler once composed.
-Application Insights requires the forthcoming managed-identity-authenticated
-exporter: a connection string and role assignment alone do not prove telemetry
-delivery. Data-plane access propagation, key-reference resolution and actual
-telemetry ingestion must be checked before enabling the app.
+The managed-identity-authenticated metrics exporter subscribes only to
+`Sidequest.Operations`, retaining only the fixed `queue` dimension. It does not automatically
+export traces, application logs, SQL statements or request headers, and disables
+local offline telemetry spooling. Named exporter options avoid mixing future
+signal settings. The template sets `APPLICATIONINSIGHTS_STATSBEAT_DISABLED=true`
+and `APPLICATIONINSIGHTS_SDKSTATS_DISABLED=true`; enabled hosting rejects missing
+process-level opt-outs. JSON configuration alone cannot disable these SDK
+diagnostics, which otherwise collect additional statistics and can contact
+Microsoft-owned diagnostic endpoints outside the application's telemetry resource.
+Live metrics, standard metrics and performance counters are also explicitly disabled.
+A connection string and role assignment alone do not prove
+telemetry delivery. Data-plane access propagation, key-reference resolution and
+actual ingestion must be checked before enabling the app. Application latency and
+other release signals still need separate instrumentation and acceptance evidence.
+
+Local hosting checks use the actual Azure Data Protection repository/encryptor with
+synthetic storage and RSA-backed key resolvers: restart, wrapping-key rotation,
+application isolation, encrypted stored XML and fail-closed behavior are exercised.
+These are not live Blob/Key Vault permission or recovery evidence. Hosting pins
+Azure Data Protection Blobs 1.5.4, Keys 1.6.4, Azure Identity 1.21.0 and Azure Monitor
+Exporter 1.9.0 (MIT), plus OpenTelemetry.Extensions.Hosting 1.18.0 (Apache-2.0).
 
 ## Recovery and cost boundaries
 

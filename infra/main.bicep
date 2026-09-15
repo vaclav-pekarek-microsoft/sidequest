@@ -415,11 +415,14 @@ resource settings 'Microsoft.Web/sites/config@2024-04-01' = {
     ConnectionStrings__Sidequest: 'Server=tcp:${sql.properties.fullyQualifiedDomainName},1433;Database=${database.name};Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;'
     Media__Storage__ServiceUri: storage.properties.primaryEndpoints.blob
     Media__Storage__ContainerName: covers.name
+    Hosting__Azure__Enabled: 'true'
     Hosting__DataProtection__ApplicationName: 'Sidequest:${environmentName}:${suffix}'
     Hosting__DataProtection__BlobUri: '${storage.properties.primaryEndpoints.blob}${protectionKeys.name}/keys.xml'
     Hosting__DataProtection__KeyUri: '${vault.properties.vaultUri}keys/${wrappingKey.name}'
     Operations__Monitoring__Enabled: 'true'
     APPLICATIONINSIGHTS_CONNECTION_STRING: insights.properties.ConnectionString
+    APPLICATIONINSIGHTS_STATSBEAT_DISABLED: 'true'
+    APPLICATIONINSIGHTS_SDKSTATS_DISABLED: 'true'
   }
 }
 

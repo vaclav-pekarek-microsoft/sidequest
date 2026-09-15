@@ -119,5 +119,8 @@ test("Deployment identities and approved retention or address ranges have no inv
     assert.ok(settings.ConnectionStrings__Sidequest.includes("Authentication=Active Directory Managed Identity;"));
     assert.ok(settings.ConnectionStrings__Sidequest.includes("Encrypt=True;TrustServerCertificate=False;"));
     assert.equal(settings.Media__Storage__ContainerName, "covers");
+    assert.equal(settings.Hosting__Azure__Enabled, "true");
+    assert.equal(settings.APPLICATIONINSIGHTS_STATSBEAT_DISABLED, "true");
+    assert.equal(settings.APPLICATIONINSIGHTS_SDKSTATS_DISABLED, "true");
     assert.equal(settings.Operations__Monitoring__Enabled, "true");
 });

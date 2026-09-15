@@ -5,11 +5,13 @@ using Sidequest.Application.Abstractions;
 using Sidequest.Infrastructure;
 using Sidequest.Web.Authentication;
 using Sidequest.Web.Components;
+using Sidequest.Web.Hosting;
 using Sidequest.Web.Operations;
 
 var builder = WebApplication.CreateBuilder(args);
 var authentication = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
 builder.Services.AddSingleton(authentication);
+builder.Services.AddSidequestAzureHosting(builder.Configuration, builder.Environment);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddFluentUIComponents();
 builder.Services.AddCascadingAuthenticationState();
