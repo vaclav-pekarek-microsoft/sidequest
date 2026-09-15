@@ -29,6 +29,8 @@ public sealed class FoundationBrowserFixture : IAsyncLifetime
 
     /// <summary>Creates a fresh isolated browser session with deterministic locale/zone and off-origin HTTP requests blocked.</summary>
     /// <param name="width">The viewport width in CSS pixels; height is fixed at 800 CSS pixels.</param>
+    /// <param name="allowServiceWorkers">Explicit opt-in for offline/PWA scenarios; all other contexts block service workers.
+    /// Context-level origin routing remains installed for worker-originated network requests.</param>
     /// <returns>A new context whose cookies/storage are not shared and which the caller must asynchronously dispose.</returns>
     /// <exception cref="PlaywrightException">The browser cannot create or configure the isolated context.</exception>
     /// <example>
@@ -39,21 +41,25 @@ public sealed class FoundationBrowserFixture : IAsyncLifetime
     /// await Assertions.Expect(page.Locator("select#persona")).ToBeVisibleAsync();
     /// </code>
     /// </example>
-    internal async Task<IBrowserContext> CreateContextAsync(int width = 1280)
+    internal async Task<IBrowserContext> CreateContextAsync(int width = 1280, bool allowServiceWorkers = false)
     {
-        var context = await browser!.NewContextAsync(new()
-        {
-            BaseURL = Settings.BaseUri.AbsoluteUri,
-            ViewportSize = new() { Width = width, Height = 800 },
-            Locale = "en-US",
-            TimezoneId = "Europe/Prague",
-            ServiceWorkers = ServiceWorkerPolicy.Block
-        });
+        var context = await browser!.NewContextAsync(CreateOptions(Settings, width, allowServiceWorkers));
         // No off-origin HTTP request (including Entra redirects/CDN assets) may leave this test.
         await context.RouteAsync("**/*", route =>
             Settings.IsSameOrigin(route.Request.Url) ? route.ContinueAsync() : route.AbortAsync());
         return context;
     }
+
+    /// <summary>Builds deterministic isolated-context options without launching a browser or bypassing fixture initialization.</summary>
+    internal static BrowserNewContextOptions CreateOptions(SyntheticAppSettings settings, int width = 1280,
+        bool allowServiceWorkers = false) => new()
+        {
+            BaseURL = settings.BaseUri.AbsoluteUri,
+            ViewportSize = new() { Width = width, Height = 800 },
+            Locale = "en-US",
+            TimezoneId = "Europe/Prague",
+            ServiceWorkers = allowServiceWorkers ? ServiceWorkerPolicy.Allow : ServiceWorkerPolicy.Block
+        };
 
     /// <inheritdoc/>
     /// <remarks>Closes this fixture's browser and always disposes its Playwright instance; no managed browser/profile is touched.</remarks>

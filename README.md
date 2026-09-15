@@ -73,6 +73,9 @@ starts the development app against a disposable SQL database, and runs the brows
 project. Do not bypass managed local browser policy to run these checks. The browser
 project includes M1 compatibility scenarios and M2 membership, participation, private
 access, moderation, calendar recovery, stale-editor and mobile interaction journeys.
+The shared browser fixture blocks service workers by default. Dedicated M3 offline
+scenarios can explicitly opt in without changing other contexts or their origin
+routing. That harness option alone is not evidence that offline behavior is complete.
 Neither synthetic suite establishes approved live-provider or release acceptance.
 CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.
