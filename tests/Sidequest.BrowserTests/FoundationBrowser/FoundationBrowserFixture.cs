@@ -47,8 +47,20 @@ public sealed class FoundationBrowserFixture : IAsyncLifetime
         // No off-origin HTTP request (including Entra redirects/CDN assets) may leave this test.
         await context.RouteAsync("**/*", route =>
             Settings.IsSameOrigin(route.Request.Url) ? route.ContinueAsync() : route.AbortAsync());
+        context.Page += (_, page) =>
+        {
+            page.PageError += (_, error) => ReportBrowserError("page", error);
+            page.Console += (_, message) =>
+            {
+                if (message.Type == "error")
+                    ReportBrowserError("console", message.Text);
+            };
+        };
         return context;
     }
+
+    private static void ReportBrowserError(string category, string message) =>
+        Console.WriteLine($"Synthetic browser {category}: {message[..Math.Min(message.Length, 4000)]}");
 
     /// <summary>Builds deterministic isolated-context options without launching a browser or bypassing fixture initialization.</summary>
     internal static BrowserNewContextOptions CreateOptions(SyntheticAppSettings settings, int width = 1280,

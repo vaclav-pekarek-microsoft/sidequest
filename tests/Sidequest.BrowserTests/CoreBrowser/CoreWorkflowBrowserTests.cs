@@ -221,7 +221,25 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private async Task<Guid> CreateEventAsync(IPage page)
     {
         await page.GotoAsync("/events/create");
-        await Expect(NameInput(page)).ToBeEditableAsync();
+        await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
+        try
+        {
+            await Expect(NameInput(page)).ToBeEditableAsync();
+        }
+        catch (PlaywrightException)
+        {
+            Console.WriteLine(await page.EvaluateAsync<string>("""
+                () => JSON.stringify({
+                  connection: document.querySelector('[data-connection]')?.textContent,
+                  fieldsets: [...document.querySelectorAll('fieldset')].map(x => x.disabled),
+                  fields: [...document.querySelectorAll('fluent-text-field')].map(x => ({
+                    disabled: x.hasAttribute('disabled'),
+                    nativeDisabled: x.shadowRoot?.querySelector('input')?.disabled
+                  }))
+                })
+                """));
+            throw;
+        }
         await NameInput(page).FillAsync($"Journey {Guid.NewGuid():N}");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Discovery summary (visible to eligible users)", Exact = true }).FillAsync("A synthetic browser acceptance Event.");
         await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (members only; plain text)", Exact = true }).FillAsync("Member-only browser acceptance description.");
