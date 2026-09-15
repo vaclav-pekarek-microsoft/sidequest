@@ -2123,6 +2123,12 @@ unsynchronized edits in a shared working tree. Never let two agents own the same
 at once; serially integrate changes to shared pages/components.
 Only the integration owner generates/applies migrations and merges the EF model snapshot.
 Feature agents supply mapping changes and migration requirements for coordinated integration.
+Notification template revisions are append-only through every synchronous/asynchronous
+EF save overload, including calls that disable state acceptance; correction appends a
+new revision rather than rewriting history. Delivery payloads already use
+`nvarchar(max)` in both the model and initial migration. Larger rendered snapshots
+need real persistence evidence, not an unnecessary widening migration inferred from
+the model's earlier blanket string-length default.
 
 Contract changes are proposed to the integration owner, recorded here or in a directly
 related architecture decision, and accepted before dependents change. No speculative
