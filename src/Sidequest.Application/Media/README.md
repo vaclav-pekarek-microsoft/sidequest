@@ -2,9 +2,9 @@
 
 The Media service implements validated uploads, authorized current-cover reads,
 removal, and durable cleanup. Quest cards and detail views display authorized covers;
-the editor composes upload/removal alongside the text form. Host composition remains
-a separate integration step; registering packages or calling the service in a test
-is not live Azure or complete browser acceptance.
+the editor composes upload/removal alongside the text form. The host registers the
+real Media service and mediated endpoint. Combined M3 acceptance remains in progress;
+registering packages or calling the service in a test is not live Azure approval.
 
 ## Composition
 

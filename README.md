@@ -7,7 +7,8 @@ Implementation is in progress. The M1 foundation is verified: shared contracts,
 SQL persistence, Entra/development authentication, a Fluent UI shell, and CI.
 M2 Event/Quest workflows and delivery are integrated into the host and have passed
 combined workflow and browser acceptance. Uploads, administration/templates, and
-dashboard/PWA/offline basics remain M3 work. This is not a production-ready release;
+dashboard/PWA/offline basics are composed; final M3 reconnect and access-hardening
+acceptance remains in progress. This is not a production-ready release;
 live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
@@ -36,7 +37,7 @@ an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 
-The M2 host starts durable SQL processing after checking that every supported work type
+The composed host starts durable SQL processing after checking that every supported work type
 has exactly one handler. Running it can process existing queued work in the configured
 database. Use an explicitly chosen development database, not a shared production catalog.
 Missing email configuration causes explicit delivery failures, not simulated success.
@@ -48,6 +49,13 @@ Provider configuration is separate from sign-in configuration:
 - `Delivery:Email`: verified sender/organizer, ACS connection string or managed-identity
   HTTPS endpoint, optional managed identity client ID and submission timeout.
 - `Events:Limits` and `Delivery:Work`: bounded workflow, polling, lease and concurrency settings.
+- `Media:Storage`: private `ContainerName`, HTTPS `ServiceUri`, optional
+  `ManagedIdentityClientId`, and `OperationTimeout`, or a secret-store `ConnectionString`.
+  Preprovision the private container and disable account-level anonymous Blob access.
+  Missing storage configuration causes explicit upload failure, not simulated success.
+- `Administration:DepartureRecovery`: disabled by default. Enabling it requires an
+  externally approved `ProcedureReference` and separately verified departure evidence;
+  configuration does not constitute approval or create that evidence.
 
 Directory tenants must match the authenticated tenant. Store credentials in user secrets
 or the deployment secret store; never commit them. Missing Graph policy or credentials
@@ -76,6 +84,7 @@ access, moderation, calendar recovery, stale-editor and mobile interaction journ
 The shared browser fixture blocks service workers by default. Dedicated M3 offline
 scenarios can explicitly opt in without changing other contexts or their origin
 routing. That harness option alone is not evidence that offline behavior is complete.
+CI also runs the client lifecycle regressions with Node's built-in test runner.
 Neither synthetic suite establishes approved live-provider or release acceptance.
 CI requires nonempty unit, SQL integration, and browser results with
 every discovered scenario executed and passed; skipped suites do not satisfy the gate.

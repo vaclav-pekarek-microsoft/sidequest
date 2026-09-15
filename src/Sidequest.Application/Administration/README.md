@@ -122,7 +122,8 @@ delivery or real Outlook interoperability is asserted.
 Call `services.AddSidequestAdministration(configuration)` once, after registering
 existing identity/access, persistence, clock and change writer. The helper starts
 no workers, makes no provider call, and does not enable recovery by default.
-Parent-owned startup/navigation must wire this helper and link `/administration`.
+Parent-owned startup now registers this helper and navigation links `/administration`;
+neither that link nor an Entra admission role grants administrator access.
 The feature pages use per-page Interactive Server with prerendering retained:
 
 - `/administration`
