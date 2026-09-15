@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
@@ -135,28 +137,139 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
         await using var context = await fixture.CreateContextAsync(width: 360);
         var page = await ExperienceBrowserSupport.SignInAsync(context);
         var checks = 0;
-        page.Request += (_, request) => { if (new Uri(request.Url).AbsolutePath == "/experience/session") Interlocked.Increment(ref checks); };
-        await page.GotoAsync("/events/create");
-        var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
-        await Expect(name).ToBeEditableAsync();
-        await name.FillAsync("Unsaved reconnect input");
-        await Expect(page.Locator("[data-connection]")).ToHaveCountAsync(1);
-        await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
-        var initialChecks = Volatile.Read(ref checks);
-        Assert.True(initialChecks > 0);
-        await context.SetOfflineAsync(true);
-        await Expect(page.Locator("#components-reconnect-modal")).ToHaveClassAsync(
-            new Regex("components-reconnect-(show|retrying|failed)"), new() { Timeout = 90_000 });
-        Assert.True(await page.Locator("main").EvaluateAsync<bool>("element => element.inert"));
-        await Expect(name).ToHaveValueAsync("Unsaved reconnect input");
-        await context.SetOfflineAsync(false);
-        await Expect(page.Locator("[data-connection]")).ToHaveTextAsync(
-            "Connected — actions still require current server authorization.", new() { Timeout = 90_000 });
-        await Expect(name).ToBeEditableAsync();
-        await Expect(name).ToHaveValueAsync("Unsaved reconnect input");
-        Assert.True(Volatile.Read(ref checks) > initialChecks);
-        await Expect(page).ToHaveURLAsync(new Regex("/events/create$"));
-        Assert.False(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"));
+        var trace = new ConcurrentQueue<string>();
+        var sockets = new ConcurrentBag<IWebSocket>();
+        var started = Stopwatch.GetTimestamp();
+        page.Request += OnRequest;
+        page.Response += OnResponse;
+        page.RequestFailed += OnRequestFailed;
+        page.WebSocket += OnSocket;
+        page.Console += OnConsole;
+        await page.AddInitScriptAsync("""
+            (() => {
+                let previous;
+                let recorded = 0;
+                document.addEventListener('components-reconnect-state-changed', event => {
+                    const detail = event.detail;
+                    const allowed = ['show', 'retrying', 'hide', 'failed', 'rejected', 'paused', 'resume-failed'];
+                    const state = allowed.includes(detail?.state) ? detail.state : 'unknown';
+                    const attempt = Number.isInteger(detail?.currentAttempt) ? Math.min(99, detail.currentAttempt) : '-';
+                    const value = `${state}:${attempt}`;
+                    if (value !== previous && recorded < 40) {
+                        previous = value;
+                        recorded++;
+                        console.info(`Experience reconnect event: ${value}`);
+                    }
+                }, true);
+            })();
+            """);
+        try
+        {
+            await page.GotoAsync("/events/create");
+            var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
+            await Expect(name).ToBeEditableAsync();
+            await name.FillAsync("Unsaved reconnect input");
+            await Expect(page.Locator("[data-connection]")).ToHaveCountAsync(1);
+            await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
+            var initialChecks = Volatile.Read(ref checks);
+            Assert.True(initialChecks > 0);
+            Record("network-offline-requested");
+            await context.SetOfflineAsync(true);
+            await Expect(page.Locator("#components-reconnect-modal")).ToHaveClassAsync(
+                new Regex("components-reconnect-(show|retrying|failed)"), new() { Timeout = 90_000 });
+            Assert.True(await page.Locator("main").EvaluateAsync<bool>("element => element.inert"));
+            await Expect(name).ToHaveValueAsync("Unsaved reconnect input");
+            Record("network-online-requested");
+            await context.SetOfflineAsync(false);
+            Record("network-online-command-completed");
+            await Expect(page.Locator("[data-connection]")).ToHaveTextAsync(
+                "Connected — actions still require current server authorization.", new() { Timeout = 90_000 });
+            await Expect(name).ToBeEditableAsync();
+            await Expect(name).ToHaveValueAsync("Unsaved reconnect input");
+            Assert.True(Volatile.Read(ref checks) > initialChecks);
+            await Expect(page).ToHaveURLAsync(new Regex("/events/create$"));
+            Assert.False(await page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"));
+        }
+        catch (Exception error) when (error is PlaywrightException or TimeoutException)
+        {
+            await Console.Out.WriteLineAsync($"Experience reconnect transport: {JsonSerializer.Serialize(trace.ToArray())}");
+            await Console.Out.WriteLineAsync($"Experience reconnect sockets closed: {JsonSerializer.Serialize(sockets.Take(40).Select(socket => socket.IsClosed).ToArray())}");
+            await ReportReconnectFailureAsync(page);
+            throw;
+        }
+        finally
+        {
+            page.Request -= OnRequest;
+            page.Response -= OnResponse;
+            page.RequestFailed -= OnRequestFailed;
+            page.WebSocket -= OnSocket;
+            page.Console -= OnConsole;
+            foreach (var socket in sockets) socket.Close -= OnSocketClosed;
+        }
+
+        void Record(string value)
+        {
+            trace.Enqueue(FormattableString.Invariant($"{Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s {value}"));
+            while (trace.Count > 40) trace.TryDequeue(out _);
+        }
+        void OnRequest(object? sender, IRequest request)
+        {
+            if (new Uri(request.Url).AbsolutePath == "/experience/session") Interlocked.Increment(ref checks);
+        }
+        void OnResponse(object? sender, IResponse response)
+        {
+            var path = new Uri(response.Url).AbsolutePath;
+            if (path is "/experience/session" or "/_blazor" or "/_blazor/negotiate")
+                Record($"response {path} {response.Status}");
+        }
+        void OnRequestFailed(object? sender, IRequest request)
+        {
+            var path = new Uri(request.Url).AbsolutePath;
+            if (path is "/experience/session" or "/_blazor" or "/_blazor/negotiate")
+                Record($"failed {path}");
+        }
+        void OnSocket(object? sender, IWebSocket socket)
+        {
+            if (new Uri(socket.Url).AbsolutePath != "/_blazor" || sockets.Count >= 40) return;
+            sockets.Add(socket);
+            socket.Close += OnSocketClosed;
+            Record("websocket-opened");
+        }
+        void OnSocketClosed(object? sender, IWebSocket socket) => Record("websocket-closed");
+        void OnConsole(object? sender, IConsoleMessage message)
+        {
+            if (message.Text.StartsWith("Experience reconnect event:", StringComparison.Ordinal))
+                Record(message.Text[..Math.Min(message.Text.Length, 100)]);
+        }
+    }
+
+    private static async Task ReportReconnectFailureAsync(IPage page)
+    {
+        try
+        {
+            var state = await page.EvaluateAsync<string>("""
+                () => {
+                    const modal = document.querySelector('#components-reconnect-modal');
+                    const main = document.querySelector('main');
+                    return JSON.stringify({
+                        path: location.pathname.slice(0, 180),
+                        online: navigator.onLine,
+                        visibility: document.visibilityState,
+                        modal: (modal?.className ?? '').slice(0, 120),
+                        message: (modal?.querySelector('[data-reconnect-message]')?.textContent ?? '').slice(0, 240),
+                        connection: (document.querySelector('[data-connection]')?.textContent ?? '').slice(0, 240),
+                        main: main === null ? null : { hidden: main.hidden, inert: main.inert },
+                        alerts: Array.from(document.querySelectorAll('main [role="alert"]'))
+                            .slice(0, 4).map(element => (element.textContent ?? '').slice(0, 320))
+                    });
+                }
+                """);
+            await Console.Out.WriteLineAsync($"Experience reconnect state: {state}");
+        }
+        catch (Exception error) when (error is PlaywrightException or TimeoutException)
+        {
+            await Console.Out.WriteLineAsync($"Experience reconnect state unavailable ({error.GetType().Name}); original failure retained.");
+        }
     }
 
     /// <summary>A real successful second sign-in response delayed until after logout cannot unblock device storage or restore another account's snapshot.</summary>
