@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Sidequest.BrowserTests.FoundationBrowser;
 using static Microsoft.Playwright.Assertions;
@@ -8,6 +9,24 @@ namespace Sidequest.BrowserTests.SecondaryExperience;
 /// <param name="fixture">The existing CI-only Chromium fixture with unchanged synthetic origin and browser isolation policies.</param>
 public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture fixture) : IClassFixture<FoundationBrowserFixture>
 {
+    private const string InitializerImportScript = """
+        () => {
+            const element = document.querySelector('script[type="importmap"]');
+            if (!element) throw new Error('The sign-in page has no import map.');
+            const target = JSON.parse(element.textContent).imports?.['./Components/App.razor.js'];
+            if (typeof target !== 'string' || target.length === 0)
+                throw new Error('The sign-in import map does not identify the App module.');
+            return new URL(target, document.baseURI).href;
+        }
+        """;
+
+    /// <summary>Matches only the fixture-origin App module, including the SDK's fingerprint before its compound Razor-JavaScript extension.</summary>
+    /// <param name="settings">The validated synthetic origin; no host, port or arbitrary script substitution is permitted.</param>
+    /// <returns>An anchored pattern; the scenario additionally verifies the intercepted URL against the rendered import map.</returns>
+    internal static Regex InitializerRoute(SyntheticAppSettings settings) =>
+        new(@"\A" + Regex.Escape(settings.At("/Components/App").AbsoluteUri) + @"(?:\.[a-z0-9]+)?\.razor\.js\z",
+            RegexOptions.CultureInvariant);
+
     /// <summary>A delayed initializer leaves native antiforgery sign-in valid, but empty-generation completion must require an explicit human continuation without activating device saving.</summary>
     /// <returns>Completion after the controlled module barrier, genuine native POST, authenticated manual-completion guidance and explicit UI continuation to an authorized root.</returns>
     [Fact]
@@ -15,7 +34,7 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
     {
         await using var context = await fixture.CreateContextAsync();
         var page = await context.NewPageAsync();
-        var intercepted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var intercepted = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var routeCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var moduleRequests = 0;
@@ -28,7 +47,7 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
             if (request.IsNavigationRequest && new Uri(request.Url).AbsolutePath == "/")
                 Interlocked.Increment(ref rootNavigations);
         };
-        const string moduleRoute = "**/Components/App.razor.js";
+        var moduleRoute = InitializerRoute(fixture.Settings);
         async Task HoldFirstInitializerAsync(IRoute route)
         {
             if (Interlocked.Increment(ref moduleRequests) != 1)
@@ -36,7 +55,7 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
                 await route.FallbackAsync();
                 return;
             }
-            intercepted.TrySetResult();
+            intercepted.TrySetResult(route.Request.Url);
             try
             {
                 await release.Task;
@@ -53,7 +72,10 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
         try
         {
             await page.GotoAsync("/signin", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-            await intercepted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            var interceptedUrl = await intercepted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            var mappedUrl = await page.EvaluateAsync<string>(InitializerImportScript);
+            Assert.True(fixture.Settings.IsSameOrigin(mappedUrl), "The App import must remain on the fixture origin.");
+            Assert.Equal(mappedUrl, interceptedUrl);
             await Expect(page.Locator("[data-connection]")).ToContainTextAsync("Connecting");
             await Expect(page.Locator("select#persona")).ToBeEnabledAsync();
             await page.Locator("select#persona").SelectOptionAsync("Alice");
