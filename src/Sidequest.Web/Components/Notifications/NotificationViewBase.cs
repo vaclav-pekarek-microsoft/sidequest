@@ -13,6 +13,7 @@ public abstract class NotificationViewBase : ComponentBase, IAsyncDisposable
     private bool disposed;
     private bool verified;
     private int authorizationVersion;
+    private int completedAuthorizationVersion = -1;
     private bool parametersSet;
     private Guid? contextId;
 
@@ -83,13 +84,28 @@ public abstract class NotificationViewBase : ComponentBase, IAsyncDisposable
             return;
         verified = false;
         authorizationVersion++;
-        while (Busy)
-            await pendingOperation;
-        if (disposed)
-            return;
-        if (clearState)
-            ClearProtectedState();
-        await CheckAccessAsync();
+        // A later connection invalidates earlier reads; only read-only authorization may repeat.
+        do
+        {
+            while (Busy)
+                await pendingOperation;
+            if (disposed)
+                return;
+            if (clearState)
+            {
+                ClearProtectedState();
+                clearState = false;
+            }
+            else if (completedAuthorizationVersion == authorizationVersion)
+            {
+                return;
+            }
+            var version = authorizationVersion;
+            await CheckAccessAsync();
+            if (version == authorizationVersion)
+                return;
+        }
+        while (!disposed && Experience.CanUseOnlineActions);
     }
 
     /// <summary>Retries current read-only authorization without replacing an unsaved draft or replaying a mutation.</summary>
@@ -167,6 +183,8 @@ public abstract class NotificationViewBase : ComponentBase, IAsyncDisposable
         }
         finally
         {
+            if (authorizationCheck && !disposed && version == authorizationVersion)
+                completedAuthorizationVersion = version;
             Busy = false;
             completed.TrySetResult();
         }

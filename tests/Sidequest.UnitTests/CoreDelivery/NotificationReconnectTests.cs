@@ -124,8 +124,10 @@ public sealed class NotificationReconnectTests : BunitContext
         await experience.ReportConnectionAsync(false, null);
         service.Items = Inbox("new authorized notification");
         service.UnreadQuery = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.UnreadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var reconnect = experience.ReportConnectionAsync(true, null);
-        component.WaitForAssertion(() => Assert.Equal(2, service.CountCalls));
+        await WaitForStartAsync(service.UnreadStarted);
+        Assert.Equal(2, service.CountCalls);
         Assert.False(reconnect.IsCompleted);
         Assert.DoesNotContain("old protected notification", component.Markup);
         Assert.DoesNotContain("new authorized notification", component.Markup);
@@ -417,8 +419,8 @@ public sealed class NotificationReconnectTests : BunitContext
         Assert.Equal(view is "preferences" or "event" ? 1 : 0, eventQueries);
     }
 
-    /// <summary>Two reconnect notifications arriving behind the same operation serialize their queries instead of racing protected projections.</summary>
-    /// <returns>Completion after both awaited reauthorization cycles run in order without duplicate mutations.</returns>
+    /// <summary>Two reconnect notifications arriving behind the same operation share the latest generation's serialized authorization check.</summary>
+    /// <returns>Completion after both reauthorization callbacks await one current query without duplicate mutations.</returns>
     [Fact]
     public async Task OverlappingReconnectsSerializeAuthorizationQueries()
     {
@@ -426,21 +428,82 @@ public sealed class NotificationReconnectTests : BunitContext
         var component = Render<NotificationPreferences>();
         service.Mutation = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var operation = SubmitAsync(component);
+        await WaitForStartAsync(service.MutationStarted);
         await experience.ReportConnectionAsync(false, null);
         var firstReconnect = experience.ReportConnectionAsync(true, null);
         await experience.ReportConnectionAsync(false, null);
         var secondReconnect = experience.ReportConnectionAsync(true, null);
         service.Preferences = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.QueryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         service.Mutation.SetResult();
-        component.WaitForAssertion(() => Assert.Equal(2, service.PreferenceCalls));
-        Assert.False(firstReconnect.IsCompleted);
-        Assert.False(secondReconnect.IsCompleted);
-        service.Preferences.SetResult(new(false, true, true, 1, null));
-        await operation;
-        await Task.WhenAll(firstReconnect, secondReconnect);
-        Assert.Equal(3, service.PreferenceCalls);
+        try
+        {
+            await WaitForStartAsync(service.QueryStarted);
+            Assert.Equal(2, service.PreferenceCalls);
+            Assert.False(firstReconnect.IsCompleted);
+            Assert.False(secondReconnect.IsCompleted);
+        }
+        finally
+        {
+            service.Preferences.SetResult(new(false, true, true, 1, null));
+            await operation;
+            await Task.WhenAll(firstReconnect, secondReconnect);
+        }
+        Assert.Equal(2, service.PreferenceCalls);
         Assert.Equal(1, service.SaveCalls);
         Assert.Single(component.FindAll("form"));
+    }
+
+    /// <summary>An earlier reconnect cannot complete on a query invalidated by another disconnect while the latest authorization is still pending.</summary>
+    /// <param name="view">The protected notification projection whose first reconnect read becomes obsolete.</param>
+    /// <returns>Completion after both connection reports have awaited current read-only authorization without replaying mutations.</returns>
+    [Theory]
+    [InlineData("inbox")]
+    [InlineData("failures")]
+    [InlineData("preferences")]
+    public async Task OverlappingReconnectReportsAwaitCurrentGenerationAuthorization(string view)
+    {
+        await experience.ReportConnectionAsync(true, null);
+        if (view == "inbox")
+            await VerifyOverlappingReportsAsync(Render<NotificationInbox>(), view, () => service.ListCalls);
+        else if (view == "failures")
+            await VerifyOverlappingReportsAsync(Render<NotificationFailures>(), view, () => service.FailureCalls);
+        else
+            await VerifyOverlappingReportsAsync(Render<NotificationPreferences>(), view, () => service.PreferenceCalls);
+        AssertNoMutations();
+    }
+
+    private async Task VerifyOverlappingReportsAsync<T>(IRenderedComponent<T> component, string view, Func<int> reads)
+        where T : NotificationViewBase
+    {
+        await experience.ReportConnectionAsync(false, null);
+        var releaseObsolete = BlockQuery(view);
+        service.QueryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstReconnect = experience.ReportConnectionAsync(true, null);
+        await WaitForStartAsync(service.QueryStarted);
+        Assert.Equal(2, reads());
+        await experience.ReportConnectionAsync(false, null);
+        var secondReconnect = experience.ReportConnectionAsync(true, null);
+        var releaseCurrent = BlockQuery(view);
+        service.QueryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        releaseObsolete();
+        try
+        {
+            await WaitForStartAsync(service.QueryStarted);
+            await component.InvokeAsync(() => { });
+            Assert.Equal(3, reads());
+            Assert.False(firstReconnect.IsCompleted);
+            Assert.False(secondReconnect.IsCompleted);
+            Assert.Empty(component.FindAll("form"));
+            Assert.DoesNotContain("old protected notification", component.Markup);
+            Assert.DoesNotContain("old failure", component.Markup);
+        }
+        finally
+        {
+            releaseCurrent();
+            await Task.WhenAll(firstReconnect, secondReconnect);
+        }
+        Assert.Equal(3, reads());
     }
 
     private async Task VerifyTransientListAsync<T>(IRenderedComponent<T> component, string retry, string content)
@@ -468,8 +531,8 @@ public sealed class NotificationReconnectTests : BunitContext
         var operation = component.InvokeAsync(() => form is null
             ? callback.InvokeAsync()
             : form.OnValidSubmit.InvokeAsync(form.EditContext));
-        component.WaitForAssertion(() => Assert.Equal(1,
-            service.Marks.Count + service.Replays.Count + service.SaveCalls + service.EventOverrides.Count));
+        await WaitForStartAsync(service.MutationStarted);
+        Assert.Equal(1, service.Marks.Count + service.Replays.Count + service.SaveCalls + service.EventOverrides.Count);
         await experience.ReportConnectionAsync(false, null);
         var reconnect = experience.ReportConnectionAsync(true, null);
         Assert.False(reconnect.IsCompleted);
@@ -493,7 +556,8 @@ public sealed class NotificationReconnectTests : BunitContext
         var callback = action is null ? default : Button(component, action).Instance.OnClick;
         Task Invoke() => form is null ? callback.InvokeAsync() : form.OnValidSubmit.InvokeAsync(form.EditContext);
         var operation = component.InvokeAsync(Invoke);
-        component.WaitForAssertion(() => Assert.Equal(1, service.Marks.Count + service.Replays.Count + service.SaveCalls));
+        await WaitForStartAsync(service.MutationStarted);
+        Assert.Equal(1, service.Marks.Count + service.Replays.Count + service.SaveCalls);
         Assert.All(component.FindComponents<FluentButton>(), button => Assert.True(button.Instance.Disabled));
         await component.InvokeAsync(Invoke);
         await experience.ReportConnectionAsync(false, null);
@@ -526,12 +590,16 @@ public sealed class NotificationReconnectTests : BunitContext
     private async Task VerifyDisposedQueryAsync<T>(IRenderedComponent<T> component, Action release, string stateField)
         where T : NotificationViewBase
     {
+        await experience.ReportConnectionAsync(false, null);
+        var reconnect = experience.ReportConnectionAsync(true, null);
+        Assert.False(reconnect.IsCompleted);
         await component.InvokeAsync(() => component.Instance.DisposeAsync().AsTask());
         await component.InvokeAsync(() => component.Instance.DisposeAsync().AsTask());
         Assert.True(Assert.Single(service.Tokens).IsCancellationRequested);
         release();
-        component.WaitForAssertion(() => Assert.False((bool)typeof(NotificationViewBase)
-            .GetProperty("Busy", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(component.Instance)!));
+        await reconnect.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.False((bool)typeof(NotificationViewBase)
+            .GetProperty("Busy", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(component.Instance)!);
         Assert.Null(Field(component.Instance, stateField));
         var calls = service.ListCalls + service.FailureCalls + service.PreferenceCalls;
         await experience.ReportConnectionAsync(false, null);
@@ -543,27 +611,30 @@ public sealed class NotificationReconnectTests : BunitContext
     {
         if (view == "inbox")
         {
-            service.Inbox = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var query = new TaskCompletionSource<PageResult<NotificationSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            service.Inbox = query;
             return () =>
             {
-                if (fault) service.Inbox.SetException(new InvalidOperationException("obsolete"));
-                else service.Inbox.SetResult(service.Items);
+                if (fault) query.SetException(new InvalidOperationException("obsolete"));
+                else query.SetResult(service.Items);
             };
         }
         if (view == "failures")
         {
-            service.FailureQuery = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var query = new TaskCompletionSource<IReadOnlyList<DeliveryFailure>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            service.FailureQuery = query;
             return () =>
             {
-                if (fault) service.FailureQuery.SetException(new InvalidOperationException("obsolete"));
-                else service.FailureQuery.SetResult(service.Failures);
+                if (fault) query.SetException(new InvalidOperationException("obsolete"));
+                else query.SetResult(service.Failures);
             };
         }
-        service.Preferences = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var preferences = new TaskCompletionSource<PreferenceInput>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Preferences = preferences;
         return () =>
         {
-            if (fault) service.Preferences.SetException(new InvalidOperationException("obsolete"));
-            else service.Preferences.SetResult(new(false, true, true, 1, null));
+            if (fault) preferences.SetException(new InvalidOperationException("obsolete"));
+            else preferences.SetResult(new(false, true, true, 1, null));
         };
     }
 
@@ -592,6 +663,9 @@ public sealed class NotificationReconnectTests : BunitContext
 
     private static object? Field(object instance, string name) =>
         instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance);
+
+    private static Task WaitForStartAsync(TaskCompletionSource started) =>
+        started.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
     private static IRenderedComponent<FluentButton> Button<T>(IRenderedComponent<T> component, string text)
         where T : ComponentBase => component.FindComponents<FluentButton>().Single(button => button.Markup.Contains($">{text}<", StringComparison.Ordinal));
