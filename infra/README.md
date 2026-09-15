@@ -34,6 +34,17 @@ authenticated deployment job, not untrusted PR inputs. It proves neither actual
 identity/group existence nor approval, network suitability or runtime availability.
 Environment approval enforcement and live Azure validation remain unfinished.
 
+The accepted planning approval model (handoff decision D39) uses GitHub environment
+reviews plus deployment-owner manual verification of administrator-bypass controls.
+Supported API metadata does not prove that bypass is disabled or distinguish every
+bypass from a normal approval. An explicit owner-controlled acknowledgement is a
+trusted operator assertion, not API evidence. Keep planning disabled until those
+controls and the deployment identity are verified; disable and reverify it after
+relevant changes. This model trusts authorized repository administrators and does
+not claim protection against an administrator who changes settings or workflow code.
+No environment, identity, owner assignment or live planning authorization is supplied
+by this decision.
+
 No SQL password administrator or public data-service firewall exception is
 created. An approved runner with private network/DNS access must bootstrap the
 application's contained SQL identity and least-privilege data access, and apply
