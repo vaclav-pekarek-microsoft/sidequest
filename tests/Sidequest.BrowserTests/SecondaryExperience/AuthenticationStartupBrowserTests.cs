@@ -25,7 +25,7 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
     /// <returns>An anchored pattern; the scenario additionally verifies the intercepted URL against the rendered import map.</returns>
     internal static Regex InitializerRoute(SyntheticAppSettings settings) =>
         new(@"\A" + Regex.Escape(settings.At("/Components/App").AbsoluteUri) + @"(?:\.[a-z0-9]+)?\.razor\.js\z",
-            RegexOptions.CultureInvariant);
+            RegexOptions.None);
 
     /// <summary>A delayed initializer leaves native antiforgery sign-in valid, but empty-generation completion must require an explicit human continuation without activating device saving.</summary>
     /// <returns>Completion after the controlled module barrier, genuine native POST, authenticated manual-completion guidance and explicit UI continuation to an authorized root.</returns>
