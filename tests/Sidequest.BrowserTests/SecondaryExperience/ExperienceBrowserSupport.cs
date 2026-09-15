@@ -8,6 +8,34 @@ namespace Sidequest.BrowserTests.SecondaryExperience;
 
 internal static class ExperienceBrowserSupport
 {
+    private const string ConfirmationDiagnosticsScript = """
+        () => {
+            const main = document.querySelector('main');
+            const management = document.querySelector('#management-title');
+            const state = element => element === null ? null : {
+                hidden: element.hidden,
+                inert: element.inert,
+                display: getComputedStyle(element).display,
+                visibility: getComputedStyle(element).visibility
+            };
+            return JSON.stringify({
+                path: location.pathname.slice(0, 180),
+                online: navigator.onLine,
+                connection: (document.querySelector('[data-connection]')?.textContent ?? '').slice(0, 240),
+                reconnect: (document.querySelector('#components-reconnect-modal')?.className ?? '').slice(0, 120),
+                alerts: Array.from(document.querySelectorAll('main [role="alert"], [data-authentication-warning]'))
+                    .slice(0, 4).map(element => (element.textContent ?? '').slice(0, 320)),
+                main: state(main),
+                management: state(management),
+                fileInputs: Array.from(document.querySelectorAll('input[type="file"]')).slice(0, 4).map(element => ({
+                    connected: element.isConnected,
+                    disabled: element.disabled,
+                    initialized: typeof element._blazorInputFileNextFileId === 'number'
+                }))
+            });
+        }
+        """;
+
     internal const string StoreModule = "/experience/snapshot-store.js?v=1";
     internal const string RefreshModule = "/experience/refresh.js?v=1";
     internal const string BridgeModule = "/Components/Experience/ConnectionStatus.razor.js";
@@ -19,6 +47,7 @@ internal static class ExperienceBrowserSupport
     {
         var page = await context.NewPageAsync();
         await page.GotoAsync("/signin");
+        var home = new Uri(new Uri(page.Url), "/").AbsoluteUri;
         var select = page.Locator("select#persona");
         await Expect(select).ToBeVisibleAsync();
         var value = await select.GetByRole(AriaRole.Option,
@@ -26,6 +55,7 @@ internal static class ExperienceBrowserSupport
         Assert.False(string.IsNullOrEmpty(value));
         await select.SelectOptionAsync(value!);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
+        await page.WaitForURLAsync(home, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
         await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
         await Expect(page.Locator("[data-refresh]")).ToBeEnabledAsync();
@@ -67,11 +97,33 @@ internal static class ExperienceBrowserSupport
 
     internal static async Task ConfirmAsync(IPage page, string action)
     {
-        var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-        await reason.FillAsync("Synthetic offline acceptance.");
-        await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
-        await Expect(reason).ToHaveValueAsync("");
+        try
+        {
+            var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
+            await reason.FillAsync("Synthetic offline acceptance.");
+            await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
+            await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
+            await Expect(reason).ToHaveValueAsync("");
+        }
+        catch (Exception error) when (error is PlaywrightException or TimeoutException)
+        {
+            await ReportConfirmationFailureAsync(page, action);
+            throw;
+        }
+    }
+
+    private static async Task ReportConfirmationFailureAsync(IPage page, string action)
+    {
+        try
+        {
+            var state = await page.EvaluateAsync<string>(ConfirmationDiagnosticsScript);
+            await Console.Out.WriteLineAsync($"Experience confirmation '{action}' failed: {state}");
+        }
+        catch (Exception error) when (error is PlaywrightException or TimeoutException)
+        {
+            await Console.Out.WriteLineAsync(
+                $"Experience confirmation '{action}' diagnostics unavailable ({error.GetType().Name}); original failure retained.");
+        }
     }
 
     internal static Task RefreshAsync(IPage page) => page.EvaluateAsync("""
