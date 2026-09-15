@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Sidequest.BrowserTests.FoundationBrowser;
 
 namespace Sidequest.BrowserTests.SecondaryExperience;
@@ -5,6 +6,14 @@ namespace Sidequest.BrowserTests.SecondaryExperience;
 /// <summary>Verifies the startup barrier's exact asset family and origin without creating a browser or weakening fixture routing.</summary>
 public sealed class AuthenticationStartupRoutingTests
 {
+    /// <summary>Keeps the route free of .NET-only flags that Playwright cannot serialize to its JavaScript routing engine.</summary>
+    [Fact]
+    public void InitializerBarrierUsesTransportSafeRegexOptions()
+    {
+        var settings = SyntheticAppSettings.Parse("http://127.0.0.1:5078");
+        Assert.Equal(RegexOptions.None, AuthenticationStartupBrowserTests.InitializerRoute(settings).Options);
+    }
+
     /// <summary>Accepts logical and correctly fingerprinted App modules only; other scripts, origins and URL decorations cannot trigger the barrier.</summary>
     /// <param name="url">A synthetic candidate request URL.</param>
     /// <param name="expected">Whether the narrowly scoped App-module barrier should intercept the request.</param>
