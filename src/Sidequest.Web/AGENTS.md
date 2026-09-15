@@ -47,6 +47,10 @@ shadow input disabled after the fieldset becomes enabled.
   successful reconnect. Keep this proof in bridge memory and the no-store check
   header, never offline storage; it cannot authenticate independently. Older
   tickets without a sign-in identifier require fresh sign-in.
+- The earliest scoped circuit handler invalidates online readiness on transport
+  down/up without invoking view callbacks or JavaScript. Revalidation during
+  `ConnectCircuit` must not await snapshot interop before the reconnect handshake
+  returns. Only the cookie-verified browser bridge may restore readiness.
 - Administration navigation is available to authenticated users, but each screen
   and operation rechecks the persisted administrator assignment. Neither a visible
   link nor an Entra admission role grants administration or private resource access.
