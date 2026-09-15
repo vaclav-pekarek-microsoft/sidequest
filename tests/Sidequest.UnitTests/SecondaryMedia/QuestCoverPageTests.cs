@@ -12,14 +12,16 @@ using Sidequest.Domain.Rules;
 using Sidequest.Web.Components.Media;
 using Sidequest.Web.Components.Pages.Quests;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.SecondaryMedia;
 
 /// <summary>Exercises real Quest page composition and parent-owned text/version state independently of storage transport.</summary>
-public sealed class QuestCoverPageTests : BunitContext
+public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
 {
     private readonly QuestStub quests = new();
     private readonly MediaStub media = new();
+    private readonly ExperienceCoordinator experience = new();
 
     /// <summary>Registers strict service doubles and real Fluent components before selecting the renderer mode.</summary>
     public QuestCoverPageTests()
@@ -28,8 +30,15 @@ public sealed class QuestCoverPageTests : BunitContext
         Services.AddSingleton<IQuestService>(quests);
         Services.AddSingleton<IEventService>(new EventStub());
         Services.AddSingleton<IMediaService>(media);
+        Services.AddSingleton(experience);
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
+
+    /// <inheritdoc />
+    Task IAsyncLifetime.InitializeAsync() => experience.ReportConnectionAsync(true, "Europe/Prague");
+
+    /// <inheritdoc />
+    Task IAsyncLifetime.DisposeAsync() => DisposeAsync().AsTask();
 
     /// <summary>A cover update changes the concurrency token and image without recreating the editor or discarding unsaved text.</summary>
     /// <param name="remove">Whether the committed update removes rather than replaces the cover.</param>
@@ -164,6 +173,72 @@ public sealed class QuestCoverPageTests : BunitContext
         Assert.Empty(page.FindAll("[role=alert]"));
     }
 
+    /// <summary>Reconnection retains unsaved text but rejects an obsolete rowversion instead of overwriting another owner's changes.</summary>
+    /// <returns>A task completing after current-service reauthorization and a rejected stale save.</returns>
+    [Fact]
+    public async Task Reconnect_VersionChangeKeepsTextAndRequiresExplicitReload()
+    {
+        SetRendererInfo(new("Server", true));
+        var page = Render<QuestEdit>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        var editor = page.FindComponent<QuestEditor>();
+        await page.InvokeAsync(() => editor.FindComponents<FluentTextField>().First().Instance.ValueChanged.InvokeAsync("Offline unsaved text"));
+        await experience.ReportConnectionAsync(false, null);
+        Assert.True(editor.Instance.Busy);
+        await page.InvokeAsync(() => editor.Instance.Save.InvokeAsync(new QuestEditorModel { Title = "Must not queue" }));
+        Assert.Empty(quests.Edits);
+        quests.Detail = quests.Detail with { Summary = quests.Detail.Summary with { Version = "AAAAAAAAAAQ=", Title = "Another owner's title" } };
+        await experience.ReportConnectionAsync(true, "Europe/Prague");
+        Assert.Equal(2, quests.Reads);
+        Assert.Equal("Offline unsaved text", editor.FindComponents<FluentTextField>().First().Instance.Value);
+        Assert.True(editor.Instance.Busy);
+        Assert.Contains("changed while disconnected", page.Find("[role=alert]").TextContent);
+        await page.InvokeAsync(() => editor.Instance.Save.InvokeAsync(new QuestEditorModel { Title = "Stale callback" }));
+        Assert.Empty(quests.Edits);
+    }
+
+    /// <summary>A fresh ownership check removes protected edit state and refreshes the independent cookie-authorized snapshot.</summary>
+    /// <returns>A task completing after current ownership loss, redaction and an awaited snapshot request.</returns>
+    [Fact]
+    public async Task Reconnect_LostOwnershipClearsEditorAndRefreshesSnapshot()
+    {
+        SetRendererInfo(new("Server", true));
+        var page = Render<QuestEdit>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        await experience.ReportConnectionAsync(false, null);
+        quests.Detail = quests.Detail with { Summary = quests.Detail.Summary with { IsOwner = false } };
+        var refreshed = 0;
+        experience.SnapshotRefreshRequested += () => { refreshed++; return Task.CompletedTask; };
+        await experience.ReportConnectionAsync(true, null);
+        Assert.Equal(2, quests.Reads);
+        Assert.Empty(page.FindComponents<QuestEditor>());
+        Assert.Empty(page.FindComponents<CoverEditor>());
+        Assert.DoesNotContain("Protected description sentinel", page.Markup);
+        Assert.Equal(2, refreshed);
+    }
+
+    /// <summary>Real participation callbacks refresh Joined data after success and never replay a callback received while offline.</summary>
+    /// <returns>A task completing after one service mutation, one immediate refresh and unchanged mutation count on reconnect.</returns>
+    [Fact]
+    public async Task Participation_RefreshesSnapshotAndNeverQueuesOfflineMutation()
+    {
+        SetRendererInfo(new("Server", true));
+        quests.Detail = quests.Detail with { Summary = quests.Detail.Summary with { Status = QuestStatus.Active } };
+        var page = Render<QuestDetails>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        var refreshed = 0;
+        experience.SnapshotRefreshRequested += () => { refreshed++; return Task.CompletedTask; };
+        var control = page.FindComponent<QuestParticipationControls>();
+        await page.InvokeAsync(() => control.Instance.Change.InvokeAsync(ParticipationCommand.Join));
+        Assert.Equal((quests.Detail.Summary.Id, ParticipationCommand.Join), Assert.Single(quests.Participations));
+        Assert.Equal(1, refreshed);
+        Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+        await experience.ReportConnectionAsync(false, null);
+        Assert.True(control.Instance.Busy);
+        await page.InvokeAsync(() => control.Instance.Change.InvokeAsync(ParticipationCommand.Leave));
+        Assert.Single(quests.Participations);
+        await experience.ReportConnectionAsync(true, null);
+        Assert.Single(quests.Participations);
+        Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+    }
+
     /// <summary>Prerendered pages never expose an enabled file input or text submit.</summary>
     [Fact]
     public void Prerender_DisablesBothEditors()
@@ -222,6 +297,7 @@ public sealed class QuestCoverPageTests : BunitContext
             "AAAAAAAAAAE=", Guid.NewGuid()), "Protected description sentinel", "", [], [], [], []);
         internal int Reads { get; private set; }
         internal List<(Guid Id, string Version, QuestInput Input)> Edits { get; } = [];
+        internal List<(Guid Id, ParticipationCommand Command)> Participations { get; } = [];
         /// <inheritdoc />
         public Task<QuestDetail> GetAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default)
         {
@@ -248,7 +324,12 @@ public sealed class QuestCoverPageTests : BunitContext
         /// <inheritdoc />
         public Task DeleteDraftAsync(Guid id, string version, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />
-        public Task ParticipateAsync(Guid id, ParticipationCommand command, CancellationToken cancellationToken = default) => throw Unexpected();
+        public Task ParticipateAsync(Guid id, ParticipationCommand command, CancellationToken cancellationToken = default)
+        {
+            Participations.Add((id, command));
+            Detail = Detail with { Summary = Detail.Summary with { Participation = command == ParticipationCommand.Join ? ParticipationStatus.Joined : ParticipationStatus.None } };
+            return Task.CompletedTask;
+        }
         /// <inheritdoc />
         public Task InviteAsync(Guid id, Guid userId, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />

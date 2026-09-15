@@ -57,7 +57,7 @@
 
     private async Task TransitionAsync(EventStatus target)
     {
-        await RunAsync(async token =>
+        await RunMutationAsync(async token =>
         {
             await Events.ChangeStatusAsync(Item.Id, Item.Version, target, reason, token);
             confirmed = false;
@@ -68,7 +68,7 @@
     }
     private async Task DeleteAsync()
     {
-        await RunAsync(async token =>
+        await RunMutationAsync(async token =>
         {
             await Events.DeleteDraftAsync(Item.Id, Item.Version, token);
             Navigation.NavigateTo("/events");

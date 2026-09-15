@@ -7,6 +7,7 @@ using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Pages.Quests;
 
@@ -27,6 +28,8 @@ public partial class QuestEdit : IAsyncDisposable
     private int editorGeneration;
     private Guid? coverAssetId;
     private bool coverBusy;
+    private ExperienceViewSubscription? experience;
+    private Task pendingOperation = Task.CompletedTask;
 
     /// <summary>Existing Quest identifier, or null for draft creation.</summary>
     [Parameter] public Guid? Id { get; set; }
@@ -36,6 +39,51 @@ public partial class QuestEdit : IAsyncDisposable
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private ILogger<QuestEdit> Logger { get; set; } = default!;
+    [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
+
+    /// <inheritdoc />
+    protected override void OnInitialized() =>
+        experience = new(Experience, () => InvokeAsync(StateHasChanged), ReauthorizeAsync);
+
+    /// <inheritdoc />
+    protected override Task OnAfterRenderAsync(bool firstRender) =>
+        RendererInfo.IsInteractive ? experience?.AfterRenderAsync() ?? Task.CompletedTask : Task.CompletedTask;
+
+    private Task ReauthorizeAsync() => InvokeAsync(async () =>
+    {
+        var requestVersion = navigationVersion;
+        await pendingOperation;
+        if (lifetime.IsCancellationRequested || requestVersion != navigationVersion)
+            return;
+        await RunAsync(async () =>
+        {
+            var generation = editorGeneration;
+            if (Id is { } id)
+            {
+                var current = (await Quests.GetAsync(id, cancellationToken: lifetime.Token)).Summary;
+                if (generation != editorGeneration || lifetime.IsCancellationRequested)
+                    return;
+                if (!current.IsOwner)
+                    throw new DomainException(ErrorCode.NotFound, "This Quest is unavailable.");
+                if (current.Version != version || current.Status is not (QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended))
+                    throw new DomainException(ErrorCode.Conflict, "The Quest changed while disconnected. Your text is kept; reload the current version before saving.");
+            }
+            else if (Guid.TryParse(selectedEvent, out var eventId))
+            {
+                var current = (await Events.GetAsync(eventId, lifetime.Token)).Summary;
+                if (generation != editorGeneration || lifetime.IsCancellationRequested)
+                    return;
+                if (!current.IsMember || current.Status != EventStatus.Active)
+                    throw new DomainException(ErrorCode.NotFound, "This Event is unavailable for Quest creation.");
+            }
+            else
+            {
+                await Events.ListAsync(EventListKind.Mine, new PageRequest(1, 100), lifetime.Token);
+            }
+        });
+        if (!lifetime.IsCancellationRequested)
+            StateHasChanged();
+    });
 
     /// <inheritdoc />
     protected override Task OnParametersSetAsync()
@@ -115,7 +163,7 @@ public partial class QuestEdit : IAsyncDisposable
 
     private async Task SaveAsync(QuestEditorModel model)
     {
-        if (busy || coverBusy || conflict || !RendererInfo.IsInteractive)
+        if (busy || coverBusy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)
             return;
         await RunAsync(async () =>
         {
@@ -133,12 +181,14 @@ public partial class QuestEdit : IAsyncDisposable
         });
     }
 
-    private void UpdateCover(int generation, CoverUpdate update)
+    private async Task UpdateCover(int generation, CoverUpdate update)
     {
         if (generation != editorGeneration || initial is null || lifetime.IsCancellationRequested)
             return;
         coverAssetId = update.AssetId;
         version = update.Version;
+        if (experience is not null)
+            await experience.AfterOperationAsync();
     }
 
     private void SetCoverBusy(int generation, bool value)
@@ -155,12 +205,14 @@ public partial class QuestEdit : IAsyncDisposable
         error = "The Quest changed during the cover operation. Your text is kept. Reload the current version before making further changes.";
     }
 
-    private void CoverAccessLost(int generation, ErrorCode code)
+    private async Task CoverAccessLost(int generation, ErrorCode code)
     {
         if (generation != editorGeneration || lifetime.IsCancellationRequested)
             return;
         ClearEditor();
         error = code == ErrorCode.Forbidden ? "Your access to this Quest has changed." : "This Quest is unavailable.";
+        if (experience is not null)
+            await experience.AfterOperationAsync();
     }
 
     private void ClearEditor()
@@ -177,6 +229,8 @@ public partial class QuestEdit : IAsyncDisposable
 
     private async Task RunAsync(Func<Task> action)
     {
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pendingOperation = completed.Task;
         var requestVersion = navigationVersion;
         busy = true;
         error = null;
@@ -199,12 +253,26 @@ public partial class QuestEdit : IAsyncDisposable
             error = $"The operation failed. Reload before trying again. Reference: {correlationId}.";
         }
         catch (Exception) when (requestVersion != navigationVersion) { }
-        finally { if (requestVersion == navigationVersion) busy = false; }
+        finally
+        {
+            try
+            {
+                if (requestVersion == navigationVersion)
+                {
+                    busy = false;
+                    if (experience is not null)
+                        await experience.AfterOperationAsync();
+                }
+            }
+            finally { completed.TrySetResult(); }
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (experience is not null)
+            await experience.DisposeAsync();
         await lifetime.CancelAsync();
         lifetime.Dispose();
     }

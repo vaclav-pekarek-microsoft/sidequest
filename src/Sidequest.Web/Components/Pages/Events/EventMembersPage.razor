@@ -94,7 +94,7 @@
         ownerConfirmed = false;
         restore = false;
     }
-    private Task AddAsync(bool invite, bool owner) => RunAsync(async token =>
+    private Task AddAsync(bool invite, bool owner) => RunMutationAsync(async token =>
     {
         if (selected is null)
             return;
@@ -107,7 +107,7 @@
         selected = null;
         await RefreshAsync(token);
     });
-    private Task RemoveAsync(Guid userId, bool owner) => RunAsync(async token =>
+    private Task RemoveAsync(Guid userId, bool owner) => RunMutationAsync(async token =>
     {
         if (owner)
             await Events.RemoveOwnerAsync(Id, userId, token);

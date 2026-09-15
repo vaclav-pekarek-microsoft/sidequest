@@ -14,12 +14,12 @@
 @if (error is not null)
 {
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || coverBusy || !RendererInfo.IsInteractive)">Reload current version (discards unsaved text)</FluentButton>
+    <FluentButton OnClick="LoadAsync" Disabled="@(busy || coverBusy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current version (discards unsaved text)</FluentButton>
 }
 @if (Id is null)
 {
     <label>Active Event
-        <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive)">
+        <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
             <option value="">Choose an Event</option>
             @foreach (var item in events)
             {
@@ -35,10 +35,10 @@
 @if (initial is not null)
 {
     var generation = editorGeneration;
-    <QuestEditor Initial="initial" ZoneId="@zone" Published="published" Busy="@(busy || coverBusy || conflict || !RendererInfo.IsInteractive)" Save="SaveAsync" />
+    <QuestEditor Initial="initial" ZoneId="@zone" Published="published" Busy="@(busy || coverBusy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Save="SaveAsync" />
     <CoverEditor @key="generation" QuestId="@(Id ?? Guid.Empty)" Version="@version" AssetId="coverAssetId"
                  QuestTitle="@(string.IsNullOrWhiteSpace(initial.Title) ? "New Quest" : initial.Title)"
-                 IsBusy="@(busy || conflict || !RendererInfo.IsInteractive)"
+                 IsBusy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)"
                  CoverChanged="update => UpdateCover(generation, update)" BusyChanged="value => SetCoverBusy(generation, value)"
                  AccessLost="code => CoverAccessLost(generation, code)" ConflictDetected="() => CoverConflict(generation)" />
     @if (published)

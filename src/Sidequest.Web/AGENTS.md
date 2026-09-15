@@ -25,8 +25,16 @@ arbitrary client delays or retrying mutations to hide this handoff.
   `IResourceAccess`; hiding UI is not authorization. Entra roles grant admission only.
 - Never use HttpContext or SignInManager inside an interactive circuit. `ICurrentUser`
   uses AuthenticationStateProvider. HttpContext is available only during static SSR/HTTP.
-- Use Fluent providers inside an interactive subtree when needed. No app-owned JS interop
-  remains. Fluent's package supplies its own web-component modules.
+- Use Fluent providers inside an interactive subtree when needed. App-owned interop
+  is limited to the Experience connection/authentication bridge and standalone offline
+  modules; Fluent supplies its own web-component modules.
+- Keep one global connection bridge. Existing views use the scoped
+  `ExperienceCoordinator` and `ExperienceViewSubscription` to disable offline actions,
+  reauthorize protected projections and defer Joined-snapshot refreshes until rendering.
+  Reconnects must preserve unsaved input, never replay mutations, and retain explicit
+  reload after version conflicts. Event pages retain their scoped circuit revalidation.
+  Authentication changes clear/block device state before submission; storage failure
+  must remain visible without preventing sign-out.
 
 ## Production / real Entra configuration
 Default mode is Entra; invalid or absent configuration fails startup. There is no fallback.
@@ -88,7 +96,8 @@ Development settings explicitly configure the fixed Admin tenant/object pair; wi
 that configuration nobody is bootstrapped. Only this Admin object is accepted in
 development bootstrap configuration. It is bootstrapped at first provisioning. Persona sign-in
 and logout are antiforgery-protected POSTs. Return URLs are local-only.
-Apply integration-owner SQL migrations before signing in; the home page works without SQL.
+Apply integration-owner SQL migrations before signing in; only the anonymous home
+page works without SQL. The authenticated dashboard performs authorized SQL queries.
 Synthetic sign-in is not evidence of live Entra correctness.
 
 ## Compatibility / operations
@@ -121,6 +130,7 @@ Graph, email, Event/Quest workflows and durable delivery now have real implement
 The host verifies handler completeness before starting its SQL worker; Graph policy and
 provider credentials remain external configuration/approval gates. M2 combined acceptance
 passed in Linux CI34896985551, including actual production composition, real SQL workflows,
-and authenticated Chromium journeys. Uploads, administration and offline caching remain
-later milestones.
+and authenticated Chromium journeys. Media and Administration backends are integrated;
+M3 dashboard, cover UI, authentication/reconnect and bounded offline composition remain
+under combined browser acceptance. This is not live-provider or device-policy approval.
 Do not introduce fake success adapters to satisfy external contracts.

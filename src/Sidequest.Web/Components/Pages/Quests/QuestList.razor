@@ -7,7 +7,7 @@
 <h1>My Quests</h1>
 <p><a href="/quests/create">Create a Quest</a> · <a href="/quests?view=History">History</a> · <a href="/quests?view=Invited">Private invitations</a></p>
 <label>View
-    <select @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive)">
+    <select @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
         @foreach (var value in Enum.GetValues<QuestListKind>())
         {
             <option value="@value">@value</option>
@@ -15,7 +15,7 @@
     </select>
 </label>
 <label>Event
-    <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive)">
+    <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
         <option value="">All my Events</option>
         @foreach (var item in events)
         {
@@ -23,7 +23,7 @@
         }
     </select>
 </label>
-<fieldset disabled="@(loading || !RendererInfo.IsInteractive)">
+<fieldset disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
     <legend>Quest start dates in @dateZone</legend>
     <label>From date (inclusive) <input type="date" @bind="fromDate" @bind:after="ResetAsync" /></label>
     <label>Through date (inclusive) <input type="date" @bind="throughDate" @bind:after="ResetAsync" /></label>
@@ -36,7 +36,7 @@
 else if (error is not null)
 {
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync">Reload</FluentButton>
+    <FluentButton OnClick="LoadAsync" Disabled="@(!RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload</FluentButton>
 }
 else if (result is null || result.Items.Count == 0)
 {
@@ -50,7 +50,7 @@ else
     }
 }
 <div>
-    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || page == 1)" OnClick="PreviousAsync">Previous</FluentButton>
+    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || page == 1)" OnClick="PreviousAsync">Previous</FluentButton>
     <span>Page @(page)</span>
-    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || result is null || page * 25 >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>
+    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || result is null || page * 25 >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>
 </div>

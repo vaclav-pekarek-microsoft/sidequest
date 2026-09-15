@@ -5,6 +5,7 @@ using Sidequest.Application.Events;
 using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreQuests;
 
@@ -15,6 +16,7 @@ public sealed class QuestComponentTests : BunitContext
     public QuestComponentTests()
     {
         Services.AddFluentUIComponents();
+        Services.AddSingleton<ExperienceCoordinator>();
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 

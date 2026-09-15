@@ -5,6 +5,7 @@ using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Pages.Quests;
 
@@ -22,6 +23,7 @@ public partial class QuestDetails : IAsyncDisposable
     private int navigationVersion;
     private string? error;
     private string? message;
+    private ExperienceViewSubscription? experience;
 
     /// <summary>Quest route identifier, reauthorized for every load and command.</summary>
     [Parameter] public Guid Id { get; set; }
@@ -31,6 +33,25 @@ public partial class QuestDetails : IAsyncDisposable
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private ILogger<QuestDetails> Logger { get; set; } = default!;
+    [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
+
+    /// <inheritdoc />
+    protected override void OnInitialized() =>
+        experience = new(Experience, () => InvokeAsync(StateHasChanged), ReauthorizeAsync);
+
+    /// <inheritdoc />
+    protected override Task OnAfterRenderAsync(bool firstRender) =>
+        RendererInfo.IsInteractive ? experience?.AfterRenderAsync() ?? Task.CompletedTask : Task.CompletedTask;
+
+    private Task ReauthorizeAsync() => InvokeAsync(async () =>
+    {
+        if (lifetime.IsCancellationRequested)
+            return;
+        navigationVersion++;
+        await LoadAsync();
+        if (!lifetime.IsCancellationRequested)
+            StateHasChanged();
+    });
 
     /// <inheritdoc />
     protected override Task OnParametersSetAsync()
@@ -62,14 +83,16 @@ public partial class QuestDetails : IAsyncDisposable
             await FetchMembersAsync();
     }
 
-    private Task ParticipateAsync(ParticipationCommand command) => RunAsync(async () =>
+    private Task ParticipateAsync(ParticipationCommand command) => !Experience.CanUseOnlineActions || !RendererInfo.IsInteractive || busy || conflict
+        ? Task.CompletedTask : RunAsync(async () =>
     {
         await Quests.ParticipateAsync(Id, command, lifetime.Token);
         await RefreshAsync();
         message = "Participation saved. Applicable delivery is queued, not guaranteed to have arrived.";
     });
 
-    private Task ExecuteAsync(QuestActionRequest request) => RunAsync(async () =>
+    private Task ExecuteAsync(QuestActionRequest request) => !Experience.CanUseOnlineActions || !RendererInfo.IsInteractive || busy || conflict
+        ? Task.CompletedTask : RunAsync(async () =>
     {
         if (detail is null)
             return;
@@ -143,7 +166,15 @@ public partial class QuestDetails : IAsyncDisposable
             error = $"The operation failed. Reload current state before trying again. Reference: {correlationId}.";
         }
         catch (Exception) when (requestVersion != navigationVersion) { }
-        finally { if (requestVersion == navigationVersion) busy = false; }
+        finally
+        {
+            if (requestVersion == navigationVersion)
+            {
+                busy = false;
+                if (experience is not null)
+                    await experience.AfterOperationAsync();
+            }
+        }
     }
 
     private void Clear() { detail = null; history = []; members = []; }
@@ -151,6 +182,8 @@ public partial class QuestDetails : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (experience is not null)
+            await experience.DisposeAsync();
         await lifetime.CancelAsync();
         lifetime.Dispose();
     }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Sidequest.Application.Events;
 using Sidequest.Domain.Rules;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Events;
 
@@ -10,6 +11,11 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
     private CancellationTokenSource? operation;
     private bool disposed;
     private bool operationBusy;
+    private ExperienceViewSubscription? experience;
+
+    /// <summary>Per-circuit online state and cookie-authorized Joined snapshot refresh coordination.</summary>
+    [Inject]
+    protected ExperienceCoordinator Experience { get; set; } = null!;
 
     /// <summary>Server-authorized application boundary; components never access persistence or providers directly.</summary>
     [Inject]
@@ -26,7 +32,7 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
     /// <summary>Whether controls must wait for interactivity or an application operation; prevents inert prerender clicks and repeated mutations.</summary>
     protected bool Busy
     {
-        get => operationBusy || !RendererInfo.IsInteractive;
+        get => operationBusy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions;
         private set => operationBusy = value;
     }
 
@@ -37,7 +43,15 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
     protected bool AccessDenied { get; private set; }
 
     /// <inheritdoc />
-    protected override void OnInitialized() => Revalidation.Reconnected += ReconnectAsync;
+    protected override void OnInitialized()
+    {
+        Revalidation.Reconnected += ReconnectAsync;
+        experience = new(Experience, () => InvokeAsync(StateHasChanged));
+    }
+
+    /// <inheritdoc />
+    protected override Task OnAfterRenderAsync(bool firstRender) =>
+        RendererInfo.IsInteractive ? experience?.AfterRenderAsync() ?? Task.CompletedTask : Task.CompletedTask;
 
     /// <summary>Reauthorizes a page after reconnect, or clears a child component's stale protected projection.</summary>
     /// <returns>A task completing after renderer-owned state is refreshed.</returns>
@@ -55,6 +69,12 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
         if (!disposed)
             StateHasChanged();
     });
+
+    /// <summary>Runs a user mutation only while the circuit is online, interactive and idle; obsolete disabled-control callbacks are never queued.</summary>
+    /// <param name="action">One server-authorized mutation using the operation cancellation token.</param>
+    /// <returns>The immediate operation completion, or a completed task when controls cannot currently act.</returns>
+    protected Task RunMutationAsync(Func<CancellationToken, Task> action) =>
+        Busy || disposed ? Task.CompletedTask : RunAsync(action);
 
     /// <summary>Runs one cancellable operation, cancelling stale parameter loads and clearing content on access loss.</summary>
     /// <param name="action">Sequential renderer-context work accepting a cancellation token.</param>
@@ -112,7 +132,11 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
         finally
         {
             if (ReferenceEquals(operation, current))
+            {
                 Busy = false;
+                if (!token.IsCancellationRequested && experience is not null)
+                    await experience.AfterOperationAsync();
+            }
         }
     }
 
@@ -126,6 +150,8 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
     {
         disposed = true;
         Revalidation.Reconnected -= ReconnectAsync;
+        if (experience is not null)
+            await experience.DisposeAsync();
         if (operation is not null)
         {
             await operation.CancelAsync();

@@ -13,7 +13,7 @@
 @if (error is not null)
 {
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive)">Reload current state</FluentButton>
+    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current state</FluentButton>
 }
 @if (message is not null)
 {
@@ -43,7 +43,7 @@
         {
             <p>Above suggested capacity. Joining is still allowed.</p>
         }
-        <QuestParticipationControls Summary="detail.Summary" Busy="@(busy || conflict || !RendererInfo.IsInteractive)" Change="ParticipateAsync" />
+        <QuestParticipationControls Summary="detail.Summary" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Change="ParticipateAsync" />
         @if (detail.Summary.Participation == ParticipationStatus.Joined && detail.Summary.Status == QuestStatus.Active)
         {
             <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
@@ -71,7 +71,7 @@
     }
     @if (Moderation || detail.Summary.IsOwner)
     {
-        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(busy || conflict || !RendererInfo.IsInteractive)" Members="members"
+        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Members="members"
                          MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="LoadMembersAsync" Execute="ExecuteAsync" />
     }
     <h2>Authorized history</h2>

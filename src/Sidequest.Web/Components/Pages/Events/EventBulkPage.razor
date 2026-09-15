@@ -52,7 +52,7 @@
         selected = group;
         confirmed = false;
     }
-    private Task StartAsync() => RunAsync(async token =>
+    private Task StartAsync() => RunMutationAsync(async token =>
     {
         if (selected is not null)
         {
