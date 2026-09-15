@@ -9,6 +9,7 @@ namespace Sidequest.Web.Components.Media;
 public partial class CoverEditor : IAsyncDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
+    private CancellationToken cancellationToken;
     private readonly string helpId = $"cover-help-{Guid.NewGuid():N}";
     private bool busy;
     private bool disposed;
@@ -44,6 +45,12 @@ public partial class CoverEditor : IAsyncDisposable
     /// <summary>Reports current access loss so the parent can clear its protected Quest fields; the editor also hides its cover.</summary>
     [Parameter] public EventCallback<ErrorCode> AccessLost { get; set; }
 
+    /// <summary>Reports a stale version so the parent can block further mutations and offer explicit reload without discarding unsaved text automatically.</summary>
+    [Parameter] public EventCallback ConflictDetected { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnInitialized() => cancellationToken = lifetime.Token;
+
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
@@ -66,8 +73,9 @@ public partial class CoverEditor : IAsyncDisposable
         {
             if (args.FileCount != 1)
                 throw new DomainException(ErrorCode.Validation, "Choose one cover image.");
-            await using var stream = args.File.OpenReadStream(2_097_152, lifetime.Token);
-            return await Media.UploadCoverAsync(quest, version, stream, lifetime.Token);
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var stream = args.File.OpenReadStream(2_097_152, cancellationToken);
+            return await Media.UploadCoverAsync(quest, version, stream, cancellationToken);
         });
     }
 
@@ -77,7 +85,7 @@ public partial class CoverEditor : IAsyncDisposable
             return;
         var quest = QuestId;
         var version = Version;
-        await ChangeAsync(() => Media.RemoveCoverAsync(quest, version, lifetime.Token));
+        await ChangeAsync(() => Media.RemoveCoverAsync(quest, version, cancellationToken));
     }
 
     private async Task ChangeAsync(Func<Task<CoverUpdate>> change)
@@ -89,6 +97,7 @@ public partial class CoverEditor : IAsyncDisposable
         try
         {
             await BusyChanged.InvokeAsync(true);
+            cancellationToken.ThrowIfCancellationRequested();
             var result = await change();
             if (!disposed && QuestId == target)
             {
@@ -103,6 +112,8 @@ public partial class CoverEditor : IAsyncDisposable
                 error = exception.Code == ErrorCode.Conflict
                     ? $"{exception.Message} Your text has been kept; check the current state before retrying."
                     : exception.Message;
+                if (exception.Code == ErrorCode.Conflict)
+                    await ConflictDetected.InvokeAsync();
                 if (exception.Code is ErrorCode.NotFound or ErrorCode.Forbidden)
                 {
                     unavailable = true;

@@ -96,6 +96,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
             request => request.IsNavigationRequest && request.Method == "POST");
         Assert.True(fixture.Settings.IsSameOrigin(request.Url));
         Assert.Equal("POST", request.Method);
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(signOut).ToHaveCountAsync(0);
         // A new protected navigation with the same browser cookies must require login again.
         await page.GotoAsync("/foundation");
@@ -104,7 +105,11 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await Expect(page.GetByRole(AriaRole.Textbox, new() { Name = "Preview label", Exact = true })).ToHaveCountAsync(0);
     }
 
-    private async Task LoginAsync(IPage page, string persona)
+    private Task LoginAsync(IPage page, string persona) =>
+        Sidequest.BrowserTests.SecondaryExperience.SyntheticLoginDiagnostics.ObserveAsync(
+            page, fixture.Settings, "Foundation", () => CompleteLoginAsync(page, persona));
+
+    private async Task CompleteLoginAsync(IPage page, string persona)
     {
         await page.GotoAsync("/signin");
         await Expect(page).ToHaveURLAsync(SignInUrl());
@@ -116,8 +121,9 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         Assert.False(string.IsNullOrEmpty(value));
         await select.SelectOptionAsync(value!);
         await Expect(select).ToHaveValueAsync(value!);
+        await Sidequest.BrowserTests.SecondaryExperience.SyntheticSignInSupport.WaitForInterceptorAsync(page);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
-        // Wait for the login POST/navigation to finish before issuing another navigation.
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
         await page.GotoAsync("/foundation");
         await Expect(page).ToHaveURLAsync(fixture.Settings.At("/foundation").AbsoluteUri);

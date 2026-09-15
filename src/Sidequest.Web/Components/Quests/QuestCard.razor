@@ -1,5 +1,7 @@
+@using Sidequest.Web.Components.Media
 <article>
     <h2><a href="@($"/quests/{Item.Id}{(Moderation ? "?moderation=true" : "")}")">@Item.Title</a></h2>
+    <QuestCover AssetId="Item.CoverAssetId" QuestTitle="@Item.Title" Moderation="Moderation" />
     <p>@Item.EventName · @Item.Status · @Item.Visibility</p>
     <QuestTimes ZoneId="@Item.TimeZoneId" StartUtc="@Item.StartUtc" EndUtc="@Item.EndUtc" />
     <p>@Item.Location</p>

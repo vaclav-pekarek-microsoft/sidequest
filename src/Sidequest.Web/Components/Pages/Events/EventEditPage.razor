@@ -81,7 +81,7 @@
         }
     });
 
-    private Task SaveAsync(EventInput values) => RunAsync(async token =>
+    private Task SaveAsync(EventInput values) => RunMutationAsync(async token =>
     {
         if (Id is { } id && detail is not null)
         {
@@ -95,7 +95,7 @@
             await CreateAsync(values, token);
     });
 
-    private Task CreateAnywayAsync() => RunAsync(async token =>
+    private Task CreateAnywayAsync() => RunMutationAsync(async token =>
     {
         if (proposed is not null)
             await CreateAsync(proposed, token);

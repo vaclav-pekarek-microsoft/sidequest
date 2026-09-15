@@ -85,6 +85,17 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default);
+    /// <summary>Checks for pending or processing work while reserving the matching key range for a possible insertion.</summary>
+    /// <param name="deduplicationPrefix">Literal nonblank key prefix, at most 300 characters; wildcard characters remain literal.</param>
+    /// <param name="cancellationToken">Cancels the existence query or waiting for its write-intent range lock.</param>
+    /// <returns>True when Pending or Processing work has the prefix; false otherwise, including terminal work.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. Acquire the parent Event lock first for
+    /// Event/Quest mutations. The reservation lasts until transaction completion and avoids shared-read
+    /// range conversion deadlocks. This method does not track entities, save, commit, or retry commands.</remarks>
+    /// <exception cref="DomainException">The prefix is invalid (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default);
     /// <summary>Begins a caller-owned explicit transaction for atomic domain, audit, and durable-work changes.</summary>
     /// <param name="isolationLevel">Database isolation level; Serializable is the default for invariant-preserving operations.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation while beginning the transaction.</param>

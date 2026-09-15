@@ -122,13 +122,19 @@ delivery or real Outlook interoperability is asserted.
 Call `services.AddSidequestAdministration(configuration)` once, after registering
 existing identity/access, persistence, clock and change writer. The helper starts
 no workers, makes no provider call, and does not enable recovery by default.
-Parent-owned startup/navigation must wire this helper and link `/administration`.
+Parent-owned startup now registers this helper and navigation links `/administration`;
+neither that link nor an Entra admission role grants administrator access.
 The feature pages use per-page Interactive Server with prerendering retained:
 
 - `/administration`
 - `/administration/recovery`
 - `/administration/email`
 - `/administration/templates`
+
+The shared page lifetime disables offline actions without replay, waits for pending
+operations before reconnect authorization, and refreshes protected projections.
+Successful reauthorization preserves unsaved email/template drafts and their original
+concurrency versions; revoked access clears sensitive state and stale confirmations.
 
 The existing `/notifications/failures` page/service remains the only delivery
 diagnostics/replay boundary and is linked rather than duplicated.

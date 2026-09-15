@@ -16,10 +16,10 @@
             <legend>Nonsecret message configuration</legend>
             <label for="email-brand">Message brand (1–80 characters)</label>
             <input id="email-brand" maxlength="80" @bind="brand" />
-            <FluentButton OnClick="@(() => pendingKey = BusinessEmailRules.BrandKey)" Disabled="@Disabled">Review brand change</FluentButton>
+            <FluentButton OnClick="@(() => Review(() => pendingKey = BusinessEmailRules.BrandKey))" Disabled="@Disabled">Review brand change</FluentButton>
             <label for="email-reply">Reply-to mailbox (optional, no display name)</label>
             <input id="email-reply" maxlength="320" @bind="replyTo" />
-            <FluentButton OnClick="@(() => pendingKey = BusinessEmailRules.ReplyToKey)" Disabled="@Disabled">Review reply-to change</FluentButton>
+            <FluentButton OnClick="@(() => Review(() => pendingKey = BusinessEmailRules.ReplyToKey))" Disabled="@Disabled">Review reply-to change</FluentButton>
         </fieldset>
         @if (currentSettings is not null)
         {
@@ -39,7 +39,7 @@
                 <h2 id="settings-confirm">Confirm email setting change</h2>
                 <p>Save @pendingKey as @(pendingKey == BusinessEmailRules.BrandKey ? brand : replyTo)? This changes future prepared mail, not recipient, sender, organizer or mandatory delivery policy.</p>
                 <FluentButton OnClick="SaveAsync" Disabled="@Disabled">Confirm setting change</FluentButton>
-                <FluentButton OnClick="@(() => pendingKey = null)" Disabled="@Disabled">Cancel change</FluentButton>
+                <FluentButton OnClick="@(() => Review(() => pendingKey = null))" Disabled="@Disabled">Cancel change</FluentButton>
             </section>
         }
     }

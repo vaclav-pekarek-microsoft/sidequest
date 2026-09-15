@@ -15,6 +15,9 @@ Keep actions and form controls disabled until `RendererInfo.IsInteractive` is tr
 Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
 an early click. Preserve prerendering and server reauthorization rather than adding
 arbitrary client delays or retrying mutations to hide this handoff.
+Bind Fluent input components' `Disabled` parameters explicitly as well as their
+native fieldset. Fieldset-only transitions can leave the web component and its
+shadow input disabled after the fieldset becomes enabled.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.
@@ -25,8 +28,35 @@ arbitrary client delays or retrying mutations to hide this handoff.
   `IResourceAccess`; hiding UI is not authorization. Entra roles grant admission only.
 - Never use HttpContext or SignInManager inside an interactive circuit. `ICurrentUser`
   uses AuthenticationStateProvider. HttpContext is available only during static SSR/HTTP.
-- Use Fluent providers inside an interactive subtree when needed. No app-owned JS interop
-  remains. Fluent's package supplies its own web-component modules.
+- Use Fluent providers inside an interactive subtree when needed. App-owned interop
+  is limited to the Experience connection/authentication bridge and standalone offline
+  modules; Fluent supplies its own web-component modules.
+- Keep one global connection bridge. Existing views use the scoped
+  `ExperienceCoordinator` and `ExperienceViewSubscription` to disable offline actions,
+  reauthorize protected projections and defer Joined-snapshot refreshes until rendering.
+  Reconnects must preserve unsaved input, never replay mutations, and retain explicit
+  reload after version conflicts. Event pages retain their scoped circuit revalidation.
+  Administration and notification bases also await pending operations and reauthorize
+  retained views before making them usable. Keep unverified projections hidden,
+  preserve valid local drafts and original versions, and clear confirmed revoked data.
+  Authentication changes clear/block device state before submission; storage failure
+  must remain visible without preventing sign-out.
+- Before enabling a surviving circuit, the session check must match the current
+  HTTP cookie to a server-protected proof of that circuit's tenant/object identity,
+  unique sign-in instance and deadline. A different authenticated cookie is not a
+  successful reconnect. Keep this proof in bridge memory and the no-store check
+  header, never offline storage; it cannot authenticate independently. Older
+  tickets without a sign-in identifier require fresh sign-in.
+- The earliest scoped circuit handler invalidates online readiness on transport
+  down/up without invoking view callbacks or JavaScript. Revalidation during
+  `ConnectCircuit` must not await snapshot interop before the reconnect handshake
+  returns. Only the cookie-verified browser bridge may restore readiness.
+- Administration navigation is available to authenticated users, but each screen
+  and operation rechecks the persisted administrator assignment. Neither a visible
+  link nor an Entra admission role grants administration or private resource access.
+- Do not instantiate `InputFile` for an unsaved Quest; use an inert disabled input
+  until a persisted draft can accept uploads. Retain cancellation tokens across
+  awaits and reject late query results before starting dependent work after disposal.
 
 ## Production / real Entra configuration
 Default mode is Entra; invalid or absent configuration fails startup. There is no fallback.
@@ -88,7 +118,8 @@ Development settings explicitly configure the fixed Admin tenant/object pair; wi
 that configuration nobody is bootstrapped. Only this Admin object is accepted in
 development bootstrap configuration. It is bootstrapped at first provisioning. Persona sign-in
 and logout are antiforgery-protected POSTs. Return URLs are local-only.
-Apply integration-owner SQL migrations before signing in; the home page works without SQL.
+Apply integration-owner SQL migrations before signing in; only the anonymous home
+page works without SQL. The authenticated dashboard performs authorized SQL queries.
 Synthetic sign-in is not evidence of live Entra correctness.
 
 ## Compatibility / operations
@@ -104,7 +135,8 @@ bypass was attempted. Subsequent isolated Linux Chromium CI
 [34861029210](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34861029210)
 passed all seven M1 browser journeys: four persona sign-ins with exact Fluent dialog
 content, unauthenticated redirect, 360px keyboard/no-overflow interaction, and logout.
-Full-product browser acceptance and real-Entra release verification remain open.
+These historical compatibility checks do not establish full release acceptance
+or real-Entra verification.
 `/health/live` is anonymous process liveness; `/health/ready` returns SQL availability
 only, not migration readiness. Both expose status only. HTTP exception responses use
 a safe HTML page or generic problem details with correlation IDs; never display exception
@@ -121,6 +153,13 @@ Graph, email, Event/Quest workflows and durable delivery now have real implement
 The host verifies handler completeness before starting its SQL worker; Graph policy and
 provider credentials remain external configuration/approval gates. M2 combined acceptance
 passed in Linux CI34896985551, including actual production composition, real SQL workflows,
-and authenticated Chromium journeys. Uploads, administration and offline caching remain
-later milestones.
+and authenticated Chromium journeys. Media and Administration backends are integrated;
+M3 dashboard, cover UI, authentication/reconnect and bounded offline composition passed
+[combined Linux acceptance 34967281852](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852):
+1,845 unit, 1,019 real-SQL, 96 browser-project cases and 54 Node regressions.
+Ordinary browser sign-in helpers observe initialized connection UI; a separate
+controlled native-startup journey verifies missing-generation guidance and explicit
+continuation. Route barriers must resolve fingerprinted assets through the rendered
+import map and use Playwright-compatible regular-expression options.
+This is not live-provider, device-policy, load/restore or production release approval.
 Do not introduce fake success adapters to satisfy external contracts.

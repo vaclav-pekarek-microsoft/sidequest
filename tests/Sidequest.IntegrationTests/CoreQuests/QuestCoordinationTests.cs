@@ -1,8 +1,13 @@
+using System.Data.Common;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Sidequest.Application.Quests.Implementation;
+using Sidequest.Application.Security;
 using Sidequest.Application.Shared;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
+using Sidequest.IntegrationTests.CoreDelivery;
 using Sidequest.IntegrationTests.FoundationPersistence;
 
 namespace Sidequest.IntegrationTests.CoreQuests;
@@ -11,6 +16,44 @@ namespace Sidequest.IntegrationTests.CoreQuests;
 /// <param name="database">Existing isolated migrated-SQL fixture.</param>
 public sealed class QuestCoordinationTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
+    /// <summary>Actual publication reserves completion work before inserting rather than converting compatible shared gap locks at save time.</summary>
+    /// <returns>Completion after a blocked reservation, absence of attempted schedule inserts, and one successful explicit publication after release.</returns>
+    [Fact]
+    public async Task Publication_ReservesCompletionRangeBeforeAttemptingInsert()
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        string version;
+        await using (var prepare = database.CreateContext())
+        {
+            var quest = await prepare.Quests.SingleAsync(x => x.Id == scenario.Seed.Quest.Id);
+            quest.Status = QuestStatus.Draft;
+            await prepare.SaveChangesAsync();
+            version = Convert.ToBase64String(quest.Version);
+        }
+        var prefix = $"quest-complete:{scenario.Seed.Quest.Id:N}:{scenario.Seed.Quest.EndUtc.UtcTicks}";
+        await using var blocker = database.CreateContext();
+        await using var reservation = await blocker.BeginTransactionAsync();
+        Assert.False(await blocker.HasPendingScheduledWorkForUpdateAsync(prefix));
+
+        var observer = new ScheduleReservationObserver();
+        var service = new QuestService(new ObservedContextFactory(database, observer),
+            new ResourceAccess(StubCurrentUser.For(scenario.Seed.User)), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
+        var failure = await Assert.ThrowsAsync<SqlException>(() =>
+            service.ChangeStatusAsync(scenario.Seed.Quest.Id, version, QuestStatus.Active, ""));
+        Assert.Equal(1222, failure.Number);
+        Assert.True(observer.ReservationReadAttempted);
+        Assert.False(observer.ScheduleInsertAttempted);
+        await reservation.RollbackAsync();
+
+        await service.ChangeStatusAsync(scenario.Seed.Quest.Id, version, QuestStatus.Active, "");
+        await using var read = database.CreateContext();
+        Assert.Equal(QuestStatus.Active, (await read.Quests.SingleAsync(x => x.Id == scenario.Seed.Quest.Id)).Status);
+        var scheduled = Assert.Single(await read.ScheduledWork.Where(x => x.QuestId == scenario.Seed.Quest.Id).ToListAsync());
+        Assert.Equal(WorkStatus.Pending, scheduled.Status);
+        Assert.Equal(scenario.Seed.Quest.EndUtc, scheduled.DueUtc);
+        Assert.Single(await read.QuestStatusHistory.Where(x => x.QuestId == scenario.Seed.Quest.Id).ToListAsync());
+    }
+
     /// <summary>Event-owned completion and child cleanup commit before a late Join is rejected, without committing any participation.</summary>
     /// <returns>Completion after both lifecycle journals and absence of participation/delivery are asserted.</returns>
     [Fact]
@@ -159,5 +202,23 @@ public sealed class QuestCoordinationTests(SqlTestDatabase database) : IClassFix
         Assert.False(await db.Participations.AnyAsync(p => p.QuestId == scenario.Seed.Quest.Id));
         Assert.False(await db.OutboxMessages.AnyAsync(o => o.AggregateId == scenario.Seed.Quest.Id));
         Assert.Equal(2, scenario.Reconciler.Calls);
+    }
+
+    private sealed class ScheduleReservationObserver : DbCommandInterceptor
+    {
+        internal bool ReservationReadAttempted { get; private set; }
+        internal bool ScheduleInsertAttempted { get; private set; }
+
+        /// <inheritdoc />
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("FROM [ScheduledWork]", StringComparison.Ordinal))
+                ReservationReadAttempted = true;
+            if (command.CommandText.Contains("INSERT INTO [ScheduledWork]", StringComparison.Ordinal))
+                ScheduleInsertAttempted = true;
+            command.CommandText = "SET LOCK_TIMEOUT 500;\n" + command.CommandText;
+            return ValueTask.FromResult(result);
+        }
     }
 }

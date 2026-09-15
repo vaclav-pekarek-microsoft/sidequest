@@ -1,8 +1,8 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-09-14.
-**Implementation:** M1 foundation verified; M2 core modules in progress. No production deployment.
+**Last revised:** 2026-09-15.
+**Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
 Sections 48–61 form the **accepted V1 baseline** and are authoritative if an earlier
@@ -1972,6 +1972,25 @@ and 360px keyboard/no-overflow behavior without lost prerender clicks. This esta
 the M2 core integration gate, not completion of M3 secondary features, M4 full-product
 acceptance, or any live-provider/release approval.
 
+M3 combined acceptance passed in Linux CI
+[34967281852](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34967281852):
+1,845 unit, 1,019 real-SQL, 96 browser-project cases and 54 Node regressions,
+all executed with zero failures/skips. The composed host includes private covers
+and cleanup, administration/template delivery, the dashboard and bounded offline
+basics. Browser acceptance includes real transport reconnect, current-cookie
+identity checks, unsaved-input preservation, private-access refresh and the
+controlled native-sign-in missing-generation continuation. Administration and
+notification projections also reauthorize before becoming usable after reconnect.
+SQL regressions prove completion work reserves its key range before insertion,
+preserving the existing Event-first Serializable transaction and explicit conflict
+policy without automatic mutation replay.
+
+This is application-level combined acceptance, not a live tenant/provider approval,
+supported Outlook or physical-device certification, measured 300-user release load,
+SQL/Blob restore evidence, operational-owner assignment or production deployment.
+M4 must still establish those release requirements; bounded provisioning conflicts
+are reported, not claimed to have been eliminated.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
@@ -2004,6 +2023,14 @@ Shared M2 integration contracts:
   completion: SQL can report a deadlock while rows are read after execution has returned.
   Preserve provider cancellation and unrelated failures; never retry a caller-owned
   transaction or hide its rollback behind a successful result.
+- Pending completion scheduling uses
+  `ISidequestDbContext.HasPendingScheduledWorkForUpdateAsync` to reserve the
+  deduplication-prefix range with write intent in that same Serializable transaction.
+  A shared existence read followed by insertion can deadlock independent Quest
+  publications on an empty or sparsely populated schedule index. The persistence
+  boundary owns SQL lock hints; it neither saves nor commits. Pending/Processing
+  matching, immutable completion deadlines, and explicit conflict recovery remain
+  unchanged. This does not serialize tests or automatically replay user commands.
 - The Event-owned `IEventLifecycleReconciler` stages overdue parent completion,
   pending membership cleanup, and Quest-side lifecycle effects in the caller's locked
   transaction. It never saves or commits. Persist system reconciliation separately

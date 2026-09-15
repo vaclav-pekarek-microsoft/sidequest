@@ -4,6 +4,7 @@ using Sidequest.Application.Events;
 using Sidequest.Application.Quests;
 using Sidequest.Domain.Rules;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Pages.Quests;
 
@@ -22,14 +23,34 @@ public partial class QuestList : IAsyncDisposable
     private DateOnly? fromDate;
     private DateOnly? throughDate;
     private string dateZone = "Etc/UTC";
+    private ExperienceViewSubscription? experience;
 
     [Inject] private IQuestService Quests { get; set; } = default!;
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private ILogger<QuestList> Logger { get; set; } = default!;
+    [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
     /// <summary>Optional list view from a deep link; invalid values use Joined.</summary>
     [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
     /// <summary>Optional internal Event filter, never an access grant.</summary>
     [SupplyParameterFromQuery(Name = "eventId")] public Guid? EventId { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnInitialized() =>
+        experience = new(Experience, () => InvokeAsync(StateHasChanged), ReauthorizeAsync);
+
+    /// <inheritdoc />
+    protected override Task OnAfterRenderAsync(bool firstRender) =>
+        RendererInfo.IsInteractive ? experience?.AfterRenderAsync() ?? Task.CompletedTask : Task.CompletedTask;
+
+    private Task ReauthorizeAsync() => InvokeAsync(async () =>
+    {
+        if (lifetime.IsCancellationRequested)
+            return;
+        navigationVersion++;
+        await LoadAsync();
+        if (!lifetime.IsCancellationRequested)
+            StateHasChanged();
+    });
 
     /// <inheritdoc />
     protected override async Task OnParametersSetAsync()
@@ -81,7 +102,15 @@ public partial class QuestList : IAsyncDisposable
             error = $"Quests could not be loaded. Please retry. Reference: {correlationId}.";
         }
         catch (Exception) when (requestVersion != navigationVersion) { }
-        finally { if (requestVersion == navigationVersion) loading = false; }
+        finally
+        {
+            if (requestVersion == navigationVersion)
+            {
+                loading = false;
+                if (experience is not null)
+                    await experience.AfterOperationAsync();
+            }
+        }
     }
 
     private async Task ResetAsync() { page = 1; await LoadAsync(); }
@@ -91,6 +120,8 @@ public partial class QuestList : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (experience is not null)
+            await experience.DisposeAsync();
         await lifetime.CancelAsync();
         lifetime.Dispose();
     }

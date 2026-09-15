@@ -52,8 +52,7 @@ internal static class QuestChanges
     internal static async Task ScheduleAsync(ISidequestDbContext db, Quest quest, CancellationToken token)
     {
         var key = $"quest-complete:{quest.Id:N}:{quest.EndUtc.UtcTicks}";
-        if (!await db.ScheduledWork.AnyAsync(x => x.DeduplicationKey.StartsWith(key) &&
-            (x.Status == WorkStatus.Pending || x.Status == WorkStatus.Processing), token).ConfigureAwait(false))
+        if (!await db.HasPendingScheduledWorkForUpdateAsync(key, token).ConfigureAwait(false))
             db.ScheduledWork.Add(new ScheduledWork
             {
                 Type = WorkTypes.QuestCompletion,

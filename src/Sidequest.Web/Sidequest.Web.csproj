@@ -16,4 +16,8 @@
     <ProjectReference Include="..\Sidequest.Infrastructure\Sidequest.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sidequest.UnitTests" />
+  </ItemGroup>
+
 </Project>

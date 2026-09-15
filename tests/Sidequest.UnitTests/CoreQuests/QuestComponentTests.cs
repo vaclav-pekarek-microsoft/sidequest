@@ -5,6 +5,7 @@ using Sidequest.Application.Events;
 using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Web.Components.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreQuests;
 
@@ -15,7 +16,28 @@ public sealed class QuestComponentTests : BunitContext
     public QuestComponentTests()
     {
         Services.AddFluentUIComponents();
+        Services.AddSingleton<ExperienceCoordinator>();
         JSInterop.Mode = JSRuntimeMode.Loose;
+    }
+
+    /// <summary>Busy transitions explicitly control Fluent fields without losing the unsaved model or unlocking published visibility.</summary>
+    /// <returns>A task completing after disable/enable transitions and immutable parent input assertions.</returns>
+    [Fact]
+    public async Task EditorBusyTransitions_ExplicitlyUpdateFluentControlsWithoutReplacingInput()
+    {
+        var input = new QuestInput("Original Quest", "Description", "Room", null, new(2026, 7, 15, 10, 0, 0),
+            new(2026, 7, 15, 12, 0, 0), null, null, QuestVisibility.Private);
+        var cut = Render<QuestEditor>(p => p.Add(x => x.Initial, input).Add(x => x.ZoneId, "Europe/Prague").Add(x => x.Published, true));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentTextField>().First().Instance.ValueChanged.InvokeAsync("Unsaved Quest"));
+        cut.Render(p => p.Add(x => x.Busy, true));
+        Assert.All(cut.FindComponents<FluentTextField>(), x => Assert.True(x.Instance.Disabled));
+        Assert.All(cut.FindComponents<FluentTextArea>(), x => Assert.True(x.Instance.Disabled));
+        cut.Render(p => p.Add(x => x.Busy, false));
+        Assert.All(cut.FindComponents<FluentTextField>(), x => Assert.False(x.Instance.Disabled));
+        Assert.All(cut.FindComponents<FluentTextArea>(), x => Assert.False(x.Instance.Disabled));
+        Assert.Equal("Unsaved Quest", cut.FindComponents<FluentTextField>().First().Instance.Value);
+        Assert.True(cut.Find("select").HasAttribute("disabled"));
+        Assert.Equal("Original Quest", input.Title);
     }
 
     /// <summary>Joined users get Leave only; none/following users see the exact non-destructive options permitted by status.</summary>

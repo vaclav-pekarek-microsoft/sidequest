@@ -3,12 +3,12 @@
     <ValidationSummary />
     <fieldset disabled="@Busy" class="editor">
         <legend>Event configuration</legend>
-        <FluentTextField Label="Name (3–120 characters)" @bind-Value="model.Name" Required="true" Maxlength="120" />
-        <FluentTextArea Label="Discovery summary (visible to eligible users)" @bind-Value="model.DiscoverySummary" Maxlength="300" />
-        <FluentTextArea Label="Description (members only; plain text)" @bind-Value="model.Description" Maxlength="10000" />
+        <FluentTextField Label="Name (3–120 characters)" @bind-Value="model.Name" Disabled="@Busy" Required="true" Maxlength="120" />
+        <FluentTextArea Label="Discovery summary (visible to eligible users)" @bind-Value="model.DiscoverySummary" Disabled="@Busy" Maxlength="300" />
+        <FluentTextArea Label="Description (members only; plain text)" @bind-Value="model.Description" Disabled="@Busy" Maxlength="10000" />
         <label>Start date, inclusive <InputDate @bind-Value="model.StartDate" /></label>
         <label>End date, inclusive <InputDate @bind-Value="model.EndDate" /></label>
-        <FluentTextField Label="IANA time zone (for example Europe/Prague)" @bind-Value="model.TimeZoneId" ReadOnly="@ZoneLocked" Required="true" />
+        <FluentTextField Label="IANA time zone (for example Europe/Prague)" @bind-Value="model.TimeZoneId" Disabled="@Busy" ReadOnly="@ZoneLocked" Required="true" />
         <p>Dates are interpreted in this zone. The zone is fixed when published; every child Quest must fit within these dates.</p>
         <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save Draft or changes</FluentButton>
     </fieldset>

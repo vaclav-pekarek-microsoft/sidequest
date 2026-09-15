@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#143d35">
+    <title>Offline joined Quests · Sidequest</title>
+    <link rel="stylesheet" href="/experience/offline.css?v=1">
+    <script type="module" src="/experience/offline.js?v=2"></script>
+</head>
+<body>
+<main>
+    <h1>Offline joined Quests</h1>
+    <p id="refresh" role="status">Reading saved basics…</p>
+    <p>Read-only, untrusted device copy. Times, locations, status and access may have changed. No editing, joining, leaving or uncached details are available here.</p>
+    <p>Basic joined private Quest details are stored in this browser profile. Anyone sharing this profile may read them. Remote logout or revocation cannot immediately erase an offline copy. This is not offline authentication or encrypted storage.</p>
+    <p>Basics expire 24 hours after the last successful authorized refresh. Browser storage may be unavailable or cleared sooner.</p>
+    <section id="quests" aria-label="Saved joined Quest basics"></section>
+    <p id="failure" role="alert"></p>
+    <button id="clear" type="button">Clear saved basics on this device</button>
+    <p><a href="/" data-enhance-nav="false">Try Sidequest online</a> (requires a connection and authorization)</p>
+</main>
+</body>
+</html>
