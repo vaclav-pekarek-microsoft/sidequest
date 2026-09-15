@@ -32,9 +32,9 @@ async function changeAuthentication(target, submitter) {
     if (target instanceof HTMLFormElement) {
         field(target, "experienceEpoch", epoch);
         field(target, "experienceClearFailed", String(failed));
-        // Preserve native validation/antiforgery and the clicked submitter; the second submit event is explicitly admitted.
-        target.dataset.authenticationPrepared = "true";
-        if (submitter) target.requestSubmit(submitter); else target.requestSubmit();
+        if (submitter?.name) field(target, submitter.name, submitter.value);
+        // The original submit event already passed native validation. Do not re-enter its submission algorithm.
+        HTMLFormElement.prototype.submit.call(target);
     } else {
         const url = new URL(target.href, location.href);
         url.searchParams.set("experienceEpoch", epoch);
@@ -77,10 +77,6 @@ export async function beforeWebStart() {
     document.addEventListener("submit", async event => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-authentication-change")) return;
-        if (form.dataset.authenticationPrepared === "true") {
-            delete form.dataset.authenticationPrepared;
-            return;
-        }
         event.preventDefault();
         await changeAuthentication(form, event.submitter);
     }, true);

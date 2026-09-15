@@ -76,8 +76,23 @@ public sealed class WorkerNetworkBrowserTests(FoundationBrowserFixture fixture) 
         var ordinary = await context.NewPageAsync();
         await ordinary.GotoAsync("/");
         await Expect(ordinary.GetByRole(AriaRole.Heading, new() { Name = "Offline joined Quests", Exact = true })).ToBeVisibleAsync();
-        await Assert.ThrowsAsync<PlaywrightException>(() => page.GotoAsync(path));
-        Assert.DoesNotContain("Offline joined Quests", await page.ContentAsync());
+        var failed = new TaskCompletionSource<IRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expectedUrl = fixture.Settings.BaseUri.GetLeftPart(UriPartial.Authority) + path;
+        page.RequestFailed += OnFailed;
+        try
+        {
+            await Assert.ThrowsAsync<PlaywrightException>(() => page.GotoAsync(path));
+            var request = await failed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Contains(request.Failure, new[] { "net::ERR_INTERNET_DISCONNECTED", "net::ERR_FAILED" });
+            Assert.Null(await request.ResponseAsync());
+            await Expect(page.Locator("html")).Not.ToContainTextAsync("Offline joined Quests");
+        }
+        finally { page.RequestFailed -= OnFailed; }
+
+        void OnFailed(object? sender, IRequest request)
+        {
+            if (request.IsNavigationRequest && request.Url == expectedUrl) failed.TrySetResult(request);
+        }
     }
 
     private static async Task RegisterWorkerAsync(IPage page)

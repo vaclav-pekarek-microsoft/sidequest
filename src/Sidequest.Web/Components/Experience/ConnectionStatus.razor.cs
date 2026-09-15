@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
 using Sidequest.Web.Experience;
 
@@ -13,6 +14,8 @@ public partial class ConnectionStatus : IAsyncDisposable
     private DotNetObjectReference<ConnectionStatus>? callback;
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private ExperienceCoordinator Coordinator { get; set; } = default!;
+    [Inject] private AuthenticationStateProvider AuthenticationState { get; set; } = default!;
+    [Inject] private ExperienceSessionBinding SessionBinding { get; set; } = default!;
 
     /// <inheritdoc />
     protected override void OnInitialized() => Coordinator.SnapshotRefreshRequested += RefreshAsync;
@@ -21,10 +24,15 @@ public partial class ConnectionStatus : IAsyncDisposable
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+        var cancellationToken = lifetime.Token;
         interop = new(JS);
         callback = DotNetObjectReference.Create(this);
-        try { await interop.InitializeAsync(root, callback, lifetime.Token); }
+        var state = await AuthenticationState.GetAuthenticationStateAsync();
+        if (cancellationToken.IsCancellationRequested) return;
+        var binding = SessionBinding.Create(state.User);
+        try { await interop.InitializeAsync(root, callback, binding, cancellationToken); }
         catch (JSDisconnectedException) { }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
     }
 
     /// <summary>Receives an untrusted browser connectivity hint and zone; resources are independently reauthorized.</summary>

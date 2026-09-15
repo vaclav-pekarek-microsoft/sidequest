@@ -30,8 +30,31 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
         await page.EvaluateAsync("async()=>await navigator.serviceWorker.ready");
         await page.WaitForFunctionAsync("() => navigator.serviceWorker.controller !== null");
-        var snapshot = await page.EvaluateAsync<JsonElement>("async()=>await (await import('/experience/snapshot-store.js?v=1')).readSnapshot()");
+        Guid authorizedAccount;
+        var response = await context.APIRequest.GetAsync("/experience/joined-snapshot", new() { MaxRedirects = 0 });
+        try
+        {
+            Assert.Equal(200, response.Status);
+            Assert.Equal("no-store", response.Headers["cache-control"]);
+            using var wire = JsonDocument.Parse(await response.TextAsync());
+            Assert.Equal(new[] { "accountId", "quests", "refreshedUtc" }, wire.RootElement.EnumerateObject().Select(p => p.Name).Order());
+            authorizedAccount = wire.RootElement.GetProperty("accountId").GetGuid();
+            var records = wire.RootElement.GetProperty("quests").EnumerateArray().ToArray();
+            Assert.Contains(records, q => q.GetProperty("id").GetGuid() == joined);
+            foreach (var quest in records)
+            {
+                Assert.Equal(new[] { "endUtc", "eventId", "id", "location", "startUtc", "status", "timeZoneId", "title" },
+                    quest.EnumerateObject().Select(p => p.Name).Order());
+                Assert.Equal(JsonValueKind.Number, quest.GetProperty("status").ValueKind);
+            }
+        }
+        finally { await response.DisposeAsync(); }
+        // JsonElement evaluation adds Playwright reference metadata; inspect the browser's own JSON without rewriting it.
+        using var stored = JsonDocument.Parse(await page.EvaluateAsync<string>(
+            "async()=>JSON.stringify(await (await import('/experience/snapshot-store.js?v=1')).readSnapshot())"));
+        var snapshot = stored.RootElement;
         Assert.Equal(new[] { "accountId", "quests", "refreshedUtc" }, snapshot.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(authorizedAccount, snapshot.GetProperty("accountId").GetGuid());
         var basics = snapshot.GetProperty("quests").EnumerateArray().ToArray();
         Assert.Contains(basics, q => q.GetProperty("id").GetGuid() == joined);
         Assert.DoesNotContain(basics, q => q.GetProperty("id").GetGuid() == owned || q.GetProperty("id").GetGuid() == followed);

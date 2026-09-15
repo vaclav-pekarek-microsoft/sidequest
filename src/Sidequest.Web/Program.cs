@@ -21,6 +21,7 @@ builder.Services.AddSidequestInfrastructure(builder.Configuration);
 builder.Services.AddSidequestDelivery(builder.Configuration);
 builder.Services.AddSidequestMedia(builder.Configuration);
 builder.Services.AddSidequestExperience();
+builder.Services.AddSidequestAdministration(builder.Configuration);
 builder.Services.AddSingleton(new WorkHandlerRequirements(RequireMediaCleanup: true));
 builder.Services.AddSidequestCoreWorkflows(builder.Configuration, authentication);
 builder.Services.AddFoundationAuthentication(authentication, builder.Configuration);

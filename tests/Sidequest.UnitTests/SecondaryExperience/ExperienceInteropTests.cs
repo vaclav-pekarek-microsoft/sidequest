@@ -20,12 +20,13 @@ public sealed class ExperienceInteropTests
         Assert.Empty(calls);
         using var callback = DotNetObjectReference.Create(new object());
         using var cancellation = new CancellationTokenSource();
-        await interop.InitializeAsync(default(ElementReference), callback, cancellation.Token);
+        await interop.InitializeAsync(default(ElementReference), callback, "transient-circuit-proof", cancellation.Token);
         await interop.RefreshAsync(cancellation.Token);
         await interop.DisposeAsync();
         Assert.Equal(new[] { "import", "module.initialize", "bridge.refresh", "bridge.dispose", "bridge.release", "module.release" }, calls);
         Assert.Equal(cancellation.Token, runtime.LastToken);
         Assert.Equal(cancellation.Token, module.LastToken);
+        Assert.Equal(new object?[] { default(ElementReference), callback, "transient-circuit-proof" }, module.LastArguments);
         Assert.Equal(2, bridge.InvocationCount);
         Assert.True(module.Released);
         Assert.True(bridge.Released);
@@ -41,7 +42,7 @@ public sealed class ExperienceInteropTests
         var module = new RecordingReference("module", calls) { Result = bridge };
         var interop = new ExperienceInterop(new RecordingRuntime(module, calls));
         using var callback = DotNetObjectReference.Create(new object());
-        await interop.InitializeAsync(default(ElementReference), callback, CancellationToken.None);
+        await interop.InitializeAsync(default(ElementReference), callback, null, CancellationToken.None);
         bridge.Failure = new JSDisconnectedException("Synthetic circuit disconnect");
         await interop.DisposeAsync();
         bridge.Failure = new JSException("Synthetic unexpected JavaScript failure");
@@ -67,6 +68,7 @@ public sealed class ExperienceInteropTests
     private sealed class RecordingReference(string name, List<string> calls) : IJSObjectReference
     {
         internal object? Result { get; init; }
+        internal object?[]? LastArguments { get; private set; }
         internal CancellationToken LastToken { get; private set; }
         internal Exception? Failure { get; set; }
         internal bool Released { get; private set; }
@@ -79,6 +81,7 @@ public sealed class ExperienceInteropTests
         {
             calls.Add($"{name}.{identifier}");
             LastToken = cancellationToken;
+            LastArguments = args;
             InvocationCount++;
             return Failure is null ? ValueTask.FromResult(Result is TValue value ? value : default!) :
                 ValueTask.FromException<TValue>(Failure);

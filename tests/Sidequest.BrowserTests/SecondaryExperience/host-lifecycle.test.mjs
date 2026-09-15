@@ -37,10 +37,11 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
         hasAttribute(name) { return name === "data-authentication-change"; }
         querySelector(selector) { return this.inputs.get(selector.match(/name="([^"]+)"/)[1]); }
         append(input) { this.inputs.set(input.name, input); }
-        requestSubmit(submitter) {
-            assert.equal(this.dataset.authenticationPrepared, "true");
+        requestSubmit() {
+            throw new Error("A reentrant requestSubmit can be ignored by the native submission algorithm.");
+        }
+        submit() {
             this.submitted++;
-            this.submitter = submitter;
         }
     }
     globalThis.HTMLFormElement = Form;
@@ -71,7 +72,9 @@ test("The native auth POST waits for clearing and preserves antiforgery form and
     const state = await host({ clear: () => new Promise(resolve => { release = resolve; }) });
     await state.module.beforeWebStart();
     const form = new state.Form();
-    const submitter = { name: "sign-out" };
+    const submitter = { name: "operation", value: "sign-out" };
+    form.inputs.set("__RequestVerificationToken", { value: "synthetic-antiforgery" });
+    form.submit = { name: "submit" };
     let prevented = false;
     const pending = state.listeners.get("submit")({ target: form, submitter, preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
@@ -79,10 +82,13 @@ test("The native auth POST waits for clearing and preserves antiforgery form and
     release("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     await pending;
     assert.equal(form.submitted, 1);
-    assert.equal(form.submitter, submitter);
+    assert.equal(form.inputs.get("operation").value, "sign-out");
+    assert.equal(form.inputs.get("__RequestVerificationToken").value, "synthetic-antiforgery");
     assert.equal(form.inputs.get("experienceEpoch").value, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     assert.equal(form.inputs.get("experienceClearFailed").value, "false");
     assert.equal(state.completions.length, 0);
+    await state.listeners.get("submit")({ target: form, submitter, preventDefault() {} });
+    assert.equal(form.submitted, 1);
 });
 
 test("A storage failure is visible and cannot prevent sign-out or pretend clearing succeeded", async () => {

@@ -1,5 +1,9 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
+using Sidequest.Web.Authentication;
 using Sidequest.Web.Components.Experience;
 using Sidequest.Web.Experience;
 
@@ -12,6 +16,15 @@ public sealed class ConnectionStatusHostTests : BunitContext
     public ConnectionStatusHostTests()
     {
         Services.AddScoped<ExperienceCoordinator>();
+        Services.AddSingleton(TimeProvider.System);
+        Services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
+        Services.AddSingleton(new FoundationAuthenticationSettings(true, DevelopmentPersonas.TenantId, DevelopmentPersonas.WorkforceRole, null));
+        Services.AddSingleton<ExperienceSessionBinding>();
+        var authentication = new ServerAuthenticationStateProvider();
+        var principal = DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All.Single(p => p.Name == "Alice"));
+        WorkforceSession.Stamp(principal, DateTimeOffset.UtcNow);
+        authentication.SetAuthenticationState(Task.FromResult(new AuthenticationState(principal)));
+        Services.AddSingleton<AuthenticationStateProvider>(authentication);
         JSInterop.Mode = JSRuntimeMode.Loose;
         JSInterop.SetupModule("./Components/Experience/ConnectionStatus.razor.js");
         SetRendererInfo(new("Server", true));
