@@ -85,7 +85,8 @@ public sealed class SqlWorkQueue(ISidequestDbContextFactory factory, TimeProvide
     public Task<bool> FailAsync(WorkLease lease, Exception failure, CancellationToken cancellationToken = default)
     {
         var permanent = failure is DeliveryTransportException { Outcome: TransportOutcome.Permanent } or
-            DomainException { Code: ErrorCode.Validation };
+            DomainException { Code: ErrorCode.Validation } or
+            DomainException { Code: ErrorCode.DependencyUnavailable, IsPermanentDependencyFailure: true };
         var dead = permanent || lease.Attempts >= 8;
         var delay = RetryDelay(lease.Attempts, lease.Id);
         if (failure is DeliveryTransportException { RetryAfter: { } retryAfter } && retryAfter > delay)
@@ -94,10 +95,8 @@ public sealed class SqlWorkQueue(ISidequestDbContextFactory factory, TimeProvide
             dead |= retryAfter > TimeSpan.FromHours(24);
             delay = retryAfter > TimeSpan.FromHours(24) ? TimeSpan.FromHours(24) : retryAfter;
         }
-        var error = failure switch
+        var error = permanent ? "Permanent dependency/configuration or payload failure; correct before replay." : failure switch
         {
-            DeliveryTransportException { Outcome: TransportOutcome.Permanent } or DomainException { Code: ErrorCode.Validation } =>
-                "Permanent dependency/configuration or payload failure; correct before replay.",
             DeliveryTransportException { Outcome: TransportOutcome.Uncertain } or OperationCanceledException => "Submission outcome uncertain; duplicates are possible. Calendar withdrawal obligation retained.",
             _ => "Retryable processing failure; inspect correlation-safe operational diagnostics."
         };
