@@ -22,6 +22,7 @@ public sealed class DomainExceptionTests
         Assert.Equal(code, error.Code);
         Assert.Equal("Quest end must be after start.", caught.Message);
         Assert.Equal("EndUtc", error.Field);
+        Assert.False(error.IsPermanentDependencyFailure);
     }
 
     /// <summary>Checks omitted, null, empty, and named fields without losing empty or multiline messages.</summary>
@@ -50,5 +51,38 @@ public sealed class DomainExceptionTests
         Assert.Equal(ErrorCode.Conflict, error.Code);
         Assert.Equal(message, error.Message);
         Assert.Equal(field, error.Field);
+        Assert.False(error.IsPermanentDependencyFailure);
+    }
+
+    /// <summary>Preserves the dependency presentation contract while explicitly distinguishing operator-required failures from ordinary retryable outages.</summary>
+    /// <param name="permanent">The explicitly selected dependency retry classification.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PermanentDependencyMarker_PreservesCategoryMessageAndField(bool permanent)
+    {
+        var error = new DomainException(ErrorCode.DependencyUnavailable, "Private storage is unavailable.", "Storage",
+            isPermanentDependencyFailure: permanent);
+
+        Assert.Equal(ErrorCode.DependencyUnavailable, error.Code);
+        Assert.Equal("Private storage is unavailable.", error.Message);
+        Assert.Equal("Storage", error.Field);
+        Assert.Equal(permanent, error.IsPermanentDependencyFailure);
+    }
+
+    /// <summary>Rejects attaching dependency-specific retry metadata to an unrelated business category.</summary>
+    /// <param name="code">A non-dependency category which must retain its own established semantics.</param>
+    [Theory]
+    [InlineData(ErrorCode.Validation)]
+    [InlineData(ErrorCode.NotFound)]
+    [InlineData(ErrorCode.Forbidden)]
+    [InlineData(ErrorCode.Conflict)]
+    public void PermanentDependencyMarker_RejectsOtherCategories(ErrorCode code)
+    {
+        var error = Assert.Throws<ArgumentException>(() =>
+            new DomainException(code, "Unavailable.", isPermanentDependencyFailure: true));
+
+        Assert.Equal("isPermanentDependencyFailure", error.ParamName);
+        Assert.StartsWith("Only dependency-unavailable failures may be marked as permanent dependencies.", error.Message, StringComparison.Ordinal);
     }
 }

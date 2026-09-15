@@ -1748,6 +1748,12 @@ work to a visible dead-letter state. Permanent invalid-recipient/configuration e
 dead-letter immediately and raise an actionable alert. An administrator can inspect a
 redacted error and replay after correction using the same logical delivery key. Replays
 still apply current authorization, lifecycle, preference, and calendar ordering rules.
+Provider adapters can mark a known operator-correctable dependency failure with
+`DomainException.IsPermanentDependencyFailure` while retaining `DependencyUnavailable`
+for HTTP/UI presentation. The marker is valid only for that category and defaults to
+false, preserving ordinary transient outage retries. The queue dead-letters marked
+failures on their first failed claim without persisting raw provider messages; handlers
+still do not own lease, attempt or work-status updates.
 
 Leases expire within two minutes and are renewed for long-running jobs. On restart,
 claim expired work and reconcile missed completion/reminder jobs against current time;
