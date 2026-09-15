@@ -97,6 +97,14 @@ jobs:
               throw "Every scenario must execute and pass in $path; empty or skipped suites are not acceptance evidence."
             }
           }
+      - name: Capture isolated browser database deadlocks
+        if: failure()
+        shell: bash
+        run: |
+          docker exec -i sidequest-test-sql bash -c '
+            export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
+            exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -h -1 -y 0
+          ' < .github/sql/browser-deadlocks.sql > "$RUNNER_TEMP/sidequest-deadlocks.xml"
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,6 +113,7 @@ jobs:
           path: |
             **/TestResults/*.trx
             ${{ runner.temp }}/sidequest-web.log
+            ${{ runner.temp }}/sidequest-deadlocks.xml
           if-no-files-found: warn
       - name: Stop test application
         if: always()
