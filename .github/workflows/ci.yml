@@ -75,6 +75,7 @@ jobs:
             exit 1
           fi
       - name: Start isolated browser diagnostics
+        id: browser_diagnostics
         shell: bash
         run: |
           docker exec -i sidequest-test-sql bash -c '
@@ -105,7 +106,7 @@ jobs:
             }
           }
       - name: Capture isolated browser database deadlocks
-        if: failure()
+        if: failure() && steps.browser_diagnostics.outcome == 'success'
         shell: bash
         run: |
           docker exec -i sidequest-test-sql bash -c '
