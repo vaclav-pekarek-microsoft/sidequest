@@ -15,6 +15,9 @@ Keep actions and form controls disabled until `RendererInfo.IsInteractive` is tr
 Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
 an early click. Preserve prerendering and server reauthorization rather than adding
 arbitrary client delays or retrying mutations to hide this handoff.
+Bind Fluent input components' `Disabled` parameters explicitly as well as their
+native fieldset. Fieldset-only transitions can leave the web component and its
+shadow input disabled after the fieldset becomes enabled.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.

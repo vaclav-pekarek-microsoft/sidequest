@@ -7,9 +7,9 @@
         They cannot see invitation, attendee, or follower rosters in that view.</p>
     <fieldset disabled="@Busy">
         <legend>Quest details</legend>
-        <FluentTextField Label="Title" @bind-Value="model.Title" Required="true" />
-        <FluentTextArea Label="Description (plain text)" @bind-Value="model.Description" />
-        <FluentTextField Label="Location (required to publish)" @bind-Value="model.Location" />
+        <FluentTextField Label="Title" @bind-Value="model.Title" Disabled="@Busy" Required="true" />
+        <FluentTextArea Label="Description (plain text)" @bind-Value="model.Description" Disabled="@Busy" />
+        <FluentTextField Label="Location (required to publish)" @bind-Value="model.Location" Disabled="@Busy" />
         <label>Suggested capacity <InputNumber @bind-Value="model.Capacity" /></label>
         <label>Starts in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.Start" /></label>
         <label>Ends in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.End" /></label>

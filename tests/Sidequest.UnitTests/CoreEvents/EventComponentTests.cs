@@ -20,6 +20,25 @@ public sealed class EventComponentTests : BunitContext
     private static EventInput Input(string name = "Initial Event") =>
         new(name, "Private description", "Public discovery", new(2026, 7, 15), new(2026, 7, 16), "Europe/Prague");
 
+    /// <summary>Busy transitions update Fluent control parameters as well as the fieldset while retaining local edits and zone locks.</summary>
+    /// <returns>A task completing after disabled and re-enabled control states are explicitly verified.</returns>
+    [Fact]
+    public async Task EditorBusyTransitions_ExplicitlyUpdateFluentControlsWithoutReplacingInput()
+    {
+        var input = Input();
+        var cut = Render<EventEditor>(p => p.Add(x => x.Input, input).Add(x => x.ZoneLocked, true));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentTextField>().First().Instance.ValueChanged.InvokeAsync("Unsaved Event"));
+        cut.Render(p => p.Add(x => x.Busy, true));
+        Assert.All(cut.FindComponents<FluentTextField>(), x => Assert.True(x.Instance.Disabled));
+        Assert.All(cut.FindComponents<FluentTextArea>(), x => Assert.True(x.Instance.Disabled));
+        cut.Render(p => p.Add(x => x.Busy, false));
+        Assert.All(cut.FindComponents<FluentTextField>(), x => Assert.False(x.Instance.Disabled));
+        Assert.All(cut.FindComponents<FluentTextArea>(), x => Assert.False(x.Instance.Disabled));
+        Assert.Equal("Unsaved Event", cut.FindComponents<FluentTextField>().First().Instance.Value);
+        Assert.True(cut.FindComponents<FluentTextField>().Last().Instance.ReadOnly);
+        Assert.Equal("Initial Event", input.Name);
+    }
+
     /// <summary>Renders only authorized discovery and owner contact fields, with escaped text and no member-content affordances.</summary>
     [Fact]
     public void NonmemberCardRendersDiscoveryAndNoProtectedContent()
