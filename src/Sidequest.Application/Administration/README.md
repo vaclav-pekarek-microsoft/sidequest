@@ -131,6 +131,11 @@ The feature pages use per-page Interactive Server with prerendering retained:
 - `/administration/email`
 - `/administration/templates`
 
+The shared page lifetime disables offline actions without replay, waits for pending
+operations before reconnect authorization, and refreshes protected projections.
+Successful reauthorization preserves unsaved email/template drafts and their original
+concurrency versions; revoked access clears sensitive state and stale confirmations.
+
 The existing `/notifications/failures` page/service remains the only delivery
 diagnostics/replay boundary and is linked rather than duplicated.
 

@@ -36,6 +36,9 @@ shadow input disabled after the fieldset becomes enabled.
   reauthorize protected projections and defer Joined-snapshot refreshes until rendering.
   Reconnects must preserve unsaved input, never replay mutations, and retain explicit
   reload after version conflicts. Event pages retain their scoped circuit revalidation.
+  Administration and notification bases also await pending operations and reauthorize
+  retained views before making them usable. Keep unverified projections hidden,
+  preserve valid local drafts and original versions, and clear confirmed revoked data.
   Authentication changes clear/block device state before submission; storage failure
   must remain visible without preventing sign-out.
 - Before enabling a surviving circuit, the session check must match the current
