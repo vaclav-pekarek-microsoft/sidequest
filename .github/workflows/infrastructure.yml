@@ -5,11 +5,9 @@ on:
     paths:
       - infra/**
       - .github/workflows/infrastructure.yml
+      - .github/workflows/infrastructure-plan.yml
   push:
     branches: [main]
-    paths:
-      - infra/**
-      - .github/workflows/infrastructure.yml
   workflow_dispatch:
 
 permissions:

@@ -45,6 +45,17 @@ not claim protection against an administrator who changes settings or workflow c
 No environment, identity, owner assignment or live planning authorization is supplied
 by this decision.
 
+The [read-only planning workflow](deployment/PLANNING.md) implements this model.
+It is manual-only and requires both `SIDEQUEST_PLANNING_ENABLED=true` and
+`SIDEQUEST_PLANNING_ADMIN_CONTROLS_VERIFIED=true`, followed by the existing protected
+environment's review. Source/CI/environment metadata checks precede the OIDC job.
+Approved non-credential configuration values use masked GitHub environment secrets;
+no long-lived Azure login secret is used. The workflow validates and computes
+what-if only, emits a bounded summary and never applies resources or enables the app.
+It has not been dispatched or verified against live federation/providers.
+Offline infrastructure checks include its regression suite and run on every main
+commit so a planning candidate can have exact-source validation evidence.
+
 No SQL password administrator or public data-service firewall exception is
 created. An approved runner with private network/DNS access must bootstrap the
 application's contained SQL identity and least-privilege data access, and apply
