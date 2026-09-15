@@ -13,6 +13,8 @@ namespace Sidequest.Web.Components.Pages.Quests;
 public partial class QuestDetails : IAsyncDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
+    private CancellationToken cancellationToken;
+    private bool disposed;
     private QuestDetail? detail;
     private IReadOnlyList<QuestHistoryItem> history = [];
     private IReadOnlyList<PersonSummary> members = [];
@@ -36,8 +38,11 @@ public partial class QuestDetails : IAsyncDisposable
     [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
 
     /// <inheritdoc />
-    protected override void OnInitialized() =>
+    protected override void OnInitialized()
+    {
+        cancellationToken = lifetime.Token;
         experience = new(Experience, () => InvokeAsync(StateHasChanged), ReauthorizeAsync);
+    }
 
     /// <inheritdoc />
     protected override Task OnAfterRenderAsync(bool firstRender) =>
@@ -45,11 +50,11 @@ public partial class QuestDetails : IAsyncDisposable
 
     private Task ReauthorizeAsync() => InvokeAsync(async () =>
     {
-        if (lifetime.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested)
             return;
         navigationVersion++;
         await LoadAsync();
-        if (!lifetime.IsCancellationRequested)
+        if (!cancellationToken.IsCancellationRequested)
             StateHasChanged();
     });
 
@@ -69,13 +74,16 @@ public partial class QuestDetails : IAsyncDisposable
 
     private async Task RefreshAsync()
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var requestVersion = navigationVersion;
         var questId = Id;
         var moderation = Moderation;
         Clear();
-        var next = await Quests.GetAsync(questId, moderation, lifetime.Token);
-        var nextHistory = await Quests.HistoryAsync(questId, moderation, lifetime.Token);
-        if (requestVersion != navigationVersion || lifetime.IsCancellationRequested)
+        var next = await Quests.GetAsync(questId, moderation, cancellationToken);
+        if (requestVersion != navigationVersion || cancellationToken.IsCancellationRequested)
+            return;
+        var nextHistory = await Quests.HistoryAsync(questId, moderation, cancellationToken);
+        if (requestVersion != navigationVersion || cancellationToken.IsCancellationRequested)
             return;
         detail = next;
         history = nextHistory;
@@ -86,7 +94,7 @@ public partial class QuestDetails : IAsyncDisposable
     private Task ParticipateAsync(ParticipationCommand command) => !Experience.CanUseOnlineActions || !RendererInfo.IsInteractive || busy || conflict
         ? Task.CompletedTask : RunAsync(async () =>
     {
-        await Quests.ParticipateAsync(Id, command, lifetime.Token);
+        await Quests.ParticipateAsync(Id, command, cancellationToken);
         await RefreshAsync();
         message = "Participation saved. Applicable delivery is queued, not guaranteed to have arrived.";
     });
@@ -97,7 +105,7 @@ public partial class QuestDetails : IAsyncDisposable
         if (detail is null)
             return;
         var version = detail.Summary.Version;
-        var token = lifetime.Token;
+        var token = cancellationToken;
         switch (request.Action)
         {
             case "publish":
@@ -136,8 +144,8 @@ public partial class QuestDetails : IAsyncDisposable
             return;
         var requestVersion = navigationVersion;
         var eventId = detail.Summary.EventId;
-        var result = await Events.ListMembersAsync(eventId, new PageRequest(memberPage), lifetime.Token);
-        if (requestVersion != navigationVersion || lifetime.IsCancellationRequested)
+        var result = await Events.ListMembersAsync(eventId, new PageRequest(memberPage), cancellationToken);
+        if (requestVersion != navigationVersion || cancellationToken.IsCancellationRequested)
             return;
         members = result.Items.Where(m => m.Status == MembershipStatus.Active).Select(m => m.User).ToArray();
         moreMembers = memberPage * 25 < result.TotalCount;
@@ -145,12 +153,14 @@ public partial class QuestDetails : IAsyncDisposable
 
     private async Task RunAsync(Func<Task> action)
     {
+        if (disposed)
+            return;
         var requestVersion = navigationVersion;
         busy = true;
         error = null;
         message = null;
         try { await action(); }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (DomainException failure) when (requestVersion == navigationVersion)
         {
             error = failure.Message;
@@ -182,6 +192,10 @@ public partial class QuestDetails : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (disposed)
+            return;
+        disposed = true;
+        navigationVersion++;
         if (experience is not null)
             await experience.DisposeAsync();
         await lifetime.CancelAsync();

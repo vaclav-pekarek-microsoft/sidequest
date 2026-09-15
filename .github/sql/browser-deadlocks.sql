@@ -15,8 +15,9 @@ DECLARE @buffer xml = (
 IF @buffer IS NULL
     THROW 50000, 'The system_health ring buffer is unavailable for diagnostics.', 1;
 
-SELECT @buffer.query('<deadlocks>{
+SELECT @buffer.query('<deadlocks reports="{count(/RingBufferTarget/event[@name="xml_deadlock_report"])}" truncated="{/RingBufferTarget/@truncated}">{
     /RingBufferTarget/event[@name="xml_deadlock_report"]/data/value/deadlock[
         resource-list/*/@dbid = sql:variable("@databaseId")
+        or process-list/process/@currentdb = sql:variable("@databaseId")
     ]
 }</deadlocks>');

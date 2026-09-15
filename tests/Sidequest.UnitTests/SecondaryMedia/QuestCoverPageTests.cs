@@ -2,6 +2,7 @@ using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
@@ -239,6 +240,32 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
     }
 
+    /// <summary>A detail query finishing after disposal cannot request history, publish protected state, or report a disposed cancellation source as a failure.</summary>
+    /// <returns>A task completing after an uncancellable late result is rejected and repeated disposal remains safe.</returns>
+    [Fact]
+    public async Task DetailReadCompletingAfterDisposal_DoesNotStartHistoryOrLogAnError()
+    {
+        var logger = new DetailLogger();
+        Services.AddSingleton<ILogger<QuestDetails>>(logger);
+        SetRendererInfo(new("Server", true));
+        var page = Render<QuestDetails>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        Assert.Equal(1, quests.HistoryReads);
+        CancellationToken observedToken = default;
+        quests.Read = async token =>
+        {
+            observedToken = token;
+            await page.Instance.DisposeAsync();
+            return quests.Detail;
+        };
+        await experience.ReportConnectionAsync(false, null);
+        await experience.ReportConnectionAsync(true, null);
+        await page.Instance.DisposeAsync();
+        Assert.True(observedToken.IsCancellationRequested);
+        Assert.Equal(2, quests.Reads);
+        Assert.Equal(1, quests.HistoryReads);
+        Assert.Equal(0, logger.Errors);
+    }
+
     /// <summary>Prerendered pages never expose an enabled file input or text submit.</summary>
     [Fact]
     public void Prerender_DisablesBothEditors()
@@ -259,6 +286,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         Assert.Equal(Guid.Empty, page.FindComponent<CoverEditor>().Instance.QuestId);
         Assert.True(page.Find("input[type=file]").HasAttribute("disabled"));
         Assert.Contains("Save your draft before adding a cover.", page.Markup);
+        Assert.Empty(page.FindComponents<InputFile>());
     }
 
     /// <summary>Cards and details preserve the explicit moderation flag when displaying the authorized cover.</summary>
@@ -289,6 +317,22 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         }
     }
 
+    private sealed class DetailLogger : ILogger<QuestDetails>
+    {
+        internal int Errors { get; private set; }
+        /// <inheritdoc />
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        /// <inheritdoc />
+        public bool IsEnabled(LogLevel logLevel) => true;
+        /// <inheritdoc />
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Error)
+                Errors++;
+        }
+    }
+
     private sealed class QuestStub : IQuestService
     {
         internal QuestDetail Detail { get; set; } = new(new(Guid.NewGuid(), EventStub.Id, "Parent Event", "Original title sentinel", "Room",
@@ -296,6 +340,8 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
             "Europe/Prague", QuestStatus.Draft, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, true, false,
             "AAAAAAAAAAE=", Guid.NewGuid()), "Protected description sentinel", "", [], [], [], []);
         internal int Reads { get; private set; }
+        internal int HistoryReads { get; private set; }
+        internal Func<CancellationToken, Task<QuestDetail>>? Read { get; set; }
         internal List<(Guid Id, string Version, QuestInput Input)> Edits { get; } = [];
         internal List<(Guid Id, ParticipationCommand Command)> Participations { get; } = [];
         /// <inheritdoc />
@@ -303,7 +349,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         {
             Assert.Equal(Detail.Summary.Id, id);
             Reads++;
-            return Task.FromResult(Detail);
+            return Read?.Invoke(cancellationToken) ?? Task.FromResult(Detail);
         }
         /// <inheritdoc />
         public Task EditAsync(Guid id, string version, QuestInput input, CancellationToken cancellationToken = default)
@@ -312,7 +358,11 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
             return Task.CompletedTask;
         }
         /// <inheritdoc />
-        public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<QuestHistoryItem>>([]);
+        public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default)
+        {
+            HistoryReads++;
+            return Task.FromResult<IReadOnlyList<QuestHistoryItem>>([]);
+        }
         /// <inheritdoc />
         public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />

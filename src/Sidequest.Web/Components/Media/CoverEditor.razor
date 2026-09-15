@@ -11,7 +11,7 @@
     {
         <p>Save your draft before adding a cover.</p>
     }
-    @if (RendererInfo.IsInteractive)
+    @if (RendererInfo.IsInteractive && QuestId != Guid.Empty)
     {
         <label>
             Upload cover
@@ -22,7 +22,10 @@
     else
     {
         <label>Upload cover <input type="file" disabled aria-describedby="@helpId" /></label>
-        <p>Connecting to enable cover changes…</p>
+        @if (!RendererInfo.IsInteractive)
+        {
+            <p>Connecting to enable cover changes…</p>
+        }
     }
     <button type="button" disabled="@(Disabled || AssetId is null)" @onclick="RemoveAsync">Remove cover</button>
     @if (busy)

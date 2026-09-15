@@ -30,6 +30,7 @@ public sealed class CoverComponentTests : BunitContext
             .Add(x => x.AssetId, Guid.NewGuid()).Add(x => x.IsBusy, busy));
         Assert.Equal(!interactive || !persisted || busy, component.Find("input[type=file]").HasAttribute("disabled"));
         Assert.Equal(!interactive || !persisted || busy, component.Find("button").HasAttribute("disabled"));
+        Assert.Equal(interactive && persisted ? 1 : 0, component.FindComponents<InputFile>().Count);
         Assert.Equal("Cover for Kayak outing", component.Find("img").GetAttribute("alt"));
     }
 
@@ -98,6 +99,31 @@ public sealed class CoverComponentTests : BunitContext
         Assert.Equal($"media/covers/{id:D}?moderation=true", cover.Find("img").GetAttribute("src"));
         Assert.Equal("Cover for Board games", cover.Find("img").GetAttribute("alt"));
         Assert.DoesNotContain("blob", cover.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Parent disposal during the busy callback cancels before opening the file or calling storage, without accessing a disposed source.</summary>
+    /// <returns>A task completing after the real upload callback safely observes disposal.</returns>
+    [Fact]
+    public async Task DisposalDuringBusyCallback_DoesNotOpenFileOrStartProviderWork()
+    {
+        var service = new MediaStub();
+        Services.AddSingleton<IMediaService>(service);
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new("Server", true));
+        var component = Render<CoverEditor>(p => p.Add(x => x.QuestId, Guid.NewGuid())
+            .Add(x => x.Version, "version").Add(x => x.QuestTitle, "Pending cover"));
+        component.Render(p => p.Add(x => x.BusyChanged, async value =>
+        {
+            if (value)
+                await component.Instance.DisposeAsync();
+        }));
+        var file = new BrowserImage();
+        await component.InvokeAsync(() => component.FindComponent<InputFile>().Instance.OnChange
+            .InvokeAsync(new InputFileChangeEventArgs([file])));
+        Assert.Equal(0, file.Limit);
+        Assert.Equal(Guid.Empty, service.Call.Quest);
+        Assert.False(service.Entered.Task.IsCompleted);
+        Assert.DoesNotContain("Cover updated.", component.Markup);
     }
 
     /// <summary>Pending uploads disable re-entry and announce progress; disposal cancels provider work without a success callback.</summary>

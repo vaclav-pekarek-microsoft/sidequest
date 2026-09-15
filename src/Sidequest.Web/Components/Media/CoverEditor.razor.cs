@@ -9,6 +9,7 @@ namespace Sidequest.Web.Components.Media;
 public partial class CoverEditor : IAsyncDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
+    private CancellationToken cancellationToken;
     private readonly string helpId = $"cover-help-{Guid.NewGuid():N}";
     private bool busy;
     private bool disposed;
@@ -48,6 +49,9 @@ public partial class CoverEditor : IAsyncDisposable
     [Parameter] public EventCallback ConflictDetected { get; set; }
 
     /// <inheritdoc />
+    protected override void OnInitialized() => cancellationToken = lifetime.Token;
+
+    /// <inheritdoc />
     protected override void OnParametersSet()
     {
         if (displayedQuest != QuestId)
@@ -69,8 +73,9 @@ public partial class CoverEditor : IAsyncDisposable
         {
             if (args.FileCount != 1)
                 throw new DomainException(ErrorCode.Validation, "Choose one cover image.");
-            await using var stream = args.File.OpenReadStream(2_097_152, lifetime.Token);
-            return await Media.UploadCoverAsync(quest, version, stream, lifetime.Token);
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var stream = args.File.OpenReadStream(2_097_152, cancellationToken);
+            return await Media.UploadCoverAsync(quest, version, stream, cancellationToken);
         });
     }
 
@@ -80,7 +85,7 @@ public partial class CoverEditor : IAsyncDisposable
             return;
         var quest = QuestId;
         var version = Version;
-        await ChangeAsync(() => Media.RemoveCoverAsync(quest, version, lifetime.Token));
+        await ChangeAsync(() => Media.RemoveCoverAsync(quest, version, cancellationToken));
     }
 
     private async Task ChangeAsync(Func<Task<CoverUpdate>> change)
@@ -92,6 +97,7 @@ public partial class CoverEditor : IAsyncDisposable
         try
         {
             await BusyChanged.InvokeAsync(true);
+            cancellationToken.ThrowIfCancellationRequested();
             var result = await change();
             if (!disposed && QuestId == target)
             {

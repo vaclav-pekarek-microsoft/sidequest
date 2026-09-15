@@ -104,6 +104,8 @@ public abstract class EventViewBase : ComponentBase, IAsyncDisposable
         }
         catch (DomainException error)
         {
+            if (error.Code == ErrorCode.Conflict)
+                Logger.LogInformation("Event UI conflict in {Component}. Origin: {Origin}", GetType().Name, error.StackTrace);
             AccessDenied = error.Code is ErrorCode.Forbidden or ErrorCode.NotFound;
             if (AccessDenied)
                 ClearProtectedState();

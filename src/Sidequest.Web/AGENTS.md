@@ -47,6 +47,9 @@ shadow input disabled after the fieldset becomes enabled.
 - Administration navigation is available to authenticated users, but each screen
   and operation rechecks the persisted administrator assignment. Neither a visible
   link nor an Entra admission role grants administration or private resource access.
+- Do not instantiate `InputFile` for an unsaved Quest; use an inert disabled input
+  until a persisted draft can accept uploads. Retain cancellation tokens across
+  awaits and reject late query results before starting dependent work after disposal.
 
 ## Production / real Entra configuration
 Default mode is Entra; invalid or absent configuration fails startup. There is no fallback.
