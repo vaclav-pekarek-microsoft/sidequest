@@ -103,6 +103,27 @@ public sealed class QuestComponentTests : BunitContext
         Assert.Contains("no participant counts or rosters", component.Markup);
     }
 
+    /// <summary>Input events update the reason before confirmation, without relying on a later blur/change event.</summary>
+    /// <returns>A task completing after the confirmed callback carries the exact reason entered before a busy transition.</returns>
+    [Fact]
+    public async Task Management_InputReasonIsCapturedBeforeConfirmationWithoutBlur()
+    {
+        var requests = new List<QuestActionRequest>();
+        var detail = new QuestDetail(Summary(), "Description", "", [], null, null, null);
+        var component = Render<QuestManagement>(p => p.Add(c => c.Detail, detail)
+            .Add(c => c.Moderation, true).Add(c => c.Execute, request => requests.Add(request)));
+        component.Find("fluent-text-area").Input("Browser acceptance action.");
+        component.Render(p => p.Add(c => c.Busy, true));
+        component.Render(p => p.Add(c => c.Busy, false));
+        component.Find("input[type=checkbox]").Change(true);
+        await component.InvokeAsync(() => component.FindComponent<FluentButton>().Instance.OnClick.InvokeAsync());
+
+        var request = Assert.Single(requests);
+        Assert.Equal("suspend", request.Action);
+        Assert.Null(request.UserId);
+        Assert.Equal("Browser acceptance action.", request.Reason);
+    }
+
     /// <summary>The draft editor validates a short title, never mutates parent input, and disables visibility changes when published.</summary>
     /// <returns>Completion after real Fluent binding and form submission.</returns>
     [Fact]

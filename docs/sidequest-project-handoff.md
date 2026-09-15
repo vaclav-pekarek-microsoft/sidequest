@@ -1991,6 +1991,26 @@ SQL/Blob restore evidence, operational-owner assignment or production deployment
 M4 must still establish those release requirements; bounded provisioning conflicts
 are reported, not claimed to have been eliminated.
 
+M4 implementation now includes a disabled Azure infrastructure baseline, offline
+deployment-parameter preflight, opt-in managed-identity encrypted Data Protection,
+privacy-scoped operational metric export, migration-history-aware readiness and
+sequential queue sampling. Operational SQL remains in Infrastructure behind focused
+Application contracts. Missing, failed and stale observations are unavailable, not
+healthy zero backlogs. The preflight emits disabled-only ARM parameters and is not
+deployment authorization or proof of real identities/network suitability.
+
+The monitoring-enabled host passed
+[CI 34978801478](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978801478):
+1,922 unit, 1,032 real-SQL and 97 browser-project cases, all executed and passed.
+This includes a controlled Quest-reason input journey with the later Fluent change
+event withheld; reason capture no longer depends on that event. The offline preflight
+also passed its 29 cases in
+[infrastructure CI 34978440069](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978440069).
+These are bounded implementation results, not completion of M4: approval-gated OIDC
+deployment, private-runner SQL bootstrap/migrations, remaining operational signals
+and alerts, live provider/identity/device checks, measured load and actual recovery
+evidence remain unfinished. No Azure resources or deployment approvals were created.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
@@ -2236,6 +2256,7 @@ not V1 release requirements.
 | D36 | 2026-09-14 | Implementation is authorized. Automatically merge verified PRs when configured review/CI requirements pass, while retaining PR-only changes and the vaclav-pekarek-microsoft identity. M1 foundation begins before parallel feature work; external approval gates still apply. |
 | D37 | 2026-09-14 | C# implementation must follow good engineering standards, including pragmatic SOLID. All public classes/types and members, methods, properties, constructors, fields, and enum values require proper XML documentation; enforce missing-documentation failures in builds and review semantic quality before merging. |
 | D38 | 2026-09-14 | Adopt PlagueHO/github-copilot-assets-library's csharp-best-practices.instructions.md as the C# baseline for all development agents, pinned at commit ea4125167b98053f083cffcc79883221f872da30. Record its application in repository instructions and EditorConfig; retain D37's public XML documentation requirement and apply the baseline before foundation integration. |
+| D39 | 2026-09-15 | Use standard GitHub environment reviews for Azure planning, with deployment-owner manual verification of administrator-bypass controls before planning is enabled. Supported API checks do not prove that bypass is disabled or distinguish every bypass from an ordinary approval. A manual-verification acknowledgement is a trusted operator assertion, not API evidence. Planning remains disabled by default, main-source-bound and environment-reviewed; relevant protection/identity changes require disabling planning and reverification. This accepts the approval model only: it does not verify current settings, assign an owner, create an identity/environment, authorize cloud access, deploy resources or enable the application. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2259,6 +2280,7 @@ implementation in this documentation session.
 | Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |
 | Azure subscription, region, budget, deploy identity, operational owner | Infrastructure provisioning | Approved hosting and access configuration |
+| GitHub Azure-planning environment protections and administrator controls | Before enabling any live Azure planning | Deployment-owner verification of required reviewers, self-review prevention, main-only branch restrictions and disabled administrator bypass; explicit owner-controlled acknowledgement under D39, repeated after relevant protection/identity changes |
 | Email provider/domain, organizer mailbox identity, test recipients | Live notification/calendar integration | Verified sender and Outlook delivery/update/cancellation smoke-test results |
 | Retention, residency, employee-data/device access and recovery targets | Before production data | Organizational approval including offline joined/private Quest basics, shared-device disclosure, and documented cleanup/restore procedure |
 

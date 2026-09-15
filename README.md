@@ -70,6 +70,20 @@ fails directory operations explicitly without preventing existing Event access.
 Calendar downloads require a configured organizer. CI uses a reserved synthetic organizer
 address solely for local calendar rendering, with no ACS credentials or live email calls.
 
+Explicit `Hosting:Azure:Enabled=true` selects managed-identity Blob/Key Vault Data
+Protection and metrics-only Azure Monitor export. It requires non-Development Entra
+hosting, stable key-ring settings, an Application Insights connection string and
+the process-level SDK diagnostic opt-outs described in the infrastructure guide.
+The default synthetic host never opts in. The [M4 infrastructure draft](infra/README.md)
+documents these settings and its remaining deployment/approval gates; no cloud
+resources are created by registering services or running the offline checks.
+
+Readiness also verifies applied SQL migration history; migrations remain a separate
+authorized deployment step. Optional `Operations:Monitoring:Enabled=true` collects
+aggregate queue observations without provider calls or writes. Failed, missing and
+stale samples are unavailable, not healthy zero backlogs; see the infrastructure
+guide before configuring alerts.
+
 ## Verification
 
 ```powershell
