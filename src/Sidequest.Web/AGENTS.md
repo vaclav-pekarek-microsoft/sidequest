@@ -18,6 +18,9 @@ arbitrary client delays or retrying mutations to hide this handoff.
 Bind Fluent input components' `Disabled` parameters explicitly as well as their
 native fieldset. Fieldset-only transitions can leave the web component and its
 shadow input disabled after the fieldset becomes enabled.
+Quest management reasons bind on input with no debounce, before confirmation can
+dispatch a command. Do not depend solely on a later Fluent blur/change event to
+capture required reasons; server validation still applies.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.
@@ -146,10 +149,24 @@ passed all seven M1 browser journeys: four persona sign-ins with exact Fluent di
 content, unauthenticated redirect, 360px keyboard/no-overflow interaction, and logout.
 These historical compatibility checks do not establish full release acceptance
 or real-Entra verification.
-`/health/live` is anonymous process liveness; `/health/ready` returns SQL availability
-only, not migration readiness. Both expose status only. HTTP exception responses use
+`/health/live` is anonymous process liveness; `/health/ready` checks SQL access and
+ordered applied migration history against the nonempty compiled migration set.
+Missing, pending or unknown migrations are unready; this does not detect manual
+schema damage hidden behind intact history. Always register operational persistence
+adapters, even when optional monitoring is disabled. Web health/sampling depends on
+Application operational ports; SQL commands, migration metadata and provider failure
+classification belong in Infrastructure. No startup migrations or provider probes
+are permitted. Both health endpoints expose status only. HTTP exception responses use
 a safe HTML page or generic problem details with correlation IDs; never display exception
 messages or secrets.
+
+`Operations:Monitoring:Enabled` explicitly enables sequential queue sampling, using
+a fresh scope/context per attempt. The interval defaults to 30 seconds (5–300 seconds);
+an observation becomes stale only after twice the interval. Export only aggregate
+queue gauges from `Sidequest.Operations`, never payloads or identifiers. Interpret
+backlogs only with availability/staleness: failures and stale/missing samples are
+not healthy zero queues. Queue age does not measure delivery latency or reminder
+business deadlines. See `infra\README.md` for alert and deployment boundaries.
 
 From the repository root:
 ```

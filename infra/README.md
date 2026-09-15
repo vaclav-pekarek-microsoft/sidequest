@@ -2,8 +2,8 @@
 
 **M4 draft, not deployment-ready.** `main.bicep` compiles and its compiled ARM
 contracts are checked without an Azure login. Azure-hosted Data Protection and
-metrics-only managed-identity export are wired behind explicit opt-in. Queue
-sampling composition, provider settings, SQL identity/migration bootstrap and the
+metrics-only managed-identity export and queue sampling are wired behind explicit
+opt-in. Provider settings, SQL identity/migration bootstrap and the
 approval-gated OIDC deployment workflow remain unfinished. Do not enable or deploy
 this draft as a release.
 
@@ -58,7 +58,7 @@ not SAS or a developer credential chain. Native HTTPS endpoints without
 credentials, query strings or fragments are required. Denied storage or wrapping
 does not fall back to local/plaintext keys.
 
-The monitoring flag is intended to enable the release sampler once composed.
+The monitoring flag enables the release sampler with a default 30-second interval.
 The managed-identity-authenticated metrics exporter subscribes only to
 `Sidequest.Operations`, retaining only the fixed `queue` dimension. It does not automatically
 export traces, application logs, SQL statements or request headers, and disables
@@ -80,6 +80,43 @@ application isolation, encrypted stored XML and fail-closed behavior are exercis
 These are not live Blob/Key Vault permission or recovery evidence. Hosting pins
 Azure Data Protection Blobs 1.5.4, Keys 1.6.4, Azure Identity 1.21.0 and Azure Monitor
 Exporter 1.9.0 (MIT), plus OpenTelemetry.Extensions.Hosting 1.18.0 (Apache-2.0).
+
+## Readiness and queue observations
+
+Operational persistence adapters are always registered, including when monitoring
+is disabled. `/health/ready` checks SQL access and ordered applied migration history
+against the compiled migration set. Missing, pending, unknown or absent compiled
+migrations are unready. This is not a manual schema-drift auditor, and never applies
+migrations. `/health/live` remains process-only; both endpoints expose status only.
+Neither probe calls Graph, Blob or email providers.
+
+`Operations:Monitoring:Enabled` defaults false. Enabled sampling uses a fresh scope
+and SQL context per sequential attempt. `Operations:Monitoring:SampleInterval`
+defaults to `00:00:30`, accepts 5–300 seconds, and is fixed until restart. The first
+attempt is immediate; later delays begin after completion. SQL command timeout is
+five seconds; opening retains the configured connection timeout and cancellation.
+
+Each queue (`outbox`, `scheduled`, `delivery`) emits `sidequest.queue.` gauges:
+`pending`, `due`, `dead_letter`, `oldest_due_age`, `observation_available`,
+`observation_stale`, and `observation_age`. Counts are work items; ages are seconds.
+Due work includes eligible Pending rows and expired Processing leases with fewer
+than eight attempts. Reads do not claim work or make an atomic cross-queue snapshot.
+
+Alert/dashboard requirements, not yet deployed alert rules:
+
+- Gate backlog interpretation on `observation_available=1` and
+  `observation_stale=0`. Staleness begins only after twice the interval.
+- Missing observations, disabled sampling, exporter failures and stale/failed
+  attempts are unavailable, not healthy zeros. Backlog gauges are absent then;
+  actual empty queues yield zero counts and no oldest-due-age point.
+- Observation age continues since the last success through failures. Never carry
+  forward an old backlog as a current healthy sample or sum copies across instances.
+- Oldest-due age is frozen at the sample cutoff, not mailbox arrival, completed
+  delivery latency or a reminder business deadline. It does not establish the
+  two-minute release targets.
+
+Application latency, authorization/error signals, Graph throttling, image failures,
+email rejections and live alert delivery still require release work and evidence.
 
 ## Recovery and cost boundaries
 

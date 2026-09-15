@@ -78,6 +78,12 @@ The default synthetic host never opts in. The [M4 infrastructure draft](infra/RE
 documents these settings and its remaining deployment/approval gates; no cloud
 resources are created by registering services or running the offline checks.
 
+Readiness also verifies applied SQL migration history; migrations remain a separate
+authorized deployment step. Optional `Operations:Monitoring:Enabled=true` collects
+aggregate queue observations without provider calls or writes. Failed, missing and
+stale samples are unavailable, not healthy zero backlogs; see the infrastructure
+guide before configuring alerts.
+
 ## Verification
 
 ```powershell
