@@ -121,6 +121,9 @@ Mutations acquire the parent Event lock first inside an explicit Serializable
 transaction; SQL-specific locking stays behind the persistence port. SQL deadlocks
 surface as safe conflicts, not automatic retries of partially executed commands.
 Cancelled unpublished Quests remain owner-only even after archival.
+Ordinary Quest-owner authorization short-circuits the history lookup it does not
+need, avoiding history-range locks during independent lifecycle writes. Moderation
+and nonowner access still check retained unpublished-cancellation history.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes

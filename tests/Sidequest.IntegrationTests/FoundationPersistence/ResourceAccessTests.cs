@@ -1,4 +1,7 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Security;
 using Sidequest.Domain.Model;
@@ -15,6 +18,39 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
     private const string SignIn = "Sign in to continue.";
     private static readonly QuestStatus[] Published =
         [QuestStatus.Active, QuestStatus.Suspended, QuestStatus.Completed, QuestStatus.Cancelled, QuestStatus.Archived];
+
+    /// <summary>Ordinary Quest-owner authorization does not read irrelevant history ranges that can deadlock independent publications.</summary>
+    /// <param name="ownerOnly">Whether the caller also explicitly requires ownership for a mutation.</param>
+    /// <returns>A task completing after successful locked owner authorization and proof that a real competing history lock remains held.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QuestOwnerAuthorization_DoesNotAcquireIrrelevantHistoryRangeLocks(bool ownerOnly)
+    {
+        var seed = await FoundationSeed.CreateAsync(database);
+        await GrantAsync(seed, eventOwner: true, questOwner: true);
+        await ConfigureAsync(seed, status: QuestStatus.Draft);
+        await using var blocker = database.CreateContext();
+        await using var blockedHistory = await blocker.BeginTransactionAsync();
+        await blocker.Database.ExecuteSqlRawAsync("SELECT COUNT_BIG(*) FROM [QuestStatusHistory] WITH (TABLOCKX, HOLDLOCK)");
+
+        await using var db = database.CreateContext();
+        await using var transaction = await db.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET LOCK_TIMEOUT 1000");
+        await db.LockEventAsync(seed.Event.Id);
+        var result = await new ResourceAccess(StubCurrentUser.For(seed.User))
+            .RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly);
+        Assert.Equal(seed.Quest.Id, result.Id);
+        Assert.Equal(QuestStatus.Draft, result.Status);
+        Assert.Equal("Private quest details", result.Description);
+        Assert.Equal(IsolationLevel.Serializable, transaction.GetDbTransaction().IsolationLevel);
+        Assert.False(db.ChangeTracker.HasChanges());
+        await using var control = db.Database.GetDbConnection().CreateCommand();
+        control.Transaction = transaction.GetDbTransaction();
+        control.CommandText = "SELECT COUNT_BIG(*) FROM [QuestStatusHistory]";
+        var blocked = await Assert.ThrowsAsync<SqlException>(() => control.ExecuteScalarAsync());
+        Assert.Equal(1222, blocked.Number);
+    }
 
     /// <summary>Checks that changed contact fields cannot replace tenant/object identity or its existing resource grants.</summary>
     /// <returns>A task completing after identity re-resolution, exact account/resource assertions, and no-write checks.</returns>
