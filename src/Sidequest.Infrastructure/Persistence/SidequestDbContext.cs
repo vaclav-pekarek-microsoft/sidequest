@@ -234,7 +234,7 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     private void EnsureHistoryIsImmutable()
     {
         if (ChangeTracker.Entries().Any(x =>
-            (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory) &&
+            (x.Entity is AuditEntry or Domain.Model.EventStatusHistory or Domain.Model.QuestStatusHistory or NotificationTemplate) &&
             (x.State is EntityState.Modified or EntityState.Deleted)))
         {
             throw new DomainException(ErrorCode.Conflict, "History records are immutable.");
