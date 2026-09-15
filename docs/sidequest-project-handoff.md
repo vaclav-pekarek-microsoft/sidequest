@@ -2057,7 +2057,12 @@ accepted deletion workflow. Such intent must survive deletion of the Quest and a
 metadata, rather than relying on foreign keys or later lookup of a removed Blob key.
 Cleanup never removes a currently attached cover or implements unapproved retention
 of ready historical assets. The cleanup handler is added to startup verification only
-when the feature is composed.
+when the feature is composed. The integration owner then registers
+`WorkHandlerRequirements(RequireMediaCleanup: true)` alongside the Media handler:
+startup requires exactly one of all six handlers. Core-only composition still
+requires its original five and rejects an undeclared Media handler; declaring Media
+without its handler also fails before polling. Validation resolves and disposes an
+isolated scope without executing work.
 
 The media implementation dependency baseline is Azure.Storage.Blobs 12.29.2 and
 SkiaSharp 4.152.0 with matching SkiaSharp.NativeAssets.Linux.NoDependencies 4.152.0;
