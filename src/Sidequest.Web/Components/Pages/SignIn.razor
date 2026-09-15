@@ -15,7 +15,7 @@
 {
     <h2>Synthetic development personas</h2>
     <p>Loopback only. These are not real employees. Local SQL and the foundation schema must be available.</p>
-    <form method="post" action="/auth/development" data-enhance="false">
+    <form method="post" action="/auth/development" data-enhance="false" data-authentication-change>
         <AntiforgeryToken />
         <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
         <label for="persona">Test persona</label>
@@ -32,7 +32,7 @@
 else
 {
     <p>Use your assigned workforce account. Guest accounts are excluded by the organization's approved workforce assignment policy.</p>
-    <a href="@($"/auth/login?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}")" data-enhance-nav="false">
+    <a href="@($"/auth/login?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}")" data-enhance-nav="false" data-authentication-change>
         Continue with Microsoft Entra
     </a>
 }

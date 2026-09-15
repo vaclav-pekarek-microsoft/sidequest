@@ -1,0 +1,3 @@
+article { border: 1px solid #748c84; border-radius: .5rem; padding: 1rem; margin-block: 1rem; overflow-wrap: anywhere; }
+h3 { font-size: 1.2rem; margin-top: 0; }
+a:focus-visible { outline: 3px solid #875900; outline-offset: 3px; }
