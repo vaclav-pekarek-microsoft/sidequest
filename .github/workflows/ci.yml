@@ -44,7 +44,7 @@ jobs:
       - run: dotnet restore Sidequest.slnx
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
       - name: Check offline and authentication lifecycle JavaScript
-        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs
+        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs
       - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
       - name: Install browser test runtime
@@ -103,7 +103,7 @@ jobs:
         run: |
           docker exec -i sidequest-test-sql bash -c '
             export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
-            exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -h -1 -y 0
+            exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -y 0
           ' < .github/sql/browser-deadlocks.sql > "$RUNNER_TEMP/sidequest-deadlocks.xml"
       - name: Upload test evidence
         if: always()
