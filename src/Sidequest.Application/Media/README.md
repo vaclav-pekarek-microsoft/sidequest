@@ -32,6 +32,13 @@ provider responses fail explicitly. Known operator-required failures retain the
 transient failures retain queue-controlled retries. No configured provider means
 no simulated upload success.
 
+After the SDK retry budget is exhausted, valid final-response `Retry-After`
+seconds/HTTP dates or Azure `x-ms-retry-after-ms` guidance survives into durable
+scheduling. HTTP dates use the injected UTC clock. The queue takes the greater
+of its ordinary backoff and the provider window; windows beyond 24 hours require
+manual recovery instead of an early automatic retry. Raw provider details are
+not persisted with this timing metadata.
+
 ## Validation and resource bounds
 
 Input must actually decode as a nonanimated JPEG, PNG, or WebP, with at most
