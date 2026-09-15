@@ -3,7 +3,7 @@ namespace Sidequest.Web.Experience;
 /// <summary>Per-circuit coordination only; browser connectivity is a UX hint and never replaces resource authorization.</summary>
 public sealed class ExperienceCoordinator
 {
-    /// <summary>Whether the browser last reported a connected circuit and network; false until the interactive bridge is ready.</summary>
+    /// <summary>Whether the browser confirmed connectivity after the latest transport transition; false until the interactive bridge is ready.</summary>
     public bool CanUseOnlineActions { get; private set; }
     /// <summary>The browser's actual IANA time zone, or null when unavailable; never an editable Quest zone.</summary>
     public string? BrowserTimeZone { get; private set; }
@@ -13,6 +13,9 @@ public sealed class ExperienceCoordinator
     public event Func<Task>? ReauthorizationRequested;
     /// <summary>Awaited callbacks asking the browser to refresh from the cookie-authorized full Joined HTTP query.</summary>
     public event Func<Task>? SnapshotRefreshRequested;
+
+    /// <summary>Invalidates readiness without invoking subscribers that could await client interop inside a transport handshake.</summary>
+    internal void SuspendForTransport() => CanUseOnlineActions = false;
 
     /// <summary>Updates circuit UX and reauthorizes on a false-to-true connection transition.</summary>
     /// <param name="connected">The browser's combined network and circuit hint.</param>

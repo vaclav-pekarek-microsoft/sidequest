@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Sidequest.Application.Experience;
 using Sidequest.Web.Experience;
 
@@ -13,6 +14,7 @@ public static class ExperienceRegistration
     {
         services.AddScoped<DashboardService>();
         services.AddScoped<ExperienceCoordinator>();
+        services.AddScoped<CircuitHandler, ExperienceCircuitHandler>();
         services.AddDataProtection();
         services.AddSingleton<ExperienceSessionBinding>();
         return services;
