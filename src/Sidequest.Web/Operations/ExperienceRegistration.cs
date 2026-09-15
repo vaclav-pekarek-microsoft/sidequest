@@ -13,6 +13,8 @@ public static class ExperienceRegistration
     {
         services.AddScoped<DashboardService>();
         services.AddScoped<ExperienceCoordinator>();
+        services.AddDataProtection();
+        services.AddSingleton<ExperienceSessionBinding>();
         return services;
     }
 }

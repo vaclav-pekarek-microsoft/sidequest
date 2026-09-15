@@ -2,6 +2,7 @@ using System.Collections;
 using System.Data;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Sidequest.Application.Abstractions;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
+using Sidequest.Infrastructure.Persistence;
 using Sidequest.Web.Authentication;
 
 namespace Sidequest.UnitTests.FoundationWeb;
@@ -17,6 +19,86 @@ namespace Sidequest.UnitTests.FoundationWeb;
 /// <remarks>Each test owns its mutable recorders. The recorders expect sequential provisioning attempts and are not shared across threads.</remarks>
 public sealed class ProvisioningRetryTests
 {
+    /// <summary>Overlapping sign-ins preserve the committed account identity when a losing first insert or existing-account update retries a normalized or EF-wrapped conflict.</summary>
+    /// <param name="firstSignIn">Whether both initial lookups precede first provisioning rather than read an existing account.</param>
+    /// <param name="wrapped">Whether EF preserves the normalized conflict inside its update exception.</param>
+    /// <returns>Completion after a controlled winning commit, fresh losing retry, exact identity/contact checks and disposal of all contexts.</returns>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public async Task ConcurrentSignInsRetryConflictAndKeepCommittedIdentity(bool firstSignIn, bool wrapped)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var winnerEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loserEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWinner = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLoser = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var winnerUser = EligibleUser();
+        var loserUser = EligibleUser();
+        loserUser.Id = winnerUser.Id;
+        var winner = new ProvisioningContext(firstSignIn ? null : winnerUser, beforeSave: token =>
+        {
+            winnerEntered.TrySetResult();
+            return releaseWinner.Task.WaitAsync(token);
+        });
+        var loser = new ProvisioningContext(firstSignIn ? null : loserUser, Conflict(wrapped), token =>
+        {
+            loserEntered.TrySetResult();
+            return releaseLoser.Task.WaitAsync(token);
+        });
+        var reloaded = EligibleUser();
+        var retry = new ProvisioningContext(reloaded);
+        var winnerFactory = new ContextSequence(winner);
+        var loserFactory = new ContextSequence(loser, retry);
+        var winningSignIn = Accounts(winnerFactory).ProvisionAsync(
+            DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), deadline.Token);
+        var losingSignIn = Accounts(loserFactory).ProvisionAsync(
+            DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), deadline.Token);
+        try
+        {
+            await Task.WhenAll(winnerEntered.Task, loserEntered.Task).WaitAsync(deadline.Token);
+            Assert.Equal(0, winner.Transaction.Commits);
+            Assert.Equal(0, loser.Transaction.Commits);
+            releaseWinner.TrySetResult();
+            await winningSignIn;
+            reloaded.Id = winner.User.Id;
+            releaseLoser.TrySetResult();
+            await losingSignIn;
+        }
+        finally
+        {
+            releaseWinner.TrySetResult();
+            releaseLoser.TrySetResult();
+            await Task.WhenAll(winningSignIn, losingSignIn);
+        }
+
+        Assert.Single(winnerFactory.Created);
+        Assert.Equal(2, loserFactory.Created.Count);
+        Assert.Equal(1, winner.Transaction.Commits);
+        Assert.Equal(0, loser.Transaction.Commits);
+        Assert.Equal(1, retry.Transaction.Commits);
+        Assert.Equal(winner.User.Id, retry.User.Id);
+        Assert.Equal(firstSignIn ? 1 : 0, winner.AddedUsers);
+        Assert.Equal(firstSignIn ? 1 : 0, loser.AddedUsers);
+        Assert.Equal(0, retry.AddedUsers);
+        if (firstSignIn) Assert.NotEqual(loser.User.Id, retry.User.Id);
+        Assert.All(new[] { winner, loser, retry }, context =>
+        {
+            Assert.Equal(DevelopmentPersonas.TenantId, context.User.TenantId);
+            Assert.Equal(DevelopmentPersonas.All[1].ObjectId, context.User.ObjectId);
+            Assert.Equal("Alice", context.User.DisplayName);
+            Assert.Equal("alice@sample.invalid", context.User.Email);
+            Assert.True(context.User.IsEligible);
+            Assert.NotNull(context.User.LastSignedInUtc);
+            Assert.Equal(IsolationLevel.Serializable, context.Isolation);
+            Assert.Equal(1, context.SaveCalls);
+            Assert.True(context.Disposed);
+            Assert.True(context.Transaction.Disposed);
+        });
+    }
+
     /// <summary>Verifies a fresh serializable context per conflict retry and a commit only on the final successful attempt.</summary>
     /// <param name="failedAttempts">The number of persistence conflicts before success, within the two-retry limit.</param>
     /// <returns>A task completing after provisioning and context/transaction lifecycle assertions.</returns>
@@ -50,15 +132,18 @@ public sealed class ProvisioningRetryTests
     }
 
     /// <summary>Verifies propagation of the final conflict after the initial attempt and two retries.</summary>
-    /// <returns>A task completing after the retry bound and disposal assertions.</returns>
-    [Fact]
-    public async Task PersistenceConflictsStopAfterThreeAttempts()
+    /// <param name="wrapped">Whether the persistence boundary preserves EF's update wrapper.</param>
+    /// <returns>A task completing after the retry bound, original exception and disposal assertions.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PersistenceConflictsStopAfterThreeAttempts(bool wrapped)
     {
-        var error = new DomainException(ErrorCode.Conflict, "Concurrent persistence change.");
+        var error = Conflict(wrapped);
         var contexts = Enumerable.Range(0, 3).Select(_ => new ProvisioningContext(EligibleUser(), error)).ToArray();
         var factory = new ContextSequence(contexts);
 
-        var thrown = await Assert.ThrowsAsync<DomainException>(() =>
+        var thrown = await Record.ExceptionAsync(() =>
             Accounts(factory).ProvisionAsync(DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), default));
 
         Assert.Same(error, thrown);
@@ -74,20 +159,84 @@ public sealed class ProvisioningRetryTests
 
     /// <summary>Verifies that Forbidden and Validation persistence failures propagate unchanged without retries.</summary>
     /// <param name="code">The non-conflict domain error returned by the fake persistence boundary.</param>
+    /// <param name="wrapped">Whether EF wraps the non-retryable domain failure.</param>
     /// <returns>A task completing after the single-attempt and no-commit assertions.</returns>
     [Theory]
-    [InlineData(ErrorCode.Forbidden)]
-    [InlineData(ErrorCode.Validation)]
-    public async Task NonConflictPersistenceErrorsDoNotRetry(ErrorCode code)
+    [InlineData(ErrorCode.Forbidden, false)]
+    [InlineData(ErrorCode.Forbidden, true)]
+    [InlineData(ErrorCode.Validation, false)]
+    [InlineData(ErrorCode.Validation, true)]
+    public async Task NonConflictPersistenceErrorsDoNotRetry(ErrorCode code, bool wrapped)
     {
-        var error = new DomainException(code, "Not retryable.");
+        Exception error = new DomainException(code, "Not retryable.");
+        if (wrapped) error = new DbUpdateException("Persistence failed.", error);
         var context = new ProvisioningContext(EligibleUser(), error);
         var factory = new ContextSequence(context);
 
-        var thrown = await Assert.ThrowsAsync<DomainException>(() =>
+        var thrown = await Record.ExceptionAsync(() =>
             Accounts(factory).ProvisionAsync(DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), default));
 
         Assert.Same(error, thrown);
+        Assert.Single(factory.Created);
+        Assert.Equal(1, context.SaveCalls);
+        Assert.Equal(0, context.Transaction.Commits);
+        Assert.True(context.Disposed);
+        Assert.True(context.Transaction.Disposed);
+    }
+
+    /// <summary>A fresh retry observes a concurrent disable or verified departure and cannot authenticate using the earlier eligible account.</summary>
+    /// <param name="departed">Whether the winning change records departure rather than disables eligibility.</param>
+    /// <param name="wrapped">Whether the initial conflict retains its EF wrapper.</param>
+    /// <returns>Completion after current-account denial, no retry save/commit and unchanged reloaded contact fields.</returns>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ConflictRetryRechecksCurrentEligibility(bool departed, bool wrapped)
+    {
+        var original = EligibleUser();
+        var reloaded = EligibleUser();
+        reloaded.Id = original.Id;
+        if (departed) reloaded.DepartureVerifiedUtc = DateTimeOffset.UnixEpoch;
+        else reloaded.IsEligible = false;
+        var first = new ProvisioningContext(original, Conflict(wrapped));
+        var retry = new ProvisioningContext(reloaded);
+        var factory = new ContextSequence(first, retry);
+
+        var error = await Assert.ThrowsAsync<DomainException>(() =>
+            Accounts(factory).ProvisionAsync(DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), default));
+
+        Assert.Equal(ErrorCode.Forbidden, error.Code);
+        Assert.Equal(2, factory.Created.Count);
+        Assert.Equal(1, first.SaveCalls);
+        Assert.Equal(0, retry.SaveCalls);
+        Assert.Equal("Before sign-in", reloaded.DisplayName);
+        Assert.Null(reloaded.LastSignedInUtc);
+        Assert.All(factory.Created, context =>
+        {
+            Assert.Equal(0, context.Transaction.Commits);
+            Assert.True(context.Disposed);
+            Assert.True(context.Transaction.Disposed);
+        });
+    }
+
+    /// <summary>Cancellation and unrelated EF failures preserve the original exception without provisioning retries.</summary>
+    /// <param name="cancelled">Whether the EF wrapper contains cancellation rather than an unrelated persistence failure.</param>
+    /// <returns>Completion after exact exception identity, a single attempt and no committed changes.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NonConflictEfFailuresDoNotRetry(bool cancelled)
+    {
+        Exception cause = cancelled ? new OperationCanceledException() : new InvalidOperationException("Unrelated failure.");
+        var error = new DbUpdateException("Persistence failed.", cause);
+        var context = new ProvisioningContext(EligibleUser(), error);
+        var factory = new ContextSequence(context);
+
+        Assert.Same(error, await Record.ExceptionAsync(() =>
+            Accounts(factory).ProvisionAsync(DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]), default)));
+
         Assert.Single(factory.Created);
         Assert.Equal(1, context.SaveCalls);
         Assert.Equal(0, context.Transaction.Commits);
@@ -123,6 +272,12 @@ public sealed class ProvisioningRetryTests
         new FoundationAuthenticationSettings(true, DevelopmentPersonas.TenantId, DevelopmentPersonas.WorkforceRole, null),
         TimeProvider.System, NullLogger<WorkforceAccounts>.Instance);
 
+    private static Exception Conflict(bool wrapped)
+    {
+        var error = new DomainException(ErrorCode.Conflict, "Concurrent persistence change.");
+        return wrapped ? new DbUpdateException("Persistence failed.", error) : error;
+    }
+
     private static UserAccount EligibleUser() => new()
     {
         TenantId = DevelopmentPersonas.TenantId,
@@ -155,15 +310,20 @@ public sealed class ProvisioningRetryTests
     }
 
     /// <summary>Records account provisioning operations without connecting to SQL.</summary>
-    /// <param name="user">The persisted account returned by the user query.</param>
+    /// <param name="user">The persisted account returned by the user query, or null before first provisioning.</param>
     /// <param name="saveError">The failure returned by each save, or no failure.</param>
+    /// <param name="beforeSave">An optional cancellation-aware barrier controlling overlapping save attempts.</param>
     /// <remarks>Only the Users set is supported; all unrelated DbSet properties deliberately throw NotSupportedException.</remarks>
-    private sealed class ProvisioningContext(UserAccount user, Exception? saveError = null) : ISidequestDbContext
+    private sealed class ProvisioningContext(UserAccount? user, Exception? saveError = null,
+        Func<CancellationToken, Task>? beforeSave = null) : ISidequestDbContext
     {
+        private readonly UserSet users = new(user);
         /// <summary>Gets the mutable local account queried by this attempt.</summary>
-        public UserAccount User { get; } = user;
+        public UserAccount User => users.CurrentUser ?? throw new InvalidOperationException("No account has been added or queried.");
+        /// <summary>Gets the number of new local accounts tracked by this attempt.</summary>
+        public int AddedUsers => users.AddedUsers;
         /// <inheritdoc/>
-        public DbSet<UserAccount> Users { get; } = new UserSet(user);
+        public DbSet<UserAccount> Users => users;
         /// <summary>Gets the transaction recorder returned by this context.</summary>
         public TrackingTransaction Transaction { get; } = new();
         /// <summary>Gets the number of save attempts, including failed saves.</summary>
@@ -183,10 +343,13 @@ public sealed class ProvisioningRetryTests
 
         /// <inheritdoc/>
         /// <remarks>Records a save attempt and returns the configured failure or a successful affected-row count.</remarks>
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             SaveCalls++;
-            return saveError is null ? Task.FromResult(1) : Task.FromException<int>(saveError);
+            if (beforeSave is not null) await beforeSave(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (saveError is not null) throw saveError;
+            return 1;
         }
 
         /// <inheritdoc/>
@@ -194,10 +357,10 @@ public sealed class ProvisioningRetryTests
             throw new NotSupportedException("Account provisioning does not acquire Event locks.");
 
         /// <inheritdoc/>
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
             Disposed = true;
-            return ValueTask.CompletedTask;
+            await users.DisposeTrackingAsync();
         }
 
         /// <inheritdoc/>
@@ -252,11 +415,26 @@ public sealed class ProvisioningRetryTests
         public DbSet<BulkMembershipRecipient> BulkRecipients => throw new NotSupportedException();
     }
 
-    /// <summary>Adapts a single account to the asynchronous scalar query used by provisioning.</summary>
-    /// <param name="user">The account exposed through LINQ-to-Objects query evaluation.</param>
-    private sealed class UserSet(UserAccount user) : DbSet<UserAccount>, IQueryable<UserAccount>
+    /// <summary>Adapts an optional account to scalar queries and records inserts with connection-free EF metadata tracking.</summary>
+    /// <param name="user">The existing account exposed through LINQ-to-Objects, or null for an initially absent row.</param>
+    private sealed class UserSet(UserAccount? user) : DbSet<UserAccount>, IQueryable<UserAccount>
     {
-        private readonly IQueryable<UserAccount> query = new[] { user }.AsQueryable();
+        private readonly IQueryable<UserAccount> query = (user is null ? Array.Empty<UserAccount>() : new[] { user }).AsQueryable();
+        private readonly SidequestDbContext tracking = new(new DbContextOptionsBuilder<SidequestDbContext>().UseSqlServer().Options);
+        /// <summary>Gets the existing or newly tracked account for this operation.</summary>
+        public UserAccount? CurrentUser { get; private set; } = user;
+        /// <summary>Gets the number of inserts attempted by the operation.</summary>
+        public int AddedUsers { get; private set; }
+        /// <inheritdoc/>
+        public override EntityEntry<UserAccount> Add(UserAccount entity)
+        {
+            AddedUsers++;
+            CurrentUser = entity;
+            return tracking.Users.Add(entity);
+        }
+        /// <summary>Disposes metadata tracking; this context has no connection string and never executes SQL.</summary>
+        /// <returns>Completion of tracker disposal.</returns>
+        public ValueTask DisposeTrackingAsync() => tracking.DisposeAsync();
         /// <inheritdoc/>
         /// <exception cref="NotSupportedException">This LINQ-only fixture does not supply EF model metadata.</exception>
         public override IEntityType EntityType => throw new NotSupportedException();

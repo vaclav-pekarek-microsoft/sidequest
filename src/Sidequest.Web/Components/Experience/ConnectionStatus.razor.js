@@ -4,6 +4,7 @@ import { refreshJoined } from "/experience/refresh.js?v=1";
 const callbackName = "ConnectionChangedAsync";
 const connectionEvent = "sidequest:connection";
 const authEvent = "sidequest:account-cleared";
+const clearedConnectionMessage = "Account or session changed. Protected content and actions remain unavailable until a full online reload or fresh sign-in.";
 let circuitConnected = true;
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("sidequest-experience") : null;
 const signalKey = "sidequest-experience-signal";
@@ -38,6 +39,7 @@ export async function afterAuthenticationSuccess(expectedEpoch) {
 class ConnectionBridge {
     #root;
     #callback;
+    #sessionBinding;
     #events = new AbortController();
     #request;
     #epoch;
@@ -51,7 +53,11 @@ class ConnectionBridge {
     #connectionVersion = 0;
     #clearFailure;
 
-    constructor(root, callback) { this.#root = root; this.#callback = callback; }
+    constructor(root, callback, sessionBinding) {
+        this.#root = root;
+        this.#callback = callback;
+        this.#sessionBinding = sessionBinding;
+    }
     async start() {
         const options = { signal: this.#events.signal };
         window.addEventListener("online", () => this.connection(), options);
@@ -109,16 +115,22 @@ class ConnectionBridge {
             for (const element of document.querySelectorAll("[data-protected-experience]")) element.hidden = true;
         this.#root.querySelector("[data-refresh]").disabled = !this.connected || this.#pending;
     }
-    clearVisible() {
+    clearVisible(message = "Account changed or signed out. Refresh stopped; reload online. If clearing failed, use browser site-data settings.") {
         this.#cleared = true;
         this.#request?.abort();
         this.#epoch = null;
-        this.status("Account changed or signed out. Refresh stopped; reload online. If clearing failed, use browser site-data settings.");
+        this.status(message);
+        this.#root.querySelector("[data-connection]").textContent = clearedConnectionMessage;
         this.gate();
         // A disconnected old circuit cannot update itself, so hide protected display immediately.
         for (const element of document.querySelectorAll("[data-protected-experience]")) element.hidden = true;
     }
     async connection() {
+        if (this.#cleared) {
+            this.gate();
+            this.#root.querySelector("[data-connection]").textContent = clearedConnectionMessage;
+            return;
+        }
         if (!this.connected) this.#reauthorized = false;
         this.gate();
         this.#root.querySelector("[data-connection]").textContent = this.connected ?
@@ -135,11 +147,14 @@ class ConnectionBridge {
             if (connected && document.querySelector('[data-requires-session="true"]')) {
                 const checkedEpoch = this.#epoch;
                 const response = await fetch("/experience/session", {
-                    credentials: "same-origin", cache: "no-store", redirect: "manual"
+                    credentials: "same-origin", cache: "no-store", redirect: "manual",
+                    headers: this.#sessionBinding ? { "X-Sidequest-Circuit-Binding": this.#sessionBinding } : {}
                 });
                 if (version !== this.#connectionVersion || !this.connected) return;
-                if ([401, 403].includes(response.status) || response.type === "opaqueredirect") {
-                    this.clearVisible();
+                if ([401, 403, 409].includes(response.status) || response.type === "opaqueredirect") {
+                    this.clearVisible(response.status === 409 ?
+                        "The signed-in account or session changed. Protected content and actions are unavailable. Reload online or sign in again before continuing." :
+                        undefined);
                     try {
                         if (await clearAccountForEpoch(checkedEpoch)) broadcastClear();
                         else if (!checkedEpoch) throw new Error("The device generation could not be verified.");
@@ -161,6 +176,8 @@ class ConnectionBridge {
         catch {
             if (version !== this.#connectionVersion) return;
             this.#root.querySelector("[data-connection]").textContent = "Server connection or current access unavailable. Retry refresh or reconnect before acting.";
+            if (this.#cleared)
+                this.#root.querySelector("[data-connection]").textContent = clearedConnectionMessage;
             this.#reauthorized = false;
             this.#lastConnected = undefined;
             this.gate();
@@ -195,8 +212,8 @@ class ConnectionBridge {
     }
 }
 
-export async function initialize(root, callback) {
-    const bridge = new ConnectionBridge(root, callback);
+export async function initialize(root, callback, sessionBinding) {
+    const bridge = new ConnectionBridge(root, callback, sessionBinding);
     await bridge.start();
     return bridge;
 }

@@ -1,9 +1,11 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Experience;
 using Sidequest.Application.Quests;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Operations;
 
@@ -15,10 +17,13 @@ public static class ExperienceEndpoints
     /// <returns>The snapshot endpoint for additional conventions.</returns>
     public static RouteHandlerBuilder MapSidequestExperience(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/experience/session", (HttpContext context) =>
+        endpoints.MapGet("/experience/session", (HttpContext context, [FromServices] ExperienceSessionBinding binding) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            return Results.NoContent();
+            context.Response.Headers.Pragma = "no-cache";
+            var proofs = context.Request.Headers[ExperienceSessionBinding.HeaderName];
+            return proofs.Count == 1 && binding.Matches(proofs[0], context.User)
+                ? Results.NoContent() : Results.StatusCode(StatusCodes.Status409Conflict);
         }).RequireAuthorization().WithMetadata(new ExperienceApiMetadata());
         endpoints.MapGet("/service-worker.js", (HttpContext context, IWebHostEnvironment environment) =>
         {
@@ -51,6 +56,7 @@ public static class ExperienceEndpoints
         await using var db = await factory.CreateAsync(cancellationToken);
         var actor = await access.RequireUserAsync(db, cancellationToken);
         var joined = await quests.GetOfflineJoinedAsync(cancellationToken);
-        return Results.Json(new OfflineSnapshot(actor.Id, clock.GetUtcNow(), joined));
+        // The minimal field names and numeric statuses must not inherit host-wide reference or enum converters.
+        return Results.Json(new OfflineSnapshot(actor.Id, clock.GetUtcNow(), joined), JsonSerializerOptions.Web);
     }
 }

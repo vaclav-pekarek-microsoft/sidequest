@@ -15,13 +15,14 @@ public sealed class ExperienceInterop(IJSRuntime runtime) : IAsyncDisposable
     /// <typeparam name="T">The public JS-invokable callback target.</typeparam>
     /// <param name="root">Rendered component root, never an element ID lookup supplied by the caller.</param>
     /// <param name="callback">Caller-owned .NET callback reference.</param>
+    /// <param name="sessionBinding">Transient proof captured from the server-owned circuit principal; null cannot enable protected content.</param>
     /// <param name="cancellationToken">Cancels module loading and initialization.</param>
     /// <returns>A task completing when the bridge is listening; storage failures are shown by the bridge.</returns>
     public async ValueTask InitializeAsync<T>(ElementReference root, DotNetObjectReference<T> callback,
-        CancellationToken cancellationToken) where T : class
+        string? sessionBinding, CancellationToken cancellationToken) where T : class
     {
         module = await runtime.InvokeAsync<IJSObjectReference>("import", cancellationToken, ModulePath);
-        bridge = await module.InvokeAsync<IJSObjectReference>("initialize", cancellationToken, root, callback);
+        bridge = await module.InvokeAsync<IJSObjectReference>("initialize", cancellationToken, root, callback, sessionBinding);
     }
 
     /// <summary>Requests an explicit authenticated full Joined refresh; JavaScript displays any storage or network failure.</summary>

@@ -6,6 +6,8 @@ const refresh = document.querySelector("#refresh");
 const failure = document.querySelector("#failure");
 let expiry;
 let renderVersion = 0;
+let rendering;
+let renderRequested = false;
 const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("sidequest-experience") : null;
 
 function textElement(tag, value) {
@@ -14,18 +16,34 @@ function textElement(tag, value) {
     return element;
 }
 
-async function render() {
+function render() {
+    // Invalid reads purge storage; overlapping lifecycle reads must not erase the resulting warning.
+    renderRequested = true;
+    return rendering ??= drainRenders();
+}
+
+async function drainRenders() {
+    try {
+        while (renderRequested) {
+            renderRequested = false;
+            await renderOnce();
+        }
+    } finally { rendering = null; }
+}
+
+async function renderOnce() {
     const version = ++renderVersion;
     clearTimeout(expiry);
     list.replaceChildren();
-    failure.textContent = "";
     try {
         const snapshot = await readSnapshot();
         if (version !== renderVersion) return;
         if (!snapshot) {
-            refresh.textContent = "Offline — no saved joined basics available.";
+            refresh.textContent = failure.textContent ?
+                "Offline — saved basics unavailable." : "Offline — no saved joined basics available.";
             return;
         }
+        failure.textContent = "";
         refresh.textContent = `Offline — last refreshed ${new Date(snapshot.refreshedUtc).toLocaleString()}. This copy may be stale.`;
         for (const quest of snapshot.quests) {
             const card = document.createElement("article");
@@ -54,6 +72,7 @@ document.querySelector("#clear").addEventListener("click", async () => {
     list.replaceChildren();
     try {
         await clearAccount();
+        failure.textContent = "";
         channel?.postMessage("account-cleared");
         try { localStorage.setItem("sidequest-experience-signal", crypto.randomUUID()); }
         catch { if (!channel) failure.textContent = "Other tabs could not be notified. Close other Sidequest tabs."; }

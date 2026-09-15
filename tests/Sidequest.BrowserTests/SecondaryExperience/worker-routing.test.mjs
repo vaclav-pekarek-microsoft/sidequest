@@ -63,7 +63,7 @@ test("Unencoded ordinary navigations still receive the dedicated fallback on net
     assert.equal(await response, worker.fallback);
     assert.deepEqual(worker.calls, [
         ["fetch", `${origin}/quests/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`],
-        ["open", "sidequest-public-experience-v1"],
+        ["open", "sidequest-public-experience-v2"],
         ["match", "/experience/offline.html"]
     ]);
 });
@@ -74,6 +74,18 @@ test("Public versioned assets still use only their explicit cache entries", asyn
     assert.equal(worker.calls[0][0], "open");
     assert.equal(worker.calls[1][0], "match");
     assert.equal(worker.calls[1][1].url, `${origin}/experience/offline.css?v=1`);
+    assert.equal(worker.calls.length, 2);
+});
+
+test("The offline document and worker agree on the new renderer version without reusing the old cached module", async () => {
+    const html = await readFile(new URL("../../../src/Sidequest.Web/wwwroot/experience/offline.html", import.meta.url), "utf8");
+    assert.match(html, /src="\/experience\/offline\.js\?v=2"/);
+    const worker = harness();
+    assert.equal(worker.dispatch("/experience/offline.js?v=1", "cors"), undefined);
+    assert.deepEqual(worker.calls, []);
+    assert.equal(await worker.dispatch("/experience/offline.js?v=2", "cors"), worker.fallback);
+    assert.deepEqual(worker.calls[0], ["open", "sidequest-public-experience-v2"]);
+    assert.equal(worker.calls[1][1].url, `${origin}/experience/offline.js?v=2`);
     assert.equal(worker.calls.length, 2);
 });
 

@@ -24,7 +24,7 @@ public sealed class WorkforceAccounts(
     /// <returns>A task completing after the serializable provisioning transaction commits.</returns>
     /// <exception cref="DomainException">Admission is forbidden, the account is disabled/departed, or persistence rejects the operation.</exception>
     /// <exception cref="OperationCanceledException">The operation was canceled.</exception>
-    /// <remarks>Conflicts retry twice with fresh contexts. Only first provisioning may grant the explicitly configured administrator role.</remarks>
+    /// <remarks>Normalized conflicts and EF-wrapped conflicts retry twice with fresh contexts. Only first provisioning may grant the explicitly configured administrator role.</remarks>
     /// <example>
     /// <code>
     /// // The authentication handler has already validated the principal.
@@ -101,6 +101,7 @@ public sealed class WorkforceAccounts(
 
     private static bool IsRetryableConflict(Exception exception) =>
         exception is DomainException { Code: ErrorCode.Conflict } ||
+        exception is DbUpdateException { InnerException: DomainException { Code: ErrorCode.Conflict } } ||
         exception is DbUpdateConcurrencyException ||
         exception is SqlException { Number: 1205 or 2601 or 2627 } ||
         exception is DbUpdateException { InnerException: SqlException { Number: 1205 or 2601 or 2627 } };

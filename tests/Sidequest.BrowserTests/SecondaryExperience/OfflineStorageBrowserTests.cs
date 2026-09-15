@@ -17,7 +17,7 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
         await using var context = await fixture.CreateContextAsync();
         var page = await context.NewPageAsync();
         await page.GotoAsync("/experience/offline.html");
-        var result = await page.EvaluateAsync<JsonElement>("""
+        using var document = JsonDocument.Parse(await page.EvaluateAsync<string>("""
             async snapshot => {
                 const store = await import('/experience/snapshot-store.js?v=1');
                 const oldEpoch = await store.currentEpoch();
@@ -28,9 +28,10 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
                 const oldCleared = await store.clearAccountForEpoch(oldEpoch);
                 const retained = await store.readSnapshot();
                 const currentCleared = await store.clearAccountForEpoch(current);
-                return {oldCleared, retained, currentCleared, after: await store.readSnapshot(), epoch: await store.currentEpoch()};
+                return JSON.stringify({oldCleared, retained, currentCleared, after: await store.readSnapshot(), epoch: await store.currentEpoch()});
             }
-            """, ExperienceBrowserSupport.Snapshot("CURRENT GENERATION"));
+            """, ExperienceBrowserSupport.Snapshot("CURRENT GENERATION")));
+        var result = document.RootElement;
         Assert.False(result.GetProperty("oldCleared").GetBoolean());
         Assert.Equal("CURRENT GENERATION", result.GetProperty("retained").GetProperty("quests")[0].GetProperty("title").GetString());
         Assert.True(result.GetProperty("currentCleared").GetBoolean());
@@ -47,7 +48,7 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
         var page = await context.NewPageAsync();
         await page.GotoAsync("/experience/offline.html");
         await ExperienceBrowserSupport.SaveAsync(page, ExperienceBrowserSupport.Snapshot());
-        var result = await page.EvaluateAsync<JsonElement>("""
+        using var document = JsonDocument.Parse(await page.EvaluateAsync<string>("""
             async () => {
                 const s = await import('/experience/snapshot-store.js?v=1');
                 const saved = await s.readSnapshot();
@@ -55,9 +56,10 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
                 const before = await s.readSnapshot(boundary - 1);
                 let expired;
                 try { await s.readSnapshot(boundary); } catch (e) { expired = e.message; }
-                return { before: before.quests.length, expired, after: await s.readSnapshot(boundary + 1) };
+                return JSON.stringify({ before: before.quests.length, expired, after: await s.readSnapshot(boundary + 1) });
             }
-            """);
+            """));
+        var result = document.RootElement;
         Assert.Equal(1, result.GetProperty("before").GetInt32());
         Assert.Contains("expired", result.GetProperty("expired").GetString());
         Assert.Equal(JsonValueKind.Null, result.GetProperty("after").ValueKind);
@@ -174,7 +176,7 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
             var epoch = await newTab.EvaluateAsync<string>("async()=> await (await import('/Components/Experience/ConnectionStatus.razor.js')).beforeAuthenticationChange()");
             Assert.True(await newTab.EvaluateAsync<bool>("async()=> (await (await import('/experience/snapshot-store.js?v=1')).readSnapshot())===null"));
             await newTab.EvaluateAsync("async epoch=> await (await import('/Components/Experience/ConnectionStatus.razor.js')).afterAuthenticationSuccess(epoch)", epoch);
-            var replacement = JsonSerializer.SerializeToElement(ExperienceBrowserSupport.Snapshot("NEW ACCOUNT"));
+            var replacement = ExperienceBrowserSupport.Snapshot("NEW ACCOUNT");
             await newTab.EvaluateAsync("""
                 async value => {
                     value.accountId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -185,7 +187,9 @@ public sealed class OfflineStorageBrowserTests(FoundationBrowserFixture fixture)
         }
         finally { release.TrySetResult(); }
         Assert.Contains("outdated", await pending);
-        var saved = await newTab.EvaluateAsync<JsonElement>("async()=> await (await import('/experience/snapshot-store.js?v=1')).readSnapshot()");
+        using var document = JsonDocument.Parse(await newTab.EvaluateAsync<string>(
+            "async()=> JSON.stringify(await (await import('/experience/snapshot-store.js?v=1')).readSnapshot())"));
+        var saved = document.RootElement;
         Assert.Equal("dddddddd-dddd-4ddd-8ddd-dddddddddddd", saved.GetProperty("accountId").GetString());
         Assert.Equal("NEW ACCOUNT", saved.GetProperty("quests")[0].GetProperty("title").GetString());
         Assert.DoesNotContain("OLD RESPONSE", saved.ToString());

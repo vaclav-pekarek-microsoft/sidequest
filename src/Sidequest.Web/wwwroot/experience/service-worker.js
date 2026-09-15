@@ -1,8 +1,8 @@
 // Parent maps this public source to /service-worker.js for root scope.
-const cacheName = "sidequest-public-experience-v1";
+const cacheName = "sidequest-public-experience-v2";
 const fallback = "/experience/offline.html";
 const assets = [
-    fallback, "/experience/offline.css?v=1", "/experience/offline.js?v=1",
+    fallback, "/experience/offline.css?v=1", "/experience/offline.js?v=2",
     "/experience/snapshot-store.js?v=1", "/experience/refresh.js?v=1", "/experience/manifest.webmanifest?v=1",
     "/experience/icon.svg?v=1", "/experience/icon-192.png?v=1", "/experience/icon-512.png?v=1"
 ];

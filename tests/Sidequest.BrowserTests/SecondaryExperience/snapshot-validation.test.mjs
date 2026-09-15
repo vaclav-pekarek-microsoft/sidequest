@@ -37,6 +37,20 @@ test("Only the exact minimal allowlist is accepted, including an empty full repl
     assert.throws(() => validateSnapshot(extra, now), /invalid/);
 });
 
+test("Reference metadata is rejected rather than stripped from snapshots", () => {
+    const root = { ...sample(), $id: "1" };
+    const quest = sample();
+    quest.quests[0].$id = "2";
+    const collection = sample();
+    collection.quests = { $id: "3", $values: collection.quests };
+    for (const value of [root, quest, collection]) {
+        assert.throws(() => validateSnapshot(value, now), /invalid/);
+    }
+    assert.equal(root.$id, "1");
+    assert.equal(quest.quests[0].$id, "2");
+    assert.equal(collection.quests.$id, "3");
+});
+
 test("Expiry is exact at 24h, future freshness is rejected, and the preceding millisecond is valid", () => {
     const value = sample();
     const refreshed = Date.parse(value.refreshedUtc);

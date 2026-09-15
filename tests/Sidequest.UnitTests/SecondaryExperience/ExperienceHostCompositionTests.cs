@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Sidequest.Application.Abstractions;
+using Sidequest.Application.Administration;
 using Sidequest.Application.Experience;
 using Sidequest.Application.Media;
 using Sidequest.Application.Media.Implementation;
@@ -14,7 +15,7 @@ namespace Sidequest.UnitTests.SecondaryExperience;
 /// <summary>Verifies the actual feature registrations compose with the existing core graph and require the sixth durable handler before polling.</summary>
 public sealed class ExperienceHostCompositionTests
 {
-    /// <summary>Real dashboard/media services resolve without provider I/O; omitting required Media fails startup rather than silently running five handlers.</summary>
+    /// <summary>Real dashboard, administration and media services resolve without provider I/O; departure recovery stays closed and omitting required Media fails startup.</summary>
     /// <param name="includeMedia">Whether the real Media feature and its cleanup handler are registered.</param>
     /// <returns>Completion after scoped-lifetime, exact handler-set and startup admission assertions.</returns>
     [Theory]
@@ -24,12 +25,16 @@ public sealed class ExperienceHostCompositionTests
     {
         var services = CoreWorkflowRegistrationTests.Services();
         services.AddSidequestExperience();
+        services.AddSidequestAdministration(new ConfigurationBuilder().Build());
         services.AddSingleton(new WorkHandlerRequirements(RequireMediaCleanup: true));
         if (includeMedia) services.AddSidequestMedia(new ConfigurationBuilder().Build());
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var first = provider.CreateAsyncScope();
         await using var second = provider.CreateAsyncScope();
         Assert.IsType<DashboardService>(first.ServiceProvider.GetRequiredService<DashboardService>());
+        Assert.IsType<AdministrationService>(first.ServiceProvider.GetRequiredService<AdministrationService>());
+        Assert.IsType<BusinessEmailService>(first.ServiceProvider.GetRequiredService<BusinessEmailService>());
+        Assert.False(provider.GetRequiredService<DepartureRecoveryPolicy>().Enabled);
         var coordinator = first.ServiceProvider.GetRequiredService<ExperienceCoordinator>();
         Assert.Same(coordinator, first.ServiceProvider.GetRequiredService<ExperienceCoordinator>());
         Assert.NotSame(coordinator, second.ServiceProvider.GetRequiredService<ExperienceCoordinator>());
