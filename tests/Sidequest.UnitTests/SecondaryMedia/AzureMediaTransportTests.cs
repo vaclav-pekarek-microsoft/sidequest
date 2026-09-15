@@ -173,7 +173,47 @@ public sealed class AzureMediaTransportTests
         Assert.Null(failure.InnerException);
     }
 
-    private static AzurePrivateMediaStorage Storage(HttpMessageHandler handler, BlobClientOptions? options = null)
+    /// <summary>Only valid final-response timing becomes safe dependency metadata; expired dates never produce negative waits.</summary>
+    /// <param name="header">Standard seconds/date guidance or Azure millisecond guidance.</param>
+    /// <param name="value">The final provider header, including invalid and boundary examples.</param>
+    /// <param name="milliseconds">Expected delay in milliseconds, or null for invalid guidance.</param>
+    /// <returns>A task completing after real SDK retry exhaustion and exact safe metadata assertions.</returns>
+    [Theory]
+    [InlineData("Retry-After", "0", 0L)]
+    [InlineData("Retry-After", "300", 300000L)]
+    [InlineData("Retry-After", "-1", null)]
+    [InlineData("Retry-After", "invalid", null)]
+    [InlineData("Retry-After", "Wed, 15 Jul 2026 10:05:00 GMT", 300000L)]
+    [InlineData("Retry-After", "Wed, 15 Jul 2026 10:00:00 GMT", 0L)]
+    [InlineData("Retry-After", "Wed, 15 Jul 2026 09:59:59 GMT", 0L)]
+    [InlineData("x-ms-retry-after-ms", "0", 0L)]
+    [InlineData("x-ms-retry-after-ms", "1250", 1250L)]
+    [InlineData("x-ms-retry-after-ms", "2147483648", 2147483648L)]
+    [InlineData("x-ms-retry-after-ms", "-1", null)]
+    [InlineData("x-ms-retry-after-ms", "invalid", null)]
+    public async Task FinalResponse_RetryAfterUsesClockAndRejectsInvalidGuidance(string header, string value, long? milliseconds)
+    {
+        var calls = 0;
+        using var handler = new TransportHandler(_ =>
+        {
+            var response = Reply(HttpStatusCode.TooManyRequests, "private-provider-detail");
+            if (++calls == 1)
+                response.Headers.Add("Retry-After", "0");
+            else
+                Assert.True(response.Headers.TryAddWithoutValidation(header, value));
+            return response;
+        });
+        var failure = await Assert.ThrowsAsync<DomainException>(() =>
+            Storage(handler, clock: new ProviderClock()).DeleteIfExistsAsync($"covers/{Guid.NewGuid():N}.png"));
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(milliseconds is { } delay ? TimeSpan.FromMilliseconds(delay) : (TimeSpan?)null, failure.RetryAfter);
+        Assert.Equal(ErrorCode.DependencyUnavailable, failure.Code);
+        Assert.False(failure.IsPermanentDependencyFailure);
+        Assert.Equal("Private media storage is unavailable.", failure.Message);
+        Assert.Null(failure.InnerException);
+    }
+
+    private static AzurePrivateMediaStorage Storage(HttpMessageHandler handler, BlobClientOptions? options = null, TimeProvider? clock = null)
     {
         options ??= new BlobClientOptions();
         options.Transport = new HttpClientTransport(new HttpClient(handler));
@@ -183,7 +223,7 @@ public sealed class AzureMediaTransportTests
         {
             ContainerName = "covers",
             ConnectionString = $"DefaultEndpointsProtocol=https;AccountName=synthetic;AccountKey={Convert.ToBase64String(new byte[32])};EndpointSuffix=core.windows.net"
-        }, options);
+        }, options, clock);
     }
 
     private static HttpResponseMessage Reply(HttpStatusCode status, string? code = null)
@@ -207,5 +247,11 @@ public sealed class AzureMediaTransportTests
             Calls++;
             return Task.FromResult(reply(request));
         }
+    }
+
+    private sealed class ProviderClock : TimeProvider
+    {
+        /// <inheritdoc />
+        public override DateTimeOffset GetUtcNow() => new(2026, 7, 15, 10, 0, 0, TimeSpan.Zero);
     }
 }
