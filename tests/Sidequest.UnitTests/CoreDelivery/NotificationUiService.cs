@@ -12,6 +12,9 @@ internal sealed class NotificationUiService : INotificationService
     internal TaskCompletionSource<IReadOnlyList<DeliveryFailure>>? FailureQuery { get; set; }
     internal TaskCompletionSource<int>? UnreadQuery { get; set; }
     internal TaskCompletionSource? Mutation { get; set; }
+    internal TaskCompletionSource? QueryStarted { get; set; }
+    internal TaskCompletionSource? UnreadStarted { get; set; }
+    internal TaskCompletionSource MutationStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal bool Denied { get; set; }
     internal Exception? ReadFailure { get; set; }
     internal PageResult<NotificationSummary> Items { get; set; } = new([], 0, 1, 25);
@@ -33,20 +36,21 @@ internal sealed class NotificationUiService : INotificationService
     {
         ListCalls++;
         Tokens.Add(cancellationToken);
-        return Read(Inbox?.Task ?? Task.FromResult(Items));
+        return Read(Inbox?.Task ?? Task.FromResult(Items), QueryStarted);
     }
     /// <inheritdoc/>
     public Task<int> UnreadCountAsync(CancellationToken cancellationToken = default)
     {
         CountCalls++;
         Tokens.Add(cancellationToken);
-        return Read(UnreadQuery?.Task ?? Task.FromResult(Unread));
+        return Read(UnreadQuery?.Task ?? Task.FromResult(Unread), UnreadStarted);
     }
     /// <inheritdoc/>
     public Task MarkReadAsync(Guid? notificationId, CancellationToken cancellationToken = default)
     {
         Marks.Add(notificationId);
         Tokens.Add(cancellationToken);
+        MutationStarted.TrySetResult();
         return Mutation?.Task ?? Task.CompletedTask;
     }
     /// <inheritdoc/>
@@ -54,7 +58,7 @@ internal sealed class NotificationUiService : INotificationService
     {
         PreferenceCalls++;
         Tokens.Add(cancellationToken);
-        return Read(Preferences?.Task ?? Task.FromResult(new PreferenceInput(false, true, true, 1, null)));
+        return Read(Preferences?.Task ?? Task.FromResult(new PreferenceInput(false, true, true, 1, null)), QueryStarted);
     }
     /// <inheritdoc/>
     public Task SavePreferencesAsync(PreferenceInput input, CancellationToken cancellationToken = default)
@@ -63,6 +67,7 @@ internal sealed class NotificationUiService : INotificationService
         SaveCalls++;
         Tokens.Add(cancellationToken);
         Saved = input;
+        MutationStarted.TrySetResult();
         return Mutation?.Task ?? Task.CompletedTask;
     }
     /// <inheritdoc/>
@@ -70,6 +75,7 @@ internal sealed class NotificationUiService : INotificationService
     {
         EventOverrides.Add((eventId, enabled));
         Tokens.Add(cancellationToken);
+        MutationStarted.TrySetResult();
         return Mutation?.Task ?? Task.CompletedTask;
     }
     /// <inheritdoc/>
@@ -79,17 +85,23 @@ internal sealed class NotificationUiService : INotificationService
     {
         FailureCalls++;
         Tokens.Add(cancellationToken);
-        return Read(FailureQuery?.Task ?? Task.FromResult(Failures));
+        return Read(FailureQuery?.Task ?? Task.FromResult(Failures), QueryStarted);
     }
     /// <inheritdoc/>
     public Task ReplayAsync(Guid deliveryId, string kind, CancellationToken cancellationToken = default)
     {
         Replays.Add((deliveryId, kind));
         Tokens.Add(cancellationToken);
+        MutationStarted.TrySetResult();
         return Mutation?.Task ?? Task.CompletedTask;
     }
 
-    private Task<T> Read<T>(Task<T> result) => ReadFailure is { } failure
-        ? Task.FromException<T>(failure)
-        : Denied ? Task.FromException<T>(new DomainException(ErrorCode.Forbidden, "private-secret")) : result;
+    private Task<T> Read<T>(Task<T> result, TaskCompletionSource? started = null)
+    {
+        var operation = ReadFailure is { } failure
+            ? Task.FromException<T>(failure)
+            : Denied ? Task.FromException<T>(new DomainException(ErrorCode.Forbidden, "private-secret")) : result;
+        started?.TrySetResult();
+        return operation;
+    }
 }
