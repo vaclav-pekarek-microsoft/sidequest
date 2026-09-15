@@ -1,0 +1,27 @@
+@namespace Sidequest.Web.Components.Media
+
+<figure class="quest-cover">
+    @if (AssetId is { } id)
+    {
+        <img src="@($"media/covers/{id:D}?moderation={Moderation.ToString().ToLowerInvariant()}")"
+             alt="@($"Cover for {QuestTitle}")" loading="lazy" />
+    }
+    else
+    {
+        <div class="default-cover" role="img" aria-label="@($"Default cover for {QuestTitle}")">
+            <span aria-hidden="true">◇</span>
+            <span>No cover selected</span>
+        </div>
+    }
+</figure>
+
+@code {
+    /// <summary>Opaque assigned ready asset identifier, or null to show the default cover.</summary>
+    [Parameter] public Guid? AssetId { get; set; }
+
+    /// <summary>Authorized Quest title used for meaningful image alternative text.</summary>
+    [Parameter, EditorRequired] public string QuestTitle { get; set; } = "";
+
+    /// <summary>Uses the explicit audited moderation image endpoint, never an implicit access grant.</summary>
+    [Parameter] public bool Moderation { get; set; }
+}

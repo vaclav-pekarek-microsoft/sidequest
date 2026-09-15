@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
+using Sidequest.Application.Media.Implementation;
 using Sidequest.Application.Shared;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
@@ -223,9 +224,9 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             QuestChanges.RequireActive(parent, now);
             if (quest.Status != QuestStatus.Draft ||
                 await db.Participations.AnyAsync(x => x.QuestId == id, token).ConfigureAwait(false) ||
-                await db.QuestStatusHistory.AnyAsync(x => x.QuestId == id, token).ConfigureAwait(false) ||
-                await db.MediaAssets.AnyAsync(x => x.QuestId == id, token).ConfigureAwait(false))
-                throw Conflict("Only an unpublished draft without participation or attached media can be deleted.");
+                await db.QuestStatusHistory.AnyAsync(x => x.QuestId == id, token).ConfigureAwait(false))
+                throw Conflict("Only an unpublished draft without participation can be deleted.");
+            await DraftMediaCleanup.StageAsync(db, quest, actor, now, token).ConfigureAwait(false);
             db.QuestOwners.RemoveRange(await db.QuestOwners.Where(x => x.QuestId == id).ToListAsync(token).ConfigureAwait(false));
             db.QuestInvitations.RemoveRange(await db.QuestInvitations.Where(x => x.QuestId == id).ToListAsync(token).ConfigureAwait(false));
             QuestChanges.Audit(db, quest, actor, "DraftDeleted", "", now);
