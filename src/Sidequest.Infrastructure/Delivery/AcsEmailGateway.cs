@@ -62,11 +62,17 @@ public sealed class AcsEmailGateway : IEmailGateway
             throw new DeliveryTransportException(TransportOutcome.Permanent, "ACS submission timeout must be positive and at most ninety seconds.");
         if (!UsableAddress(message.Recipient))
             throw new DeliveryTransportException(TransportOutcome.Permanent, "Trusted recipient address is unavailable.");
+        if (string.IsNullOrWhiteSpace(message.Subject) || message.Subject.Length > 200 ||
+            message.Subject.Any(character => char.IsControl(character) || character is '\u2028' or '\u2029') ||
+            (message.ReplyTo is not null && !UsableAddress(message.ReplyTo)))
+            throw new DeliveryTransportException(TransportOutcome.Permanent, "Email subject or reply-to header is invalid.");
         if (string.IsNullOrWhiteSpace(message.IdempotencyKey) ||
             (message.CalendarContent is not null && message.CalendarMethod is not ("REQUEST" or "CANCEL")))
             throw new DeliveryTransportException(TransportOutcome.Permanent, "Invalid transport message contract.");
         var content = new EmailContent(message.Subject) { Html = message.HtmlBody, PlainText = message.TextBody };
         var transport = new Azure.Communication.Email.EmailMessage(options.SenderAddress, message.Recipient, content);
+        if (message.ReplyTo is not null)
+            transport.ReplyTo.Add(new EmailAddress(message.ReplyTo));
         if (message.CalendarContent is not null)
             transport.Attachments.Add(new EmailAttachment("sidequest.ics",
                 $"text/calendar; charset=utf-8; method={message.CalendarMethod}", BinaryData.FromString(message.CalendarContent)));
@@ -116,7 +122,8 @@ public sealed class AcsEmailGateway : IEmailGateway
     }
 
     internal static bool UsableAddress(string address) =>
-        !string.IsNullOrWhiteSpace(address) && !address.Contains('\r') && !address.Contains('\n') &&
+        !string.IsNullOrWhiteSpace(address) &&
+        !address.Any(character => char.IsControl(character) || character is '\u2028' or '\u2029') &&
         MailAddress.TryCreate(address, out var parsed) &&
         string.Equals(parsed.Address, address, StringComparison.OrdinalIgnoreCase) && address.Contains('@');
 }

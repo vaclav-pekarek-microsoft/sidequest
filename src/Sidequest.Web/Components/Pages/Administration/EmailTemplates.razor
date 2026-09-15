@@ -1,0 +1,73 @@
+@page "/administration/templates"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AdminPageBase
+
+<PageTitle>Email templates · Sidequest</PageTitle>
+<h1>Email templates</h1>
+<AdminPanel>
+    <p>Templates are not Razor or executable code. Allowed variables: <code>{{Brand}}</code>, <code>{{Summary}}</code>, <code>{{CalendarGuidance}}</code>. Both bodies must retain Summary and CalendarGuidance.</p>
+    <p>HTML is an attribute-free XHTML fragment: p, br, strong, em, ul, ol, li, h2, blockquote only. Close all tags, use &lt;br /&gt;, and encode literal ampersands. No links, styles, scripts, comments or resource-content variables.</p>
+    <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
+    <fieldset disabled="@Disabled">
+        <legend>Template category</legend>
+        <label for="template-key">Category</label>
+        <select id="template-key" @bind="selectedKey">
+            @foreach (var key in BusinessEmailRules.TemplateKeys)
+            {
+                <option @key="key" value="@key">@key</option>
+            }
+        </select>
+        <FluentButton OnClick="LoadSelectedAsync" Disabled="@Disabled">Open selected category (discard current draft)</FluentButton>
+    </fieldset>
+    @if (history is not null && !Forbidden)
+    {
+        <p>Editing @loadedKey against revision @revision. Saving appends a revision and never replaces old history.</p>
+        <fieldset disabled="@Disabled">
+            <legend>Unsaved template wording</legend>
+            <label for="template-subject">Subject (1–200 single-line characters)</label>
+            <input id="template-subject" maxlength="200" @bind="subject" @bind:after="InvalidatePreview" />
+            <label for="template-html">Inert XHTML body (1–2,000 characters)</label>
+            <textarea id="template-html" maxlength="2000" @bind="html" @bind:after="InvalidatePreview"></textarea>
+            <label for="template-text">Plain-text alternative (1–2,000 characters)</label>
+            <textarea id="template-text" maxlength="2000" @bind="text" @bind:after="InvalidatePreview"></textarea>
+            <FluentButton OnClick="PreviewAsync" Disabled="@Disabled">Preview with synthetic values</FluentButton>
+            <FluentButton OnClick="@(() => confirming = true)" Disabled="@Disabled">Review new revision</FluentButton>
+            <FluentButton OnClick="RefreshHistoryAsync" Disabled="@Disabled">Check latest history, keep edits</FluentButton>
+        </fieldset>
+        @if (confirming)
+        {
+            <section aria-labelledby="template-confirm">
+                <h2 id="template-confirm">Confirm new template revision</h2>
+                <p>Newly prepared @loadedKey email will use this wording. Already attempted messages keep their frozen content. Previous revisions remain available.</p>
+                <FluentButton OnClick="SaveAsync" Disabled="@Disabled">Confirm append revision</FluentButton>
+                <FluentButton OnClick="@(() => confirming = false)" Disabled="@Disabled">Cancel save</FluentButton>
+            </section>
+        }
+        <TemplatePreview Preview="@preview" />
+        <section aria-labelledby="template-history">
+            <h2 id="template-history">Recent saved versions and compiled default</h2>
+            <p>Latest observed revision: @latestRevision. History page @historyPage. Choosing wording copies it into the draft; it does not modify history.</p>
+            <FluentButton OnClick="AcceptLatestVersion" Disabled="@Disabled">Use latest revision as base, keep edits</FluentButton>
+            <ul>
+                @foreach (var item in history)
+                {
+                    <li @key="item.Revision">
+                        @(item.Revision == 0 ? "Compiled default" : $"Revision {item.Revision} · {item.ChangedUtc:u}")
+                        <details>
+                            <summary>Inspect saved wording</summary>
+                            <p>@item.Subject</p><pre>@item.HtmlBody</pre><pre>@item.TextBody</pre>
+                        </details>
+                        <FluentButton OnClick="@(() => CopyWording(item))" Disabled="@Disabled">Copy wording to draft</FluentButton>
+                    </li>
+                }
+            </ul>
+            <FluentButton OnClick="PreviousHistoryAsync" Disabled="@(Disabled || historyPage == 1)">Newer history</FluentButton>
+            <FluentButton OnClick="NextHistoryAsync" Disabled="@(Disabled || history.Count < 26)">Older history</FluentButton>
+        </section>
+    }
+    else if (!Busy)
+    {
+        <p>Templates are unavailable. Current administrator access and valid stored configuration are required.</p>
+    }
+</AdminPanel>
