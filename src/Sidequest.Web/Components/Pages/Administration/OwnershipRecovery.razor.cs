@@ -19,13 +19,19 @@ public partial class OwnershipRecovery
     private RecoveryPreview? preview;
 
     /// <inheritdoc />
-    protected override Task OnInitializedAsync() => CheckAccessAsync();
+    protected override Task OnInitializedAsync() => InitializeAsync(RefreshAfterReconnectAsync);
 
-    private Task CheckAccessAsync() => RunAsync(async () =>
+    private Task CheckAccessAsync() => RunAsync(RefreshAfterReconnectAsync);
+
+    /// <inheritdoc />
+    protected override async Task RefreshAfterReconnectAsync()
     {
         await Service.ListAsync(Lifetime);
         authorized = true;
-    });
+        choices = null;
+        selectedId = "";
+        preview = null;
+    }
 
     private Task SearchAsync() => RunAsync(async () =>
     {
@@ -61,5 +67,9 @@ public partial class OwnershipRecovery
         choices = null;
         preview = null;
         selectedId = "";
+        resourceId = "";
+        query = "";
+        reason = "";
+        kind = ResourceKind.Event;
     }
 }

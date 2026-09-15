@@ -20,7 +20,7 @@
             {
                 <li @key="assignment.UserId">
                     @assignment.DisplayName — @(assignment.Eligible ? "Eligible administrator" : "Assignment inactive: account ineligible")
-                    <FluentButton OnClick="@(() => pendingRemoval = assignment)" Disabled="@Disabled">Review removal</FluentButton>
+                    <FluentButton OnClick="@(() => Review(() => pendingRemoval = assignment))" Disabled="@Disabled">Review removal</FluentButton>
                 </li>
             }
         </ul>
@@ -42,7 +42,7 @@
                     @foreach (var choice in choices)
                     {
                         <li @key="choice.Id">@choice.DisplayName
-                            <FluentButton OnClick="@(() => pendingAddition = choice)" Disabled="@Disabled">Review addition</FluentButton>
+                            <FluentButton OnClick="@(() => Review(() => pendingAddition = choice))" Disabled="@Disabled">Review addition</FluentButton>
                         </li>
                     }
                 </ul>
@@ -54,7 +54,7 @@
                 <h2 id="add-heading">Confirm administrator addition</h2>
                 <p>@pendingAddition.DisplayName will manage global administrators and email settings, not private resource content.</p>
                 <FluentButton OnClick="AddAsync" Disabled="@Disabled">Confirm administrator addition</FluentButton>
-                <FluentButton OnClick="@(() => pendingAddition = null)" Disabled="@Disabled">Cancel addition</FluentButton>
+                <FluentButton OnClick="@(() => Review(() => pendingAddition = null))" Disabled="@Disabled">Cancel addition</FluentButton>
             </section>
         }
         @if (pendingRemoval is not null)
@@ -63,7 +63,7 @@
                 <h2 id="remove-heading">Confirm administrator removal</h2>
                 <p>@pendingRemoval.DisplayName will lose administrative privileges. Login does not restore the role. At least one eligible administrator must remain.</p>
                 <FluentButton OnClick="RemoveAsync" Disabled="@Disabled">Confirm administrator removal</FluentButton>
-                <FluentButton OnClick="@(() => pendingRemoval = null)" Disabled="@Disabled">Cancel removal</FluentButton>
+                <FluentButton OnClick="@(() => Review(() => pendingRemoval = null))" Disabled="@Disabled">Cancel removal</FluentButton>
             </section>
         }
     }

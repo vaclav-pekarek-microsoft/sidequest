@@ -32,7 +32,7 @@
             <label for="template-text">Plain-text alternative (1–2,000 characters)</label>
             <textarea id="template-text" maxlength="2000" @bind="text" @bind:after="InvalidatePreview"></textarea>
             <FluentButton OnClick="PreviewAsync" Disabled="@Disabled">Preview with synthetic values</FluentButton>
-            <FluentButton OnClick="@(() => confirming = true)" Disabled="@Disabled">Review new revision</FluentButton>
+            <FluentButton OnClick="@(() => Review(() => confirming = true))" Disabled="@Disabled">Review new revision</FluentButton>
             <FluentButton OnClick="RefreshHistoryAsync" Disabled="@Disabled">Check latest history, keep edits</FluentButton>
         </fieldset>
         @if (confirming)
@@ -41,7 +41,7 @@
                 <h2 id="template-confirm">Confirm new template revision</h2>
                 <p>Newly prepared @loadedKey email will use this wording. Already attempted messages keep their frozen content. Previous revisions remain available.</p>
                 <FluentButton OnClick="SaveAsync" Disabled="@Disabled">Confirm append revision</FluentButton>
-                <FluentButton OnClick="@(() => confirming = false)" Disabled="@Disabled">Cancel save</FluentButton>
+                <FluentButton OnClick="@(() => Review(() => confirming = false))" Disabled="@Disabled">Cancel save</FluentButton>
             </section>
         }
         <TemplatePreview Preview="@preview" />
@@ -58,7 +58,7 @@
                             <summary>Inspect saved wording</summary>
                             <p>@item.Subject</p><pre>@item.HtmlBody</pre><pre>@item.TextBody</pre>
                         </details>
-                        <FluentButton OnClick="@(() => CopyWording(item))" Disabled="@Disabled">Copy wording to draft</FluentButton>
+                        <FluentButton OnClick="@(() => Review(() => CopyWording(item)))" Disabled="@Disabled">Copy wording to draft</FluentButton>
                     </li>
                 }
             </ul>

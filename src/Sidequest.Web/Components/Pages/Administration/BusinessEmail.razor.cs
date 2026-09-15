@@ -14,7 +14,7 @@ public partial class BusinessEmail
     private string? pendingKey;
 
     /// <inheritdoc />
-    protected override Task OnInitializedAsync() => RunAsync(async () =>
+    protected override Task OnInitializedAsync() => InitializeAsync(async () =>
     {
         settings = await Service.GetSettingsAsync(Lifetime, allowInvalidForEditing: true);
         brand = settings.Single(x => x.Key == BusinessEmailRules.BrandKey).Value;
@@ -22,7 +22,16 @@ public partial class BusinessEmail
         ValidateSettings(settings);
     });
 
-    private Task RefreshAsync() => RunAsync(async () =>
+    private Task RefreshAsync() => RunAsync(async () => ValidateSettings(await RefreshSettingsAsync()));
+
+    /// <inheritdoc />
+    protected override async Task RefreshAfterReconnectAsync()
+    {
+        var latest = await RefreshSettingsAsync();
+        ValidateLoadedConfiguration(() => ValidateSettings(latest));
+    }
+
+    private async Task<IReadOnlyList<BusinessSetting>> RefreshSettingsAsync()
     {
         var latest = await Service.GetSettingsAsync(Lifetime, allowInvalidForEditing: true);
         if (settings is null)
@@ -35,11 +44,13 @@ public partial class BusinessEmail
         {
             currentSettings = latest;
         }
-        ValidateSettings(latest);
-    });
+        pendingKey = null;
+        return latest;
+    }
 
     private void AcceptVersions()
     {
+        if (Disabled || currentSettings is null) return;
         settings = currentSettings;
         currentSettings = null;
         pendingKey = null;
@@ -50,6 +61,7 @@ public partial class BusinessEmail
         if (pendingKey is null || settings is null) return;
         var original = settings.Single(x => x.Key == pendingKey);
         await Service.SaveSettingAsync(original with { Value = pendingKey == BusinessEmailRules.BrandKey ? brand : replyTo }, Lifetime);
+        Lifetime.ThrowIfCancellationRequested();
         settings = await Service.GetSettingsAsync(Lifetime, allowInvalidForEditing: true);
         pendingKey = null;
         currentSettings = null;
@@ -68,5 +80,7 @@ public partial class BusinessEmail
         settings = null;
         currentSettings = null;
         pendingKey = null;
+        brand = "";
+        replyTo = "";
     }
 }
