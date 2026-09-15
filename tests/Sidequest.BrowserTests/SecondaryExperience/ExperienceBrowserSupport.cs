@@ -48,17 +48,21 @@ internal static class ExperienceBrowserSupport
         var page = await context.NewPageAsync();
         await page.GotoAsync("/signin");
         var home = new Uri(new Uri(page.Url), "/").AbsoluteUri;
-        var select = page.Locator("select#persona");
-        await Expect(select).ToBeVisibleAsync();
-        var value = await select.GetByRole(AriaRole.Option,
-            new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") }).GetAttributeAsync("value");
-        Assert.False(string.IsNullOrEmpty(value));
-        await select.SelectOptionAsync(value!);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
-        await page.WaitForURLAsync(home, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
-        await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
-        await Expect(page.Locator("[data-refresh]")).ToBeEnabledAsync();
+        await SyntheticLoginDiagnostics.ObserveAsync(page, SyntheticAppSettings.Parse(home), "Experience", async () =>
+        {
+            var select = page.Locator("select#persona");
+            await Expect(select).ToBeVisibleAsync();
+            var value = await select.GetByRole(AriaRole.Option,
+                new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") }).GetAttributeAsync("value");
+            Assert.False(string.IsNullOrEmpty(value));
+            await select.SelectOptionAsync(value!);
+            await SyntheticSignInSupport.WaitForInterceptorAsync(page);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
+            await page.WaitForURLAsync(home, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
+            await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
+            await Expect(page.Locator("[data-refresh]")).ToBeEnabledAsync();
+        });
         return page;
     }
 

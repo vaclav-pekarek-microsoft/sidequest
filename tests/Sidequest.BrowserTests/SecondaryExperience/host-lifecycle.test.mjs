@@ -91,6 +91,42 @@ test("The native auth POST waits for clearing and preserves antiforgery form and
     assert.equal(form.submitted, 1);
 });
 
+test("Submission before initializer installation stays native; missing completion generation never auto-activates or navigates", async () => {
+    let clears = 0;
+    const state = await host({ clear: async () => { clears++; return "attempt-epoch"; } });
+    const form = new state.Form();
+    form.inputs.set("__RequestVerificationToken", { value: "synthetic-antiforgery" });
+    form.inputs.set("returnUrl", { value: "/" });
+    let prevented = false;
+    assert.equal(state.listeners.has("submit"), false);
+    const pending = state.listeners.get("submit")?.({
+        target: form, preventDefault() { prevented = true; }
+    });
+    if (!prevented) state.Form.prototype.submit.call(form);
+    await pending;
+    assert.equal(prevented, false);
+    assert.equal(form.submitted, 1);
+    assert.equal(clears, 0);
+    assert.equal(form.inputs.has("experienceEpoch"), false);
+    assert.equal(form.inputs.get("__RequestVerificationToken").value, "synthetic-antiforgery");
+    assert.equal(form.inputs.get("returnUrl").value, "/");
+
+    // Installing a listener later cannot intercept an already-dispatched native submission.
+    await state.module.beforeWebStart();
+    assert.equal(state.listeners.has("submit"), true);
+    assert.equal(clears, 0);
+    assert.equal(form.submitted, 1);
+    assert.equal(form.inputs.has("experienceEpoch"), false);
+
+    const completion = await host({ marker: "" });
+    await completion.module.beforeWebStart();
+    assert.deepEqual(completion.completions, []);
+    assert.deepEqual(completion.navigation, []);
+    assert.match(completion.result.textContent, /Sign-in succeeded/);
+    assert.match(completion.result.textContent, /Continue uses the current online account/);
+    assert.match(completion.result.textContent, /Nothing was refreshed/);
+});
+
 test("A storage failure is visible and cannot prevent sign-out or pretend clearing succeeded", async () => {
     const state = await host({ clear: async () => { throw new Error("denied"); } });
     await state.module.beforeWebStart();

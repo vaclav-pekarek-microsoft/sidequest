@@ -242,16 +242,21 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private async Task<IPage> SignedInAsync(IBrowserContext context, string persona)
     {
         var page = await context.NewPageAsync();
-        await page.GotoAsync("/signin");
-        var select = page.Locator("select#persona");
-        await Expect(select).ToBeVisibleAsync();
-        var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
-        var value = await option.GetAttributeAsync("value");
-        Assert.False(string.IsNullOrEmpty(value));
-        await select.SelectOptionAsync(value!);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
-        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
+        await Sidequest.BrowserTests.SecondaryExperience.SyntheticLoginDiagnostics.ObserveAsync(
+            page, fixture.Settings, "Core", async () =>
+            {
+                await page.GotoAsync("/signin");
+                var select = page.Locator("select#persona");
+                await Expect(select).ToBeVisibleAsync();
+                var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new($"^{Regex.Escape(persona)}\\b") });
+                var value = await option.GetAttributeAsync("value");
+                Assert.False(string.IsNullOrEmpty(value));
+                await select.SelectOptionAsync(value!);
+                await Sidequest.BrowserTests.SecondaryExperience.SyntheticSignInSupport.WaitForInterceptorAsync(page);
+                await page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+                await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true })).ToBeVisibleAsync();
+            });
         return page;
     }
 
