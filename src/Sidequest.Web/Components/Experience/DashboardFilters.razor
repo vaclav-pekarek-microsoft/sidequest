@@ -1,0 +1,60 @@
+@using Sidequest.Application.Events
+@using Sidequest.Application.Quests
+@using Sidequest.Web.Experience
+<fieldset disabled="@Disabled" data-online-actions>
+    <legend>Find your Quests</legend>
+    <label>View
+        <select @bind="kind" @bind:after="NotifyAsync">
+            <option value="Joined">Upcoming Joined</option>
+            <option value="Following">Following</option>
+            <option value="Organizing">Organizing</option>
+            <option value="Discover">Discover</option>
+            <option value="Invited">Invited</option>
+        </select>
+    </label>
+    @if (EventTotal > 100)
+    {
+        <p>Event choices page @EventPage (100 per page)</p>
+        <button type="button" disabled="@(Disabled || EventPage == 1)" @onclick="() => EventPageChanged.InvokeAsync(EventPage - 1)">Previous Event choices</button>
+        <button type="button" disabled="@(Disabled || (long)EventPage * 100 >= EventTotal)" @onclick="() => EventPageChanged.InvokeAsync(EventPage + 1)">Next Event choices</button>
+    }
+    <label>Event
+        <select @bind="eventId" @bind:after="NotifyAsync">
+            <option value="">All my Events</option>
+            @foreach (var item in Events)
+            {
+                <option @key="item.Id" value="@item.Id">@item.Name</option>
+            }
+        </select>
+    </label>
+    <p>Start dates use @(SelectedZone). From and through dates are inclusive civil dates; filtering happens before paging.</p>
+    <label>From date <input type="date" @bind="from" @bind:after="NotifyAsync" /></label>
+    <label>Through date <input type="date" @bind="through" @bind:after="NotifyAsync" /></label>
+    <label>Quests per page
+        <select @bind="size" @bind:after="NotifyAsync">
+            <option value="25">25</option><option value="50">50</option><option value="100">100</option>
+        </select>
+    </label>
+</fieldset>
+
+@code {
+    private QuestListKind kind;
+    private Guid? eventId;
+    private DateOnly? from;
+    private DateOnly? through;
+    private int size = 25;
+    private string SelectedZone => Events.FirstOrDefault(e => e.Id == eventId)?.TimeZoneId ?? "UTC (across Events)";
+    /// <summary>Authorized Event choices provided by the dashboard, never fetched per card.</summary>
+    [Parameter] public IReadOnlyList<EventSummary> Events { get; set; } = [];
+    /// <summary>Disables all controls during prerendering, pending loads and known disconnection.</summary>
+    [Parameter] public bool Disabled { get; set; }
+    /// <summary>Notifies the parent to reset paging and run a newly authorized query.</summary>
+    [Parameter] public EventCallback<DashboardFilter> Changed { get; set; }
+    /// <summary>One-based page of authorized Event choices; the selected Event remains available when paging choices.</summary>
+    [Parameter] public int EventPage { get; set; } = 1;
+    /// <summary>Total authorized Event choices, used only for the Event picker pager.</summary>
+    [Parameter] public int EventTotal { get; set; }
+    /// <summary>Asks the parent to load another bounded page of Event choices.</summary>
+    [Parameter] public EventCallback<int> EventPageChanged { get; set; }
+    private Task NotifyAsync() => Changed.InvokeAsync(new DashboardFilter(kind, eventId, from, through, size));
+}

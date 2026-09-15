@@ -12,6 +12,9 @@ nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
 nav form { margin: 0; }
 main { max-width: 64rem; margin: auto; padding: 1.25rem; min-height: 60vh; }
 footer { padding: 1rem; border-top: 1px solid #c8c8c8; }
+[data-authentication-warning], #components-reconnect-modal { margin: 1rem; padding: 1rem; background: #fff1b8; color: #382c00; }
+#components-reconnect-modal.components-reconnect-hide { display: none; }
+#components-reconnect-modal button { margin: .25rem; max-width: 100%; white-space: normal; }
 .development-banner { background: #fff1b8; color: #382c00; padding: .75rem 1rem; font-weight: 700; }
 .skip-link { position: absolute; left: -10000px; top: .5rem; background: white; padding: .75rem; z-index: 100; }
 .skip-link:focus { left: .5rem; }

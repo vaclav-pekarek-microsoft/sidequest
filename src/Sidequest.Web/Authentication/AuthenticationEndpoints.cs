@@ -49,27 +49,29 @@ public static class AuthenticationEndpoints
                 var principal = DevelopmentPersonas.CreatePrincipal(persona);
                 await accounts.ProvisionAsync(principal, context.RequestAborted);
                 WorkforceSession.Stamp(principal, context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow());
-                await context.SignInAsync(FoundationAuthenticationSettings.CookieScheme, principal,
-                    new AuthenticationProperties { IsPersistent = false });
-                return Results.LocalRedirect(LocalReturnUrl(form["returnUrl"]));
+                var properties = ExperienceAuthentication.CreateProperties(form["returnUrl"], form["experienceEpoch"]);
+                await context.SignInAsync(FoundationAuthenticationSettings.CookieScheme, principal, properties);
+                return Results.LocalRedirect(properties.RedirectUri!);
             });
         }
         else
         {
-            app.MapGet("/auth/login", (string? returnUrl) => Results.Challenge(
-                new AuthenticationProperties { RedirectUri = LocalReturnUrl(returnUrl) },
+            app.MapGet("/auth/login", (string? returnUrl, string? experienceEpoch) => Results.Challenge(
+                ExperienceAuthentication.CreateProperties(returnUrl, experienceEpoch),
                 [OpenIdConnectDefaults.AuthenticationScheme]));
         }
 
         app.MapPost("/auth/logout", async (HttpContext context, IAntiforgery antiforgery) =>
         {
             await antiforgery.ValidateRequestAsync(context);
+            var form = await context.Request.ReadFormAsync(context.RequestAborted);
+            var destination = form["experienceClearFailed"] == "true" ? "/?deviceClearFailed=true" : "/";
             if (settings.IsDevelopment)
                 await context.SignOutAsync(FoundationAuthenticationSettings.CookieScheme);
             else
-                return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
+                return Results.SignOut(new AuthenticationProperties { RedirectUri = destination },
                     [FoundationAuthenticationSettings.CookieScheme, OpenIdConnectDefaults.AuthenticationScheme]);
-            return Results.LocalRedirect("/");
+            return Results.LocalRedirect(destination);
         });
     }
 }

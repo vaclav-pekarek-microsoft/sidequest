@@ -1,0 +1,31 @@
+@page "/auth/complete"
+@attribute [Authorize]
+@layout Layout.AuthenticationBoundaryLayout
+@using Microsoft.AspNetCore.Authentication
+
+<PageTitle>Completing sign-in · Sidequest</PageTitle>
+<h1>Completing sign-in</h1>
+<noscript><p>Sign-in completed, but device clearing and refresh require JavaScript. Clear this site's data before sharing the device.</p></noscript>
+<div data-authentication-completion="@(epoch ?? "")">
+    <p data-authentication-result role="status">Checking the device-clearing boundary before opening Sidequest.</p>
+    <a href="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" data-authentication-continue data-enhance-nav="false">Continue to Sidequest</a>
+</div>
+
+@code {
+    private string? epoch;
+
+    /// <summary>Gets the current static HTTP request used to verify the newly issued, protected authentication ticket.</summary>
+    [CascadingParameter] public HttpContext? HttpContext { get; set; }
+
+    /// <summary>Gets or sets the untrusted destination, normalized to a local path before rendering.</summary>
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpContext is null) throw new InvalidOperationException("Authentication completion requires static HTTP rendering.");
+        var result = await HttpContext.AuthenticateAsync(FoundationAuthenticationSettings.CookieScheme);
+        if (result.Succeeded && result.Properties?.Items.TryGetValue(ExperienceAuthentication.EpochProperty, out var value) == true)
+            epoch = value;
+    }
+}
