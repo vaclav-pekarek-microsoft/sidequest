@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Quests.Implementation;
 using Sidequest.Web.Operations;
@@ -73,6 +74,75 @@ public sealed class WorkHandlerStartupCheckTests
         Assert.Equal(cancellation.Token, error.CancellationToken);
         await check.StopAsync(cancellation.Token);
         Assert.Equal(0, resolutions);
+    }
+
+    /// <summary>Uses the host's explicit Media requirement to validate six handlers without executing work or retaining the validation scope.</summary>
+    /// <returns>A task completing after actual hosted-service resolution, inert validation and disposal assertions.</returns>
+    [Fact]
+    public async Task ConfiguredMedia_RequiresExactlyOneHandler_WithoutExecutingWork()
+    {
+        var services = CoreWorkflowRegistrationTests.Services();
+        services.AddSingleton(new WorkHandlerRequirements(RequireMediaCleanup: true));
+        var executions = 0;
+        var disposals = 0;
+        services.AddScoped<IBackgroundWorkHandler>(_ => new MediaHandler(() => executions++, () => disposals++));
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+        var check = Assert.Single(provider.GetServices<IHostedService>().OfType<WorkHandlerStartupCheck>());
+
+        await check.StartAsync(CancellationToken.None);
+
+        Assert.Equal(0, executions);
+        Assert.Equal(1, disposals);
+        await check.StopAsync(new CancellationToken(canceled: true));
+        Assert.Equal(0, executions);
+        Assert.Equal(1, disposals);
+    }
+
+    /// <summary>Rejects a missing or duplicate enabled Media handler and an undeclared Media handler in a core-only host.</summary>
+    /// <param name="enabled">Whether host composition explicitly requires Media cleanup.</param>
+    /// <param name="handlerCount">Number of Media handlers registered in addition to the real five-handler core graph.</param>
+    /// <param name="replaceQuestHandler">Whether a duplicate Media handler replaces a missing core handler while preserving the expected total count.</param>
+    /// <returns>A task completing after exact startup rejection and zero-execution assertions.</returns>
+    [Theory]
+    [InlineData(true, 0, false)]
+    [InlineData(true, 2, false)]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 2, true)]
+    public async Task ConfiguredMedia_MissingDuplicateOrUndeclaredHandler_RejectsStartup(bool enabled, int handlerCount, bool replaceQuestHandler)
+    {
+        var services = CoreWorkflowRegistrationTests.Services();
+        services.AddSingleton(new WorkHandlerRequirements(enabled));
+        if (replaceQuestHandler)
+            Assert.True(services.Remove(Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IBackgroundWorkHandler) &&
+                descriptor.ImplementationType == typeof(QuestCompletionHandler))));
+        var executions = 0;
+        var disposals = 0;
+        for (var index = 0; index < handlerCount; index++)
+            services.AddScoped<IBackgroundWorkHandler>(_ => new MediaHandler(() => executions++, () => disposals++));
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+        var check = Assert.Single(provider.GetServices<IHostedService>().OfType<WorkHandlerStartupCheck>());
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => check.StartAsync(CancellationToken.None));
+
+        Assert.Equal("Every supported durable work type must have exactly one registered handler.", error.Message);
+        Assert.Equal(0, executions);
+        Assert.Equal(handlerCount, disposals);
+    }
+
+    private sealed class MediaHandler(Action execute, Action dispose) : IBackgroundWorkHandler, IDisposable
+    {
+        /// <inheritdoc />
+        public string WorkType => WorkTypes.MediaCleanup;
+
+        /// <inheritdoc />
+        public Task ExecuteAsync(Guid workId, CancellationToken cancellationToken)
+        {
+            execute();
+            return Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        public void Dispose() => dispose();
     }
 
     private sealed class UnsupportedHandler : IBackgroundWorkHandler

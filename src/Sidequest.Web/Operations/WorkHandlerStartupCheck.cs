@@ -4,7 +4,8 @@ namespace Sidequest.Web.Operations;
 
 /// <summary>Fails host startup before polling if versioned work does not have exactly one registered handler.</summary>
 /// <param name="scopes">Creates an isolated scope to resolve handlers without invoking them or opening a database connection.</param>
-public sealed class WorkHandlerStartupCheck(IServiceScopeFactory scopes) : IHostedService
+/// <param name="requirements">Explicit optional feature requirements; null retains the five-handler core-only host contract.</param>
+public sealed class WorkHandlerStartupCheck(IServiceScopeFactory scopes, WorkHandlerRequirements? requirements = null) : IHostedService
 {
     /// <summary>Checks the complete supported work-type set and rejects missing, duplicate or unknown registrations.</summary>
     /// <param name="cancellationToken">Requests cancellation before startup validation.</param>
@@ -16,12 +17,14 @@ public sealed class WorkHandlerStartupCheck(IServiceScopeFactory scopes) : IHost
         cancellationToken.ThrowIfCancellationRequested();
         using var scope = scopes.CreateScope();
         var types = scope.ServiceProvider.GetServices<IBackgroundWorkHandler>().Select(handler => handler.WorkType).ToArray();
-        string[] expected =
+        List<string> expected =
         [
             WorkTypes.Change, WorkTypes.EventCompletion, WorkTypes.QuestCompletion,
             WorkTypes.BulkMembership, WorkTypes.Reminder
         ];
-        if (types.Length != expected.Length || expected.Any(type => types.Count(actual => actual == type) != 1))
+        if (requirements?.RequireMediaCleanup == true)
+            expected.Add(WorkTypes.MediaCleanup);
+        if (types.Length != expected.Count || expected.Any(type => types.Count(actual => actual == type) != 1))
             throw new InvalidOperationException("Every supported durable work type must have exactly one registered handler.");
         return Task.CompletedTask;
     }
