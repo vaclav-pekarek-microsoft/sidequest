@@ -1,9 +1,9 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Sidequest.Application.Abstractions;
+using Sidequest.Application.Administration;
 using Sidequest.Application.Notifications.Implementation;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
@@ -187,14 +187,29 @@ public sealed class DeliveryDispatcher(ISidequestDbContextFactory factory, Recip
             }
             state!.MayHaveBeenDelivered = true;
         }
+        if (payload.BusinessEmail is null)
+        {
+            try
+            {
+                payload = payload with
+                {
+                    BusinessEmail = await BusinessEmailComposer.ComposeAsync(db, change.Kind, cancellationToken).ConfigureAwait(false)
+                };
+                row.PayloadJson = JsonSerializer.Serialize(payload);
+            }
+            catch (DomainException exception) when (exception.Code == ErrorCode.Validation)
+            {
+                throw new DeliveryTransportException(TransportOutcome.Permanent,
+                    "Business email configuration or template is invalid. Correct it before replaying the delivery.");
+            }
+        }
         // A started attempt is conservatively uncertain even if cancellation is observed in the next instruction.
         row.LastError = "Submission started; acceptance is not yet recorded.";
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        var text = NotificationRules.Summary(change.Kind) +
-            "\nCalendar clients may require acceptance of updates. Declining in Outlook does not change attendance; leave in Sidequest.";
-        return new(user.Email, "Sidequest notification", WebUtility.HtmlEncode(text), text, row.DeduplicationKey,
-            payload.CalendarContent, payload.Calendar?.Method);
+        var email = payload.BusinessEmail;
+        return new(user.Email, email.Subject, email.HtmlBody, email.TextBody, row.DeduplicationKey,
+            payload.CalendarContent, payload.Calendar?.Method, email.ReplyTo);
     }
 
     private void StageCompensation(ISidequestDbContext db, NotificationDelivery original, DeliveryPayload payload,
@@ -304,9 +319,15 @@ public sealed class DeliveryDispatcher(ISidequestDbContextFactory factory, Recip
             ChangeOutboxHandler.Validate(payload.Change);
             if (ChangeOutboxHandler.IsTargeted(payload.Change.Kind) && !payload.Change.AffectedUserIds!.Contains(recipient))
                 throw ChangeOutboxHandler.InvalidPayload();
+            if (payload.BusinessEmail is not null)
+                BusinessEmailRules.ValidateSnapshot(payload.BusinessEmail, payload.Change.Kind);
             return payload;
         }
         catch (JsonException)
+        {
+            throw ChangeOutboxHandler.InvalidPayload();
+        }
+        catch (DomainException exception) when (exception.Code == ErrorCode.Validation)
         {
             throw ChangeOutboxHandler.InvalidPayload();
         }
