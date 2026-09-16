@@ -64,11 +64,21 @@ public sealed class ChangeOutboxHandler(ISidequestDbContextFactory factory, Reci
         var includesWithdrawals = change.Kind is NotificationKind.AccessRemoved or NotificationKind.Left or NotificationKind.AttendeeRemoved
             or NotificationKind.QuestSuspended or NotificationKind.QuestCancelled or NotificationKind.EventCancelled;
         var recipientsToProcess = change.RecipientIds.Concat(includesWithdrawals ? change.PreviousAttendeeIds ?? [] : []).Distinct().ToArray();
+        // Match reminder consumers: reserve schedules before inbox keys, then calendar intent.
+        if (quest is not null)
+        {
+            var participants = await db.Participations.Where(x => x.QuestId == quest.Id).Select(x => x.UserId)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var userId in participants.Concat(recipientsToProcess).Distinct())
+            {
+                var preference = await db.NotificationPreferences.SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
+                await scheduler.ReconcileAsync(db, quest, userId, preference, cancellationToken).ConfigureAwait(false);
+            }
+        }
         foreach (var recipientId in recipientsToProcess)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await db.Notifications.AnyAsync(n => n.SourceChangeId == change.ChangeId &&
-                n.UserId == recipientId && n.Kind == change.Kind, cancellationToken).ConfigureAwait(false))
+            if (await db.HasNotificationForUpdateAsync(change.ChangeId, recipientId, change.Kind, cancellationToken).ConfigureAwait(false))
                 continue;
             if (!await policy.EligibleAsync(db, recipientId, cancellationToken).ConfigureAwait(false))
                 continue;
@@ -107,16 +117,6 @@ public sealed class ChangeOutboxHandler(ISidequestDbContextFactory factory, Reci
                 });
             }
         }
-        if (quest is not null)
-        {
-            var participants = await db.Participations.Where(x => x.QuestId == quest.Id).Select(x => x.UserId)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var userId in participants.Concat(recipientsToProcess).Distinct())
-            {
-                var preference = await db.NotificationPreferences.SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
-                await scheduler.ReconcileAsync(db, quest, userId, preference, cancellationToken).ConfigureAwait(false);
-            }
-        }
         if (!Owns(row, execution.Lease, clock.GetUtcNow()))
             throw new DeliveryTransportException(TransportOutcome.Retryable, "Outbox lease expired before effects could commit.");
         // Completion shares the effects transaction. Even an empty publication snapshot cannot be re-expanded after a crash.
@@ -148,8 +148,7 @@ public sealed class ChangeOutboxHandler(ISidequestDbContextFactory factory, Reci
             return null;
         if (!withdrawal && !request)
             return null;
-        var state = await db.CalendarDeliveryStates.SingleOrDefaultAsync(x => x.QuestId == quest.Id &&
-            x.UserId == recipientId, cancellationToken).ConfigureAwait(false);
+        var state = await db.FindCalendarDeliveryStateForUpdateAsync(quest.Id, recipientId, cancellationToken).ConfigureAwait(false);
         if (withdrawal && !previous && state is null)
             return null;
         // A stale attendance-specific withdrawal cannot cancel a later explicit rejoin.

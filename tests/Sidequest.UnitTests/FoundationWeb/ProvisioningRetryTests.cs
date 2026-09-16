@@ -380,6 +380,21 @@ public sealed class ProvisioningRetryTests
             throw new NotSupportedException("Account provisioning does not change Quest participation.");
 
         /// <inheritdoc/>
+        public Task<CalendarDeliveryState?> FindCalendarDeliveryStateForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not change calendar intent.");
+
+        /// <inheritdoc/>
+        public Task<bool> HasNotificationForUpdateAsync(Guid sourceChangeId, Guid userId, NotificationKind kind,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not produce inbox effects.");
+
+        /// <inheritdoc/>
+        public Task<List<ScheduledWork>> ReadReminderSchedulesForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not schedule reminders.");
+
+        /// <inheritdoc/>
         public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not schedule completion work.");
 
