@@ -87,6 +87,35 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default);
+    /// <summary>Finds a private Quest invitation while reserving its exact Quest/account key for insertion or reactivation.</summary>
+    /// <param name="questId">Nonempty internal Quest identifier whose parent mutation lock has been acquired.</param>
+    /// <param name="userId">Nonempty internal invitee identifier, already checked for current eligibility and Event membership.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>The tracked Active or Revoked invitation with its current rowversion, or null when the exact key is absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and operation context. Authorize the owner before
+    /// reserving the target invitation, and use this instead of a shared invitation lookup before inserting.
+    /// The reservation lasts until transaction completion; adjacent absent keys may contend. This method neither
+    /// grants access nor changes, saves, commits, or retries any work.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default);
+    /// <summary>Finds an actor's participation while reserving its exact Quest/account key for insertion or an exclusive-state update.</summary>
+    /// <param name="questId">Nonempty internal Quest identifier whose parent mutation lock has been acquired.</param>
+    /// <param name="userId">Nonempty internal actor identifier, already authorized for this participation operation.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>The tracked participation in any retained status, with its current rowversion, or null when the exact pair is absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and operation context. Acquire the Event lock and
+    /// reauthorize first, then use this instead of a shared participation lookup. The reservation covers this pair,
+    /// not unrelated participation audience scans; do not read unused audiences before saving a participation change.
+    /// It lasts until transaction completion, and adjacent missing keys may contend. This method neither grants
+    /// access nor changes state, saves, commits, or retries work.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<QuestParticipation?> FindQuestParticipationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default);
     /// <summary>Acquires the addressed Event's mutation lock for the caller's explicit Serializable transaction.</summary>
     /// <param name="eventId">Internal Event identifier resolved before beginning the mutation transaction.</param>
     /// <param name="cancellationToken">Cancels waiting for the database lock.</param>
@@ -112,6 +141,17 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
         DateTimeOffset since, CancellationToken cancellationToken = default);
+    /// <summary>Checks for an exact scheduled-work key in any status while reserving it for a possible insertion.</summary>
+    /// <param name="deduplicationKey">Nonblank complete key, at most 300 characters, compared using database equality rather than prefix matching.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>True when the exact key exists, including Completed, DeadLetter, and Superseded work; false when absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. Acquire the parent Event lock and authorize first
+    /// for Event/Quest mutations, before any shared scheduling read. The reservation lasts until transaction completion;
+    /// adjacent absent keys may contend. No entities are tracked and no work is modified, saved, committed, or retried.</remarks>
+    /// <exception cref="DomainException">The key is invalid (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default);
     /// <summary>Checks for pending or processing work while reserving the matching key range for a possible insertion.</summary>
     /// <param name="deduplicationPrefix">Literal nonblank key prefix, at most 300 characters; wildcard characters remain literal.</param>
     /// <param name="cancellationToken">Cancels the existence query or waiting for its write-intent range lock.</param>

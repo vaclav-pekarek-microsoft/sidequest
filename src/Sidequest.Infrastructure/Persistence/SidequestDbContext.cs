@@ -96,6 +96,42 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     }
 
     /// <inheritdoc />
+    public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (questId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "A Quest identifier is required.", nameof(questId));
+        if (userId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An account identifier is required.", nameof(userId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving a Quest invitation.");
+
+        return QuestInvitations.FromSqlInterpolated($"""
+            SELECT * FROM [QuestInvitations] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_QuestInvitations_QuestId_UserId]))
+            WHERE [QuestId] = {questId} AND [UserId] = {userId}
+            """).AsTracking().SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<QuestParticipation?> FindQuestParticipationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (questId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "A Quest identifier is required.", nameof(questId));
+        if (userId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An account identifier is required.", nameof(userId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving a Quest participation.");
+
+        return Participations.FromSqlInterpolated($"""
+            SELECT * FROM [Participations] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_Participations_QuestId_UserId]))
+            WHERE [QuestId] = {questId} AND [UserId] = {userId}
+            """).AsTracking().SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -135,6 +171,18 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         optionsBuilder.AddInterceptors(SqlConflictCommandInterceptor.Instance, SqlConflictTransactionInterceptor.Instance);
 
     /// <inheritdoc />
+    public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(deduplicationKey) || deduplicationKey.Length > 300)
+            throw new DomainException(ErrorCode.Validation, "A work key of 1 to 300 characters is required.", nameof(deduplicationKey));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving scheduled work.");
+
+        return ScheduledWorkForUpdate().AnyAsync(x => x.DeduplicationKey == deduplicationKey, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -143,10 +191,12 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
             throw new InvalidOperationException("An explicit Serializable transaction is required before reserving scheduled work.");
 
-        return ScheduledWork.FromSqlRaw("SELECT * FROM [ScheduledWork] WITH (UPDLOCK, HOLDLOCK)")
-            .AsNoTracking().AnyAsync(x => x.DeduplicationKey.StartsWith(deduplicationPrefix) &&
+        return ScheduledWorkForUpdate().AnyAsync(x => x.DeduplicationKey.StartsWith(deduplicationPrefix) &&
             (x.Status == WorkStatus.Pending || x.Status == WorkStatus.Processing), cancellationToken);
     }
+
+    private IQueryable<ScheduledWork> ScheduledWorkForUpdate() =>
+        ScheduledWork.FromSqlRaw("SELECT * FROM [ScheduledWork] WITH (UPDLOCK, HOLDLOCK)").AsNoTracking();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

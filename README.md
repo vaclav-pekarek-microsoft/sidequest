@@ -174,6 +174,37 @@ insertion in the same transaction. This avoids compatible shared-range reads tur
 into competing insert conversions during concurrent Quest publication; it does not
 change completion deadlines, retry user commands, or commit outside the caller.
 
+Event publication and Active Event date edits reserve the **exact** completion key
+`event.complete.v1:<EventId>:<end UTC ticks>` through `HasScheduledWorkForUpdateAsync`.
+Unlike Quest's pending-prefix check, every existing exact Event key suppresses a new
+intent, including Completed, DeadLetter and Superseded rows. Revisited deadlines reuse
+their retained intent; changing the end creates a different immutable key, and stale
+work cannot complete an extended Event. Both contracts share the Infrastructure-owned
+write-intent query and existing deduplication index, with no migration or isolation
+change. Publication, history, audit, outbox and scheduling still commit or roll back
+together; an already-published Event still rejects another publication.
+
+Private Quest invitations reserve their exact `(QuestId, UserId)` key through
+`FindQuestInvitationForUpdateAsync` before inserting or reactivating a grant.
+Authorization still requires an eligible owner with current Event membership, but
+does not read unrelated invitation grants for owner-only operations or moderation.
+This avoids taking shared empty invitation ranges before the write-intent reservation.
+Existing Active grants are unchanged; Revoked grants reuse their row without restoring
+participation. The existing unique index is reused, with no migration, added retry,
+or weaker isolation. Invitation, audit, outbox and Quest updates remain atomic.
+
+Participation mutations reserve the actor's exact `(QuestId, UserId)` through
+`FindQuestParticipationForUpdateAsync` after Event locking, authorization and
+lifecycle checks, before reading the prior state. The Infrastructure query uses
+write intent on the existing unique index for both absent and retained rows.
+Join/Leave delivery captures only owners plus the actor; unused attendee/follower
+audience scans must not acquire shared participation PK ranges before saving.
+An exact-key reservation alone does not protect those unrelated scans. Follow/Unfollow
+changes do not need an audience read. Exclusive states, advisory capacity, repeat safety,
+calendar revision and atomic audit/outbox remain unchanged. No migration, automatic
+retry, global application lock or isolation change is introduced; adjacent missing
+index ranges may still wait for transaction completion.
+
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
 are prohibited. Shared contracts and migrations have one integration owner. See

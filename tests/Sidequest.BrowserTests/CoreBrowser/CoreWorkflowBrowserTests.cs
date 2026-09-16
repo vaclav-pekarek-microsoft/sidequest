@@ -440,11 +440,14 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private static async Task ConfirmQuestActionAsync(IPage page, string action)
     {
         var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-        await reason.FillAsync("Browser acceptance action.");
-        await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
-        await Expect(reason).ToHaveValueAsync("");
-        await Expect(page.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
+        await QuestConfirmationDiagnostics.ObserveAsync(page, reason, action, async () =>
+        {
+            await reason.FillAsync("Browser acceptance action.");
+            await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
+            await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
+            await Expect(reason).ToHaveValueAsync("");
+            await Expect(page.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
+        });
     }
 
     private static Task ParticipationAsync(IPage page, string value) =>

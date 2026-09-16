@@ -245,13 +245,17 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             if (quest.Status == QuestStatus.Draft)
                 throw Conflict("Draft Quests do not accept participation.");
-            var participation = await db.Participations.SingleOrDefaultAsync(
-                x => x.QuestId == id && x.UserId == actor, token).ConfigureAwait(false);
+            var participation = await db.FindQuestParticipationForUpdateAsync(id, actor, token).ConfigureAwait(false);
             var previous = participation?.Status ?? ParticipationStatus.None;
             var next = ParticipationRules.Apply(previous, command);
             if (next == previous)
                 return;
-            var audience = await QuestChanges.CaptureAsync(db, id, token).ConfigureAwait(false);
+            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
+            // Participation delivery uses only owners and the actor. Unused audience scans
+            // can lock unrelated participation PK ranges despite the exact-key reservation.
+            var owners = calendar
+                ? await db.QuestOwners.Where(x => x.QuestId == id).Select(x => x.UserId).ToArrayAsync(token).ConfigureAwait(false)
+                : [];
             if (participation is null)
             {
                 participation = new QuestParticipation { QuestId = id, UserId = actor };
@@ -259,14 +263,13 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             participation.Status = next;
             participation.ChangedUtc = now;
-            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
             if (calendar)
                 quest.CalendarRevision++;
             var change = QuestChanges.Audit(db, quest, actor, $"Participation:{actor:N}:{previous}->{next}", "", now);
             if (calendar)
                 QuestChanges.Notify(db, writer, quest, change, actor,
                     next == ParticipationStatus.Joined ? NotificationKind.Joined : NotificationKind.Left,
-                    audience.Owners.Append(actor), now,
+                    owners.Append(actor), now,
                     previousAttendees: previous == ParticipationStatus.Joined ? [actor] : [],
                     calendarChanged: true, affectedUsers: [actor]);
         }, cancellationToken);
@@ -279,7 +282,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             if (quest.Status != QuestStatus.Active || quest.Visibility != QuestVisibility.Private || quest.EndUtc <= now)
                 throw Conflict("Invitations require an active private Quest before its end.");
             await RequireTargetAsync(db, parent.Id, userId, token).ConfigureAwait(false);
-            var invitation = await db.QuestInvitations.SingleOrDefaultAsync(x => x.QuestId == id && x.UserId == userId, token).ConfigureAwait(false);
+            var invitation = await db.FindQuestInvitationForUpdateAsync(id, userId, token).ConfigureAwait(false);
             if (invitation?.Status == QuestInvitationStatus.Active)
                 return;
             if (invitation is null)
@@ -479,19 +482,21 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         bool moderation, CancellationToken token)
     {
         var quest = await access.RequireQuestAsync(db, id, actor, owner, moderation, token).ConfigureAwait(false);
-        if (!await Visible(db, actor, moderation).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
+        if (!await Visible(db, actor, moderation, owner).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
             throw new DomainException(ErrorCode.NotFound, "This resource is unavailable.");
         return quest;
     }
 
-    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation) =>
+    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation, bool ownerOnly = false) =>
         db.Quests.Where(q =>
             db.Events.Any(e => e.Id == q.EventId && e.Status != EventStatus.Draft &&
                 (db.EventOwners.Any(o => o.EventId == e.Id && o.UserId == actor) ||
                  !db.EventStatusHistory.Any(h => h.EventId == e.Id &&
                      h.Previous == EventStatus.Draft && h.Next == EventStatus.Cancelled))) &&
             db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active) &&
-            (moderation
+            (ownerOnly && !moderation
+                ? db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
+                : moderation
                 ? q.Status != QuestStatus.Draft &&
                     !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
                     db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor)
