@@ -370,6 +370,11 @@ public sealed class ProvisioningRetryTests
             throw new NotSupportedException("Account provisioning does not request Event membership.");
 
         /// <inheritdoc/>
+        public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not grant Quest invitations.");
+
+        /// <inheritdoc/>
         public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not schedule completion work.");
 

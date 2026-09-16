@@ -63,7 +63,8 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         if ((moderation || !owner) && await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
             x.Previous == QuestStatus.Draft && x.Next == QuestStatus.Cancelled, cancellationToken).ConfigureAwait(false))
             throw Unavailable();
-        var invited = await db.QuestInvitations.AnyAsync(
+        // An invitation cannot authorize an owner-only or moderation request, and owners already have access.
+        var invited = !owner && !ownerOnly && !moderation && await db.QuestInvitations.AnyAsync(
             x => x.QuestId == questId && x.UserId == userId && x.Status == QuestInvitationStatus.Active, cancellationToken).ConfigureAwait(false);
         var eventOwner = moderation && await db.EventOwners.AnyAsync(
             x => x.EventId == parent.Id && x.UserId == userId, cancellationToken).ConfigureAwait(false);

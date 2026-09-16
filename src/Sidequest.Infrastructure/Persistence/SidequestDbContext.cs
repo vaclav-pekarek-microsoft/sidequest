@@ -96,6 +96,24 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     }
 
     /// <inheritdoc />
+    public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (questId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "A Quest identifier is required.", nameof(questId));
+        if (userId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An account identifier is required.", nameof(userId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving a Quest invitation.");
+
+        return QuestInvitations.FromSqlInterpolated($"""
+            SELECT * FROM [QuestInvitations] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_QuestInvitations_QuestId_UserId]))
+            WHERE [QuestId] = {questId} AND [UserId] = {userId}
+            """).AsTracking().SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

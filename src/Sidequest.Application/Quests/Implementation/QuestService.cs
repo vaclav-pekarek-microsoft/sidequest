@@ -279,7 +279,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             if (quest.Status != QuestStatus.Active || quest.Visibility != QuestVisibility.Private || quest.EndUtc <= now)
                 throw Conflict("Invitations require an active private Quest before its end.");
             await RequireTargetAsync(db, parent.Id, userId, token).ConfigureAwait(false);
-            var invitation = await db.QuestInvitations.SingleOrDefaultAsync(x => x.QuestId == id && x.UserId == userId, token).ConfigureAwait(false);
+            var invitation = await db.FindQuestInvitationForUpdateAsync(id, userId, token).ConfigureAwait(false);
             if (invitation?.Status == QuestInvitationStatus.Active)
                 return;
             if (invitation is null)
@@ -479,19 +479,21 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         bool moderation, CancellationToken token)
     {
         var quest = await access.RequireQuestAsync(db, id, actor, owner, moderation, token).ConfigureAwait(false);
-        if (!await Visible(db, actor, moderation).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
+        if (!await Visible(db, actor, moderation, owner).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
             throw new DomainException(ErrorCode.NotFound, "This resource is unavailable.");
         return quest;
     }
 
-    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation) =>
+    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation, bool ownerOnly = false) =>
         db.Quests.Where(q =>
             db.Events.Any(e => e.Id == q.EventId && e.Status != EventStatus.Draft &&
                 (db.EventOwners.Any(o => o.EventId == e.Id && o.UserId == actor) ||
                  !db.EventStatusHistory.Any(h => h.EventId == e.Id &&
                      h.Previous == EventStatus.Draft && h.Next == EventStatus.Cancelled))) &&
             db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active) &&
-            (moderation
+            (ownerOnly && !moderation
+                ? db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
+                : moderation
                 ? q.Status != QuestStatus.Draft &&
                     !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
                     db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor)

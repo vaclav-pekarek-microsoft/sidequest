@@ -87,6 +87,20 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default);
+    /// <summary>Finds a private Quest invitation while reserving its exact Quest/account key for insertion or reactivation.</summary>
+    /// <param name="questId">Nonempty internal Quest identifier whose parent mutation lock has been acquired.</param>
+    /// <param name="userId">Nonempty internal invitee identifier, already checked for current eligibility and Event membership.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>The tracked Active or Revoked invitation with its current rowversion, or null when the exact key is absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and operation context. Authorize the owner before
+    /// reserving the target invitation, and use this instead of a shared invitation lookup before inserting.
+    /// The reservation lasts until transaction completion; adjacent absent keys may contend. This method neither
+    /// grants access nor changes, saves, commits, or retries any work.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default);
     /// <summary>Acquires the addressed Event's mutation lock for the caller's explicit Serializable transaction.</summary>
     /// <param name="eventId">Internal Event identifier resolved before beginning the mutation transaction.</param>
     /// <param name="cancellationToken">Cancels waiting for the database lock.</param>
