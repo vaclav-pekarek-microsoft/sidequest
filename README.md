@@ -184,6 +184,15 @@ write-intent query and existing deduplication index, with no migration or isolat
 change. Publication, history, audit, outbox and scheduling still commit or roll back
 together; an already-published Event still rejects another publication.
 
+Private Quest invitations reserve their exact `(QuestId, UserId)` key through
+`FindQuestInvitationForUpdateAsync` before inserting or reactivating a grant.
+Authorization still requires an eligible owner with current Event membership, but
+does not read unrelated invitation grants for owner-only operations or moderation.
+This avoids taking shared empty invitation ranges before the write-intent reservation.
+Existing Active grants are unchanged; Revoked grants reuse their row without restoring
+participation. The existing unique index is reused, with no migration, added retry,
+or weaker isolation. Invitation, audit, outbox and Quest updates remain atomic.
+
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
 are prohibited. Shared contracts and migrations have one integration owner. See
