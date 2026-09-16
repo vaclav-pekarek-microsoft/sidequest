@@ -141,7 +141,7 @@ internal static class ExperienceBrowserSupport
         var response = await page.RunAndWaitForResponseAsync(() => button.ClickAsync(),
             response => response.Url == endpoint && response.Request.Method == "GET");
         Assert.Equal(200, response.Status);
-        Assert.Null(await response.FinishedAsync());
+        Assert.Null(await response.FinishedAsync().WaitAsync(TimeSpan.FromSeconds(30)));
         await Expect(button).ToBeEnabledAsync();
         await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
     }

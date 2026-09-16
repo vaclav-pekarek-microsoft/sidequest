@@ -88,7 +88,7 @@ jobs:
         env:
           SIDEQUEST_BASE_URL: http://127.0.0.1:5078
         run: |
-          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
+          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Require executed foundation scenarios
         shell: pwsh
@@ -107,7 +107,7 @@ jobs:
             }
           }
       - name: Capture isolated browser database deadlocks
-        if: failure() && steps.browser_diagnostics.outcome == 'success'
+        if: (failure() || cancelled()) && steps.browser_diagnostics.outcome == 'success'
         shell: bash
         run: |
           docker exec -i sidequest-test-sql bash -c '
@@ -121,6 +121,7 @@ jobs:
           name: test-results
           path: |
             **/TestResults/*.trx
+            **/TestResults/**/Sequence*.xml
             ${{ runner.temp }}/sidequest-web.log
             ${{ runner.temp }}/sidequest-deadlocks.xml
           if-no-files-found: warn
