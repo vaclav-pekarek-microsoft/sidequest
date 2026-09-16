@@ -354,8 +354,14 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
             }
             var logout = await old.RunAndWaitForRequestAsync(
                 () => old.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync(),
-                request => request.IsNavigationRequest && request.Method == "POST" &&
-                    new Uri(request.Url).AbsolutePath == "/auth/logout");
+                request =>
+                {
+                    var isLogout = request.IsNavigationRequest && request.Method == "POST" &&
+                        new Uri(request.Url).AbsolutePath == "/auth/logout";
+                    // Release at the POST, before ClickAsync can await the destination's module load.
+                    if (isLogout) releaseInitializer.TrySetResult();
+                    return isLogout;
+                });
             var fields = (logout.PostData ?? "").Split('&');
             Assert.Contains(fields, field => field.StartsWith("__RequestVerificationToken=", StringComparison.Ordinal) &&
                 field.Length > "__RequestVerificationToken=".Length);
@@ -368,12 +374,12 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
         {
             releaseInitializer.TrySetResult();
             release.TrySetResult();
-            await completion;
             if (initializerCaptured.Task.IsCompletedSuccessfully)
                 await initializerCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
             if (nativeLogout)
                 await old.UnrouteAsync(initializerRoute, HoldInitializerAsync);
         }
+        await completion;
         await Expect(signingIn.Locator("[data-authentication-result]")).ToContainTextAsync("superseded");
         Assert.True(await signingIn.EvaluateAsync<bool>("""
             async () => {
