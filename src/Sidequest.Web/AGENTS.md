@@ -201,5 +201,9 @@ Ordinary browser sign-in helpers observe initialized connection UI; a separate
 controlled native-startup journey verifies missing-generation guidance and explicit
 continuation. Route barriers must resolve fingerprinted assets through the rendered
 import map and use Playwright-compatible regular-expression options.
+Moderation navigation verifies the actual selected View and Event, not only the
+URL. Its failure diagnostics report bounded state categories and booleans, never
+titles, resource identities, authentication proofs or raw alert content; do not
+replace missing-state evidence with automatic retries or relaxed access checks.
 This is not live-provider, device-policy, load/restore or production release approval.
 Do not introduce fake success adapters to satisfy external contracts.
