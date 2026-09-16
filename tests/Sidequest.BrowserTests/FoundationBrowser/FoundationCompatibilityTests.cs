@@ -26,7 +26,7 @@ public sealed class FoundationCompatibilityTests(FoundationBrowserFixture fixtur
         await LoginAsync(page, persona);
         var label = $"M1 {persona} – Žluťoučký & <preview>";
         var input = page.GetByRole(AriaRole.Textbox, new() { Name = "Preview label", Exact = true });
-        await input.FillAsync(label);
+        await input.FillWhenActionableAsync(label);
         await Expect(input).ToHaveValueAsync(label);
         await page.GetByRole(AriaRole.Button, new() { Name = "Preview dialog", Exact = true }).ClickAsync();
         var dialog = Preview(page);

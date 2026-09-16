@@ -41,13 +41,13 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
         await AssertInheritedZoneAsync(page);
         await QuestCreationDiagnostics.ObserveAsync(page, title, async () =>
         {
-            await title.FillAsync($"Zone proof {Guid.NewGuid():N}");
+            await title.FillWhenActionableAsync($"Zone proof {Guid.NewGuid():N}");
             await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true })
-                .FillAsync("An evening Quest contained in the Event's one local date.");
+                .FillWhenActionableAsync("An evening Quest contained in the Event's one local date.");
             await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true })
-                .FillAsync("Synthetic evening meeting point");
-            await page.GetByLabel("Starts in Event zone", new() { Exact = true }).FillAsync($"{date}T20:30");
-            await page.GetByLabel("Ends in Event zone", new() { Exact = true }).FillAsync($"{date}T21:30");
+                .FillWhenActionableAsync("Synthetic evening meeting point");
+            await page.GetByLabel("Starts in Event zone", new() { Exact = true }).FillWhenActionableAsync($"{date}T20:30");
+            await page.GetByLabel("Ends in Event zone", new() { Exact = true }).FillWhenActionableAsync($"{date}T21:30");
             await Expect(page.GetByLabel("Start UTC offset (hours)", new() { Exact = true })).ToHaveValueAsync("");
             await Expect(page.GetByLabel("End UTC offset (hours)", new() { Exact = true })).ToHaveValueAsync("");
             await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();

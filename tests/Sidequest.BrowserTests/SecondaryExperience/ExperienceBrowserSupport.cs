@@ -71,12 +71,12 @@ internal static class ExperienceBrowserSupport
         await page.GotoAsync("/events/create");
         var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
         await Expect(name).ToBeEditableAsync();
-        await name.FillAsync($"Offline Event {Guid.NewGuid():N}");
+        await name.FillWhenActionableAsync($"Offline Event {Guid.NewGuid():N}");
         var date = (day ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7))).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillAsync(date);
-        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillAsync(date);
+        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
+        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
         if (timeZoneId is not null)
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "IANA time zone (for example Europe/Prague)", Exact = true }).FillAsync(timeZoneId);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "IANA time zone (for example Europe/Prague)", Exact = true }).FillWhenActionableAsync(timeZoneId);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
@@ -90,9 +90,9 @@ internal static class ExperienceBrowserSupport
         await page.GotoAsync($"/quests/create?eventId={eventId}");
         var input = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
         await Expect(input).ToBeEditableAsync();
-        await input.FillAsync(title);
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync("NEVER-SAVE-THIS-DESCRIPTION");
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync("Synthetic meeting point");
+        await input.FillWhenActionableAsync(title);
+        await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillWhenActionableAsync("NEVER-SAVE-THIS-DESCRIPTION");
+        await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillWhenActionableAsync("Synthetic meeting point");
         await page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Visibility\\b") }).SelectOptionAsync(privateQuest ? "Private" : "Public");
         await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
@@ -107,7 +107,7 @@ internal static class ExperienceBrowserSupport
         try
         {
             var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-            await reason.FillAsync("Synthetic offline acceptance.");
+            await reason.FillWhenActionableAsync("Synthetic offline acceptance.");
             await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
             await Expect(reason).ToHaveValueAsync("");
