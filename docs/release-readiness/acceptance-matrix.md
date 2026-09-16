@@ -26,7 +26,7 @@ suite. No unexecuted scenario is marked passed.
 | **A05** Source-group changes/failures do not alter frozen individual grants | S `BulkMembershipTests.FrozenSnapshotReplayDoesNotRefetchAndRetainsPartialFailures`; S `BulkMembershipTests.ExpansionFailureCannotApplyPartialMembership`; S `BulkMembershipTests.RemovalOrRevocationWinsAgainstStaleSnapshot` | Frozen results and failure semantics exercised with directory doubles. **OPEN live**: approved Graph policy/group fixture, add/invite then change group and outage; subsequent access must not make an ongoing group check. |
 | **A06** Membership/invitation revocation removes access/participation, suppresses content and withdraws calendar | S `QuestEventLifecycleTests.MembershipLoss_AtomicallyRevokesInvitationsAndParticipation`; S `DeliveryPipelineTests.AccessRevokedBeforeSendSuppressesCalendarAndRead`; S `DeliveryPipelineTests.UncertainRequestAccessLossCreatesDurableCompensation`; B `ExperienceJourneyBrowserTests.PrivateInvitedOnlyNeverLeaksAndOnlineRevocationRemovesJoinedBasics` | Device cache refresh semantics and durable delivery proven in bounded environments. **OPEN** real client calendar withdrawal and disconnected-device limitations (A21/A23); immediate remote deletion while offline is not promised. |
 | **A07** Concurrent approvals/repeated accept create one membership/decision/history | S `EventMembershipTests.ConcurrentApprovalsProduceOneMembershipAndDecision`; S `EventMembershipTests.InviteAndAcceptAreRepeatSafeAndResolvePendingRequest`; S `DeliveryPipelineTests.MembershipDecisionSeparatesAffectedRequesterFromManagerObservers` | Actual parallel SQL approval and repeated acceptance proof. Distinguish producer envelope uniqueness from physical exactly-once email, which is not guaranteed. |
-| **A08** Follow/join/leave exclusivity, advisory capacity, repeats/races | S `QuestServiceTests.Participation_IsExclusiveIdempotent_AndCapacityIsAdvisory`; S `EventLockTests.LockEventAsync_SameKeySerializesMutators_UntilCommitOrRollback`; B `CoreWorkflowBrowserTests.MembershipApprovalPublicQuestParticipationAndCalendarRecovery` | **Gap**: cited sequential participation and generic lock tests are not a composed parallel Join-versus-Follow/over-capacity test with exact final counts/audit/delivery. Add/execute that product regression before claiming the entire race scenario. |
+| **A08** Follow/join/leave exclusivity, advisory capacity, repeats/races | S `QuestServiceTests.Participation_IsExclusiveIdempotent_AndCapacityIsAdvisory`; S `EventLockTests.LockEventAsync_SameKeySerializesMutators_UntilCommitOrRollback`; B `CoreWorkflowBrowserTests.MembershipApprovalPublicQuestParticipationAndCalendarRecovery` | The original cited run lacks composed participation races. **Supplemental A08 evidence below** adds overlapping Join-versus-Follow, repeated Join/Leave, and over-capacity cases with exact persisted counts, audit and durable delivery intent. Provider/client acceptance remains separate. |
 | **A09** Named private invitation is immediate read permission, not automatic attendance/acceptance | S `QuestServiceTests.InviteRevokeReinvite_PreservesIndependentOwnerAccess_AndNeverRestoresParticipation`; S `QuestAuthorizationTests.PrivateRead_RequiresInvitationAndMembershipAcrossRetainedStates`; B `CoreWorkflowBrowserTests.PrivateInvitationModerationAndRevocationPreserveDistinctAccess` | Invitation/owner access independence and browser revocation supported. **OPEN live** forwarded URL/nonmember check with approved distinct users; do not mislabel private invitations as Event consent invitations. |
 | **A10** Invalid state/date transition rejects atomically | S `EventServiceTests.EditEnforcesRowversionPublishedZoneAndChildContainment`; S `QuestServiceTests.FailedMutation_RollsBackAuditOutboxAndContent`; S `QuestFailureTests.OutboxFailure_RollsBackParticipationCalendarAndAudit`; S `QuestBoundaryTests.Containment_UsesExactExclusiveEnd` | Actual rollback and boundary proof; failures are not automatically replayed. Retain explicit conflict/validation observations in representative UI run. |
 | **A11** Event cancellation atomically cancels relevant public/private children | S `EventCancellationCompositionTests.CancelEvent_RealProducers_CoalesceParentStatusAndPerQuestCalendarWithdrawals`; S `EventCancellationCompositionTests.CancelEvent_DraftAndTerminalChildren_PreservePrivateAndHistoricalSemantics`; S `EventServiceTests.CancellationCascadeFailureRollsBackChildAndParent` | Composed audience/calendar intent plus rollback proof. **OPEN** supported Outlook delivery/withdrawal evidence; terminal children must not receive invented new cancellation. |
@@ -46,13 +46,46 @@ suite. No unexecuted scenario is marked passed.
 | **A25** Local end/reschedule/restarted completion; repeat-safe history; no calendar withdrawal | S `CompletionCompositionTests.EventCompletion_EarlyClaim_RetriesThenCompletesUsingImmutableCutoff`; S `CompletionCompositionTests.CompletionIntent_AfterRealEndEdit_DoesNotApplyOldDeadline`; S `CompletionCompositionTests.EarlyQuestCompletion_MustNotLoseDurableCompletionAtImmutableCutoff`; S `QuestEventLifecycleTests.CompletionCleanup_PreservesHistoricalCalendars_AndCancelsOnlyUnpublishedDrafts`; S `EventServiceTests.ArchiveRequiresAllChildrenTerminal` | Composed immutable-deadline/retry and history proof. **OPEN** host clock/zone configuration and actual restart observation; controlled queue recovery is not a deployment restart. |
 | **A26** Bulk pagination/dedup/ineligibility/throttle/failure/retry/removal; frozen individuals only | U `GraphDirectoryGatewayTests.ExpandSupportedGroupReadsAllTransitivePagesAndDeduplicates`; U `GraphDirectoryGatewayTests.ExpansionRejectsIncompleteOrUntrustedContinuation`; U `GraphDirectoryGatewayTests.ThrottlingWaitsForExactRetryAfterBeforeRetrying`; S `BulkMembershipTests.CompleteExpansionPrecedesMembershipAndDeduplicatesSnapshot`; S `BulkMembershipTests.FrozenSnapshotReplayDoesNotRefetchAndRetainsPartialFailures`; S `BulkMembershipTests.RemovalOrRevocationWinsAgainstStaleSnapshot` | Controlled Graph pagination/throttle and SQL snapshot proof. **OPEN live** approved group/paging/rate policy and visible partial progress; no assumption that app access remains group-derived. |
 
-## Product automated follow-up, not implemented in this preparation slice
+## Supplemental A08 regression evidence
 
-Prioritize the uncited combined assertions for **A08, A12, A13 and A17**, and
+These cases were added after the original `613e795` evidence baseline and are
+not claimed to exist in its retained TRX. Their source is
+`tests\Sidequest.IntegrationTests\CoreQuests\QuestServiceTests.cs` in this revision:
+
+- `Participation_JoinRacingFollow_PreservesExactStateAndIntent`: both Event-lock
+  orderings, exact accepted/conflicting command outcomes, Joined-only final state,
+  an explicit repeat Join, exact audit transitions, and one calendar-affecting
+  Joined envelope with the correct actor, recipients and revision.
+- `Participation_ConcurrentJoinAndLeave_PreserveCapacityAndRepeatSafety`: two
+  overlapping calls by either the same actor or distinct members; two distinct
+  members may join despite suggested capacity one. Repeated Join/Leave commits
+  one transition per actor, retains None rather than restoring Following, and
+  produces exact counts, audit, per-actor Joined/Left envelopes and consecutive
+  calendar revisions.
+
+The helper holds the first real Quest service call inside its already-acquired
+Event lock while starting the second call, then releases it without arbitrary
+sleeps or replaying a failed mutation. Each call uses its own SQL context and
+the real access checks, transaction boundary and change writer; the existing
+active-Event reconciliation fixture remains in use. Five focused cases,
+including the original sequential case, passed against fixture-owned LocalDB:
+
+```powershell
+dotnet test tests\Sidequest.IntegrationTests\Sidequest.IntegrationTests.csproj -c Release --no-build --filter "FullyQualifiedName~Participation_JoinRacingFollow|FullyQualifiedName~Participation_ConcurrentJoinAndLeave|FullyQualifiedName~Participation_IsExclusiveIdempotent"
+```
+
+Retain the accepted PR's hosted execution evidence with the release dossier.
+These assertions prove durable producer intent, not queue consumption, actual
+email submission or client ingestion, and do not independently approve A08 or
+release acceptance.
+
+## Remaining product automated follow-up
+
+Prioritize the uncited combined assertions for **A12, A13 and A17**, and
 approved actual process-kill/restart exercises for **A15/A22/A25**. Define exact
 new case names only when implemented; proposed names are not executed evidence.
 The other rows' automated support must still be reviewed against every §58
-clause before sign-off. No change to existing product tests is included here.
+clause before sign-off.
 
 ## Recording a later acceptance decision
 
