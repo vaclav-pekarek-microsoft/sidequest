@@ -30,7 +30,7 @@ public partial class QuestDetails : IAsyncDisposable
     /// <summary>Quest route identifier, reauthorized for every load and command.</summary>
     [Parameter] public Guid Id { get; set; }
     /// <summary>Explicit audited Event-owner view; it never grants ordinary private participation access.</summary>
-    [SupplyParameterFromQuery(Name = "moderation")] public bool Moderation { get; set; }
+    [Parameter] public bool Moderation { get; set; }
     [Inject] private IQuestService Quests { get; set; } = default!;
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;

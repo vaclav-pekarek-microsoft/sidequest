@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using Sidequest.BrowserTests.FoundationBrowser;
@@ -85,9 +86,12 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     }
 
     /// <summary>Proves private invitation grants immediate access, ordinary Event ownership grants none, moderation hides rosters, and revocation removes access.</summary>
+    /// <param name="navigateDuringCircuitStartup">Whether to hold the captured source-URL startup frame until enhanced navigation completes.</param>
     /// <returns>A task completing after three separate identities traverse their distinct authorization paths.</returns>
-    [Fact]
-    public async Task PrivateInvitationModerationAndRevocationPreserveDistinctAccess()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PrivateInvitationModerationAndRevocationPreserveDistinctAccess(bool navigateDuringCircuitStartup)
     {
         await using var eventOwnerContext = await fixture.CreateContextAsync();
         await using var questOwnerContext = await fixture.CreateContextAsync();
@@ -103,9 +107,45 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
         await AssertPrivateUnavailableAsync(invitee, questId, title);
         await AssertPrivateUnavailableAsync(eventOwner, questId, title);
+        var startup = new TaskCompletionSource<Action>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (navigateDuringCircuitStartup)
+        {
+            await eventOwner.RouteWebSocketAsync(new Regex("/_blazor\\?"), socket =>
+            {
+                var server = socket.ConnectToServer();
+                socket.OnMessage(frame =>
+                {
+                    if (frame.Binary is { } bytes)
+                    {
+                        var payload = Encoding.UTF8.GetString(bytes);
+                        if (payload.Contains("StartCircuit", StringComparison.Ordinal) &&
+                            payload.Contains($"/events/{eventId}", StringComparison.Ordinal))
+                        {
+                            Assert.True(startup.TrySetResult(() => server.Send(bytes)), "Only one source-page startup frame may be held.");
+                            return;
+                        }
+                        server.Send(bytes);
+                    }
+                    else
+                    {
+                        server.Send(frame.Text ?? throw new InvalidOperationException("WebSocket frame has no payload."));
+                    }
+                });
+            });
+        }
         await eventOwner.GotoAsync($"/events/{eventId}");
-        await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Quest moderation", Exact = true }).ClickAsync();
-        await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
+        var releaseStartup = navigateDuringCircuitStartup ? await startup.Task.WaitAsync(TimeSpan.FromSeconds(15)) : null;
+        try
+        {
+            await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Quest moderation", Exact = true }).ClickAsync();
+            await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
+            await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "My Quests", Exact = true })).ToBeVisibleAsync();
+        }
+        finally
+        {
+            releaseStartup?.Invoke();
+        }
+        await Expect(eventOwner.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToBeEnabledAsync();
         await OpenModerationQuestAsync(eventOwner, eventId, title);
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Attendees", Exact = true })).ToHaveCountAsync(0);

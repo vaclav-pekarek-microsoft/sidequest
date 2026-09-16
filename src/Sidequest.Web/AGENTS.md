@@ -15,6 +15,15 @@ Keep actions and form controls disabled until `RendererInfo.IsInteractive` is tr
 Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
 an early click. Preserve prerendering and server reauthorization rather than adding
 arbitrary client delays or retrying mutations to hide this handoff.
+Query-dependent Quest routes bind query values in static `*Route` components and
+pass serializable parameters explicitly to their interactive views. An enhanced
+navigation can finish after `StartCircuit` captures the previous URL but before
+the interactive renderer attaches; that circuit can miss the navigation and
+supply obsolete query values. Do not move query binding into those interactive
+roots or parse their `NavigationManager.Uri` as a fallback. Keep route authorization,
+prerendering, service reauthorization and explicit parameter transfer together.
+The browser regression holds the unchanged source-URL startup frame until the
+target SSR page arrives, then verifies the enabled interactive moderation view.
 Bind Fluent input components' `Disabled` parameters explicitly as well as their
 native fieldset. Fieldset-only transitions can leave the web component and its
 shadow input disabled after the fieldset becomes enabled.
