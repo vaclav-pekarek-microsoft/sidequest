@@ -356,6 +356,11 @@ public sealed class ProvisioningRetryTests
         public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not acquire Event locks.");
 
+        /// <inheritdoc />
+        public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
+            DateTimeOffset since, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not request Event membership.");
+
         /// <inheritdoc/>
         public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not schedule completion work.");

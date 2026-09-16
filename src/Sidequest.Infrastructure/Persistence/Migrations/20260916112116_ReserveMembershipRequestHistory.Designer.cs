@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Sidequest.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Sidequest.Infrastructure.Persistence;
 namespace Sidequest.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(SidequestDbContext))]
-    partial class SidequestDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916112116_ReserveMembershipRequestHistory")]
+    partial class ReserveMembershipRequestHistory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -249,13 +249,13 @@ public sealed class EventService : IEventService, IEventManagementQueries
                 throw EventTransactions.Unavailable();
             EventTransactions.RequireActive(item, now);
             if (await db.EventMemberships.AnyAsync(x => x.EventId == eventId && x.UserId == actor.Id &&
-                x.Status == MembershipStatus.Active, cancellationToken).ConfigureAwait(false) ||
-                await db.MembershipRequests.AnyAsync(x => x.EventId == eventId && x.UserId == actor.Id &&
-                x.Status == MembershipRequestStatus.Pending, cancellationToken).ConfigureAwait(false))
+                x.Status == MembershipStatus.Active, cancellationToken).ConfigureAwait(false))
                 return;
             var since = now.AddHours(-1);
-            if (await db.MembershipRequests.CountAsync(x => x.EventId == eventId && x.UserId == actor.Id &&
-                x.CreatedUtc >= since, cancellationToken).ConfigureAwait(false) >= options.RequestsPerHour)
+            var requests = await db.ReadMembershipRequestStateForUpdateAsync(eventId, actor.Id, since, cancellationToken).ConfigureAwait(false);
+            if (requests.HasPendingRequest)
+                return;
+            if (requests.RecentRequestCount >= options.RequestsPerHour)
                 throw EventTransactions.Conflict("The request rate limit was reached. Try again later.");
             db.MembershipRequests.Add(new EventMembershipRequest { EventId = eventId, UserId = actor.Id, CreatedUtc = now });
             Emit(db, eventId, actor.Id, "Membership.Requested", NotificationKind.MembershipRequested,

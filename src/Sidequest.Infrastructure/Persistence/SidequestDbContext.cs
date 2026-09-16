@@ -92,6 +92,28 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     }
 
     /// <inheritdoc />
+    public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
+        DateTimeOffset since, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (eventId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An Event identifier is required.", nameof(eventId));
+        if (userId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An account identifier is required.", nameof(userId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving membership requests.");
+
+        // Use one covering, unfiltered range for both facts. Separate shared pending/history reads
+        // can lock the clustered index's infinite gap and deadlock when different Events insert.
+        return Database.SqlQuery<MembershipRequestState>($"""
+            SELECT CAST(COALESCE(MAX(CASE WHEN [Status] = 0 THEN 1 ELSE 0 END), 0) AS bit) AS [HasPendingRequest],
+                   COUNT(CASE WHEN [CreatedUtc] >= {since} THEN 1 END) AS [RecentRequestCount]
+            FROM [MembershipRequests] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_MembershipRequests_EventId_UserId_CreatedUtc]))
+            WHERE [EventId] = {eventId} AND [UserId] = {userId}
+            """).SingleAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.AddInterceptors(SqlConflictCommandInterceptor.Instance, SqlConflictTransactionInterceptor.Instance);
 
@@ -130,6 +152,8 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         modelBuilder.Entity<EventMembership>().HasIndex(x => new { x.EventId, x.UserId }).IsUnique();
         modelBuilder.Entity<EventMembershipRequest>().HasIndex(x => new { x.EventId, x.UserId })
             .IsUnique().HasFilter("[Status] = 0");
+        modelBuilder.Entity<EventMembershipRequest>().HasIndex(x => new { x.EventId, x.UserId, x.CreatedUtc })
+            .IncludeProperties(x => x.Status);
         modelBuilder.Entity<EventInvitation>().HasIndex(x => new { x.EventId, x.UserId })
             .IsUnique().HasFilter("[Status] = 0");
         modelBuilder.Entity<QuestOwner>().HasIndex(x => new { x.QuestId, x.UserId }).IsUnique();
