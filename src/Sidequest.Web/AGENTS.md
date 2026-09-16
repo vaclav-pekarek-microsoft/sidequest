@@ -106,6 +106,12 @@ Sign-in provisions/updates `(TenantId,ObjectId)` in a serializable transaction, 
 duplicate-key/deadlock/concurrency conflicts at most twice with fresh contexts.
 This includes `DomainException(Conflict)` translated by the persistence boundary;
 Forbidden/Validation outcomes and ineligible accounts are not retried.
+After trusted admission, `FindUserForUpdateAsync` performs the first account lookup
+with an Infrastructure-owned `UPDLOCK,HOLDLOCK` reservation using the existing unique
+tenant/object index. It returns current tracked eligibility and rowversion, protecting
+both absent-key inserts and existing-account updates before shared locks can convert.
+Adjacent empty ranges may wait; unrelated existing identities are not globally locked.
+No schema migration is required, and the reservation neither admits users nor grants roles.
 The integration-owned schema must enforce that unique key. Disabled or verified-departed
 users remain disabled. Request cookies revalidate SQL eligibility on every request;
 circuits revalidate every minute and fail closed on errors. Resource commands still
