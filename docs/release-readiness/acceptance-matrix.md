@@ -30,7 +30,7 @@ suite. No unexecuted scenario is marked passed.
 | **A09** Named private invitation is immediate read permission, not automatic attendance/acceptance | S `QuestServiceTests.InviteRevokeReinvite_PreservesIndependentOwnerAccess_AndNeverRestoresParticipation`; S `QuestAuthorizationTests.PrivateRead_RequiresInvitationAndMembershipAcrossRetainedStates`; B `CoreWorkflowBrowserTests.PrivateInvitationModerationAndRevocationPreserveDistinctAccess` | Invitation/owner access independence and browser revocation supported. **OPEN live** forwarded URL/nonmember check with approved distinct users; do not mislabel private invitations as Event consent invitations. |
 | **A10** Invalid state/date transition rejects atomically | S `EventServiceTests.EditEnforcesRowversionPublishedZoneAndChildContainment`; S `QuestServiceTests.FailedMutation_RollsBackAuditOutboxAndContent`; S `QuestFailureTests.OutboxFailure_RollsBackParticipationCalendarAndAudit`; S `QuestBoundaryTests.Containment_UsesExactExclusiveEnd` | Actual rollback and boundary proof; failures are not automatically replayed. Retain explicit conflict/validation observations in representative UI run. |
 | **A11** Event cancellation atomically cancels relevant public/private children | S `EventCancellationCompositionTests.CancelEvent_RealProducers_CoalesceParentStatusAndPerQuestCalendarWithdrawals`; S `EventCancellationCompositionTests.CancelEvent_DraftAndTerminalChildren_PreservePrivateAndHistoricalSemantics`; S `EventServiceTests.CancellationCascadeFailureRollsBackChildAndParent` | Composed audience/calendar intent plus rollback proof. **OPEN** supported Outlook delivery/withdrawal evidence; terminal children must not receive invented new cancellation. |
-| **A12** Suspended edit, moderator reinstatement, latest same-UID restoration, completion without cancellation | S `QuestServiceTests.SuspendEditReinstateCancelArchive_PreservesLifecycleAndDeliveryRules`; S `DeliveryPipelineTests.SuspendedEditModeratorNoticeIsGenericAndOwnershipRechecked`; S `QuestCompletionHandlerTests.Completion_ChecksDueAndCurrentEnd_AndReplaysWithoutCalendarCancellation` | **Gap**: these do not alone prove one composed suspend→edit→reinstate→complete transport journey with latest rendered details. Add targeted composed regression; real restoration belongs to A23. |
+| **A12** Suspended edit, moderator reinstatement, latest same-UID restoration, completion without cancellation | S `QuestServiceTests.SuspendEditReinstateCancelArchive_PreservesLifecycleAndDeliveryRules`; S `DeliveryPipelineTests.SuspendedEditModeratorNoticeIsGenericAndOwnershipRechecked`; S `QuestCompletionHandlerTests.Completion_ChecksDueAndCurrentEnd_AndReplaysWithoutCalendarCancellation` | The original cited run does not alone prove the complete transport journey. **Supplemental A12 evidence below** adds composed public/private suspend→edit→reinstate→complete journeys with exact latest rendered details and no final withdrawal. Real client restoration remains **OPEN A23**. |
 | **A13** Inherited Event zone, DST gap/overlap, midnight, UTC/local display | S `QuestBoundaryTests.LocalTime_DstGapAndOverlap_RequireExplicitValidMapping`; U `TimeRulesTests.EventWindow_DstDays_HaveExactInclusiveDateBoundaries`; U `TimeRulesTests.ToUtc_AutumnOverlap_BothBranchesReturnIndependentInstants`; U `TimeRulesTests.ToUtc_InputKindDoesNotOverrideEventZone` | Exact time-rule support. **Gap**: explicit differing-user/Event-zone rendered product-display journey is not established here. Record on supported clients, including selected overlap offset and no override. |
 | **A14** Same UID, ordered changes, exact retries, no roster/stale send | S `DeliveryPipelineTests.JoinLeaveRejoinRetainsUidAndMonotonicSequence`; S `DeliveryPipelineTests.CalendarRetryRetainsExactPayloadAndRecordsActualReceipt`; S `DeliveryPipelineTests.UncertainRequestThenSuspensionSendsWithdrawalAndSuppressesOldRetry`; U `RecipientCalendarRendererTests.Render_RoundTripsEscapesUtcAndOnlyRecipientWithExactRetries` | Calendar bytes/SQL ordering and controlled transport proof, not client ingestion. **OPEN A23**: original/update/withdraw/rejoin observed in mailbox/client; uncertain delivery may duplicate externally. |
 | **A15** Crash after commit/acceptance and racing workers recover durably | S `DeliveryPipelineTests.OutboxRecoveryDeduplicatesNotificationCalendarAndReminder`; S `DeliveryPipelineTests.ReceiptSurvivesCrashBeforeQueueCompletionWithoutResend`; S `SqlWorkQueueTests.ConcurrentClaimsAndExpiredRecoveryFenceOldCompletion`; S `DeliveryPipelineTests.StaleProviderCompletionCannotOverwriteReclaimedDelivery` | Controlled crash-boundary state and actual SQL worker race proof. **Gap/live**: actual host termination/restart at both boundaries, approved provider receipt reconciliation; these tests are not a killed deployment or SQL/Blob restore. |
@@ -79,9 +79,43 @@ These assertions prove durable producer intent, not queue consumption, actual
 email submission or client ingestion, and do not independently approve A08 or
 release acceptance.
 
+## Supplemental A12 composed delivery evidence
+
+`SuspendedQuestDeliveryTests.SuspendEditReinstateComplete_RestoresLatestCalendarWithoutFinalWithdrawal`
+in `tests\Sidequest.IntegrationTests\CoreComposition` adds two cases, Public and
+Private, after the original `613e795` evidence baseline. These are not claimed
+to exist in that baseline's TRX.
+
+Each case uses real application producers, SQL transactions and queue leases,
+notification policy, calendar rendering and a deterministic recording email
+gateway. It joins an attendee, suspends through the Event manager, edits title,
+description, location and both times while suspended, rejects owner-only
+reinstatement, then reinstates through the manager. Assertions inspect the actual
+recipient-only REQUEST/CANCEL/REQUEST bytes: one UID, exact increasing sequences,
+latest content/times, redacted withdrawal and no transport delivery during the
+suspended edit. Both owner and moderator receive the exact generic, link-free
+inbox notice.
+
+The same execution consumes the obsolete original completion deadline without
+ending the extended Quest, then consumes the new deadline and repeats its handler.
+It verifies exactly one completion history/audit, retained Joined participation,
+unchanged final calendar state/version, and no extra outbox or transport message.
+Completion is not treated as cancellation.
+
+Both cases and the 12 existing cancellation-composition cases passed against
+fixture-owned LocalDB in Release:
+
+```powershell
+dotnet test tests\Sidequest.IntegrationTests\Sidequest.IntegrationTests.csproj -c Release --no-restore --filter "FullyQualifiedName~SuspendedQuestDeliveryTests|FullyQualifiedName~EventCancellationCompositionTests" -m:1 -p:UseSharedCompilation=false
+```
+
+Retain the accepted PR's hosted evidence with the dossier. This proves composed
+producer/worker/rendering behavior, not actual provider submission, Outlook
+ingestion, a killed host or release approval.
+
 ## Remaining product automated follow-up
 
-Prioritize the uncited combined assertions for **A12, A13 and A17**, and
+Prioritize the uncited combined assertions for **A13 and A17**, and
 approved actual process-kill/restart exercises for **A15/A22/A25**. Define exact
 new case names only when implemented; proposed names are not executed evidence.
 The other rows' automated support must still be reviewed against every §58
