@@ -131,13 +131,20 @@ internal static class ExperienceBrowserSupport
         }
     }
 
-    internal static Task RefreshAsync(IPage page) => page.EvaluateAsync("""
-        async () => {
-            const store = await import('/experience/snapshot-store.js?v=1');
-            const refresh = await import('/experience/refresh.js?v=1');
-            await refresh.refreshJoined(await store.currentEpoch());
-        }
-        """);
+    internal static async Task RefreshAsync(IPage page)
+    {
+        // Use the bridge's serialized refresh path, rather than racing its automatic
+        // refresh with a separate ticket issued directly through the storage module.
+        var button = page.Locator("[data-refresh]");
+        await Expect(button).ToBeEnabledAsync();
+        var endpoint = new Uri(new Uri(page.Url), "/experience/joined-snapshot").AbsoluteUri;
+        var response = await page.RunAndWaitForResponseAsync(() => button.ClickAsync(),
+            response => response.Url == endpoint && response.Request.Method == "GET");
+        Assert.Equal(200, response.Status);
+        Assert.Null(await response.FinishedAsync());
+        await Expect(button).ToBeEnabledAsync();
+        await Expect(page.Locator("[data-snapshot]")).ToContainTextAsync("Joined basics saved");
+    }
 
     internal static object Snapshot(string title = "Saved joined Quest") => new
     {
