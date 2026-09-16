@@ -66,15 +66,17 @@ internal static class ExperienceBrowserSupport
         return page;
     }
 
-    internal static async Task<Guid> CreateEventAsync(IPage page)
+    internal static async Task<Guid> CreateEventAsync(IPage page, DateOnly? day = null, string? timeZoneId = null)
     {
         await page.GotoAsync("/events/create");
         var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
         await Expect(name).ToBeEditableAsync();
         await name.FillAsync($"Offline Event {Guid.NewGuid():N}");
-        var date = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var date = (day ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7))).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillAsync(date);
         await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillAsync(date);
+        if (timeZoneId is not null)
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "IANA time zone (for example Europe/Prague)", Exact = true }).FillAsync(timeZoneId);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
