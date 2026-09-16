@@ -197,6 +197,48 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         Assert.True(await owner.EvaluateAsync<int>("window.sidequestBlockedReasonChanges") > 0);
     }
 
+    /// <summary>Compares an uninterrupted reason draft with a real same-cookie reconnect, requiring one explicit persisted cancellation after recovery.</summary>
+    /// <param name="reconnect">Whether to interrupt actual browser networking after entering the unsent reason.</param>
+    /// <returns>A task completing after exact input retention, one user-confirmed cancellation, and a persisted reload with one matching history entry.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QuestManagementReasonSurvivesSameSessionReconnect(bool reconnect)
+    {
+        await using var context = await fixture.CreateContextAsync();
+        var owner = await SignedInAsync(context, "Alice");
+        var eventId = await CreateEventAsync(owner);
+        await CreateQuestAsync(owner, eventId);
+        var reason = owner.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
+        const string enteredReason = "Retained reason for one explicit cancellation.";
+        await QuestConfirmationDiagnostics.ObserveAsync(owner, reason, "Cancel Quest after revalidation", async () =>
+        {
+            await reason.FillAsync(enteredReason);
+            await Expect(owner.Locator("main fluent-text-area")).ToHaveAttributeAsync("value", enteredReason);
+            if (reconnect)
+            {
+                await context.SetOfflineAsync(true);
+                await Expect(owner.Locator("#components-reconnect-modal")).ToHaveClassAsync(
+                    new Regex("components-reconnect-(show|retrying|failed)"), new() { Timeout = 90_000 });
+                Assert.True(await owner.Locator("main").EvaluateAsync<bool>("element => element.inert"));
+                await context.SetOfflineAsync(false);
+                await Expect(owner.Locator("[data-connection]")).ToHaveTextAsync(
+                    "Connected — actions still require current server authorization.", new() { Timeout = 90_000 });
+            }
+            await Expect(reason).ToBeEditableAsync();
+            await Expect(reason).ToHaveValueAsync(enteredReason);
+            await Expect(owner.GetByText("Active", new() { Exact = true })).ToBeVisibleAsync();
+            await owner.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
+            await owner.GetByRole(AriaRole.Button, new() { Name = "Cancel Quest", Exact = true }).ClickAsync();
+            await Expect(owner.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
+            await Expect(reason).ToHaveValueAsync("");
+            await Expect(owner.GetByText("Cancelled", new() { Exact = true })).ToBeVisibleAsync();
+        });
+        await owner.ReloadAsync();
+        await Expect(owner.GetByText("Cancelled", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(owner.Locator("main li").Filter(new() { HasText = enteredReason })).ToHaveCountAsync(1);
+    }
+
     /// <summary>Proves a stale Event editor cannot overwrite a committed winner and retains unsaved form input for explicit recovery.</summary>
     /// <returns>A task completing after both editor contexts and a persisted reload are inspected.</returns>
     [Fact]
@@ -415,12 +457,15 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await page.GotoAsync($"/quests/create?eventId={eventId}");
         var title = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
         await Expect(title).ToBeEditableAsync();
-        await title.FillAsync($"Activity {Guid.NewGuid():N}");
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync("Synthetic private-safe activity description.");
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync("Test meeting point");
-        await page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Visibility\\b") }).SelectOptionAsync(isPrivate ? "Private" : "Public");
-        await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
-        await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
+        await QuestCreationDiagnostics.ObserveAsync(page, title, async () =>
+        {
+            await title.FillAsync($"Activity {Guid.NewGuid():N}");
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync("Synthetic private-safe activity description.");
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync("Test meeting point");
+            await page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Visibility\\b") }).SelectOptionAsync(isPrivate ? "Private" : "Public");
+            await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
+            await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
+        });
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
         await ConfirmQuestActionAsync(page, "Publish draft");
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Join Quest", Exact = true })).ToBeVisibleAsync();
