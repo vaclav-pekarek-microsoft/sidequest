@@ -4,21 +4,29 @@
 @using Sidequest.Domain.Model
 <PageTitle>Quest · Sidequest</PageTitle>
 <p><a href="/quests">Back to Quests</a></p>
-@if (busy && detail is null)
+@if (busy && (reauthorizationRequired || detail is null))
 {
     <p role="status">Loading authorized Quest…</p>
 }
+else if (reauthorizationRequired && error is null)
+{
+    <p role="status">Current access must be checked before showing this Quest.</p>
+}
 @if (error is not null)
 {
+    var requestVersion = navigationVersion;
+    var checkVersion = authorizationVersion;
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current state</FluentButton>
+    <FluentButton OnClick="() => ReloadAsync(requestVersion, checkVersion)" Disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current state</FluentButton>
 }
 @if (message is not null)
 {
     <p role="status">@message</p>
 }
-@if (detail is not null)
+@if (detail is not null && !reauthorizationRequired)
 {
+    var requestVersion = navigationVersion;
+    var checkVersion = authorizationVersion;
     <h1>@detail.Summary.Title</h1>
     <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" Moderation="Moderation" />
     <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
@@ -41,7 +49,8 @@
         {
             <p>Above suggested capacity. Joining is still allowed.</p>
         }
-        <QuestParticipationControls Summary="detail.Summary" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Change="ParticipateAsync" />
+        <QuestParticipationControls Summary="detail.Summary" Busy="@(ControlsDisabled || conflict)"
+                                    Change="command => ParticipateAsync(requestVersion, checkVersion, command)" />
         @if (detail.Summary.Participation == ParticipationStatus.Joined && detail.Summary.Status == QuestStatus.Active)
         {
             <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
@@ -69,8 +78,10 @@
     }
     @if (Moderation || detail.Summary.IsOwner)
     {
-        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Members="members"
-                         MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="LoadMembersAsync" Execute="ExecuteAsync" />
+        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(ControlsDisabled || conflict || draftConflict)" Members="members"
+                         MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="page => LoadMembersAsync(requestVersion, checkVersion, page)"
+                         Draft="managementDraft" DraftChanged="draft => SetManagementDraft(requestVersion, checkVersion, draft)"
+                         Execute="request => ExecuteAsync(requestVersion, checkVersion, request)" />
     }
     <h2>Authorized history</h2>
     @if (history.Count == 0) { <p>No visible history.</p> }
@@ -84,7 +95,7 @@
         </ul>
     }
 }
-else if (!busy && error is null)
+else if (!busy && !reauthorizationRequired && error is null)
 {
     <h1>Quest unavailable</h1>
 }
