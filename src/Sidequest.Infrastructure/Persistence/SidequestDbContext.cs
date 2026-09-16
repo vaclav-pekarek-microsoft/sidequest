@@ -79,6 +79,23 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         CancellationToken cancellationToken = default) => Database.BeginTransactionAsync(isolationLevel, cancellationToken);
 
     /// <inheritdoc />
+    public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (tenantId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "A tenant identifier is required.", nameof(tenantId));
+        if (objectId == Guid.Empty)
+            throw new DomainException(ErrorCode.Validation, "An account object identifier is required.", nameof(objectId));
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving an account identity.");
+
+        return Users.FromSqlInterpolated($"""
+            SELECT * FROM [Users] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_Users_TenantId_ObjectId]))
+            WHERE [TenantId] = {tenantId} AND [ObjectId] = {objectId}
+            """).AsTracking().SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
