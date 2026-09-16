@@ -17,7 +17,13 @@ public static class MediaRegistration
         var options = new PrivateMediaOptions();
         configuration.GetSection("Media:Storage").Bind(options);
         services.AddSingleton(options);
-        services.AddSingleton<IImageSanitizer, SkiaImageSanitizer>();
+        services.AddSingleton<SkiaImageSanitizer>();
+        services.AddSingleton<IImageSanitizer>(provider =>
+        {
+            var inner = provider.GetRequiredService<SkiaImageSanitizer>();
+            return provider.GetService<OperationalActivityMetrics>() is { } metrics
+                ? new ObservedImageSanitizer(inner, metrics) : inner;
+        });
         services.AddSingleton<IPrivateMediaStorage, AzurePrivateMediaStorage>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<IBackgroundWorkHandler, MediaCleanupHandler>();
