@@ -160,6 +160,55 @@ not tests of simultaneous SQL transaction scheduling. Retain the accepted PR's
 successful hosted run and source SHA before citing the new cases as executed.
 Existing SQL race/rollback evidence and live release review remain separate.
 
+## Supplemental publication/participation SQL concurrency evidence
+
+`PublicationParticipationConcurrencyTests.PublicationAndNonownerJoin_CommitWithoutCrossResourceCycle`
+in `tests\Sidequest.IntegrationTests\CoreQuests` overlaps draft publication with
+a nonowner joining a different Event's Quest. The four cases cover both staging
+orders and public/private publication. A SQL DMV-observed history lock wait
+establishes actual overlap; no user mutation is retried to hide a conflict.
+
+Draft publication does not query unused participation audiences. Drafts cannot
+be joined, and public discovery recipients are resolved by the outbox consumer.
+The regression checks both commits, one status-history entry, one completion
+schedule, exact audits and participation, public-only publication intent and
+the joining actor's calendar revision. Explicit repeated successful commands
+must not duplicate those effects.
+
+All four cases reject with conflicts against the original claim-fix baseline
+`ff6a01f`. With the publication correction, all four plus 32 adjacent Quest
+service/lifecycle cases passed against fixture-owned LocalDB. The isolated
+comparison run retained a visible NU1900 warning because NuGet's advisory
+service was unavailable; repository and hosted CI audit policy were unchanged.
+Retain the accepted PR's source-pinned hosted evidence before citing this as
+integrated acceptance. This does not establish process-kill recovery, provider
+delivery, representative load, or absence of every possible SQL deadlock.
+
+## Supplemental calendar-consumer SQL concurrency evidence
+
+`CalendarStateConcurrencyTests.DifferentEvents_StageCalendarAndCompleteLeasesExactlyOnce`
+in `tests\Sidequest.IntegrationTests\CoreDelivery` overlaps two real leased
+outbox handlers for separate Events. Eight cases combine absent/retained
+calendar intent, due/future Quest starts, and empty/separated inbox and reminder
+index ranges. Separating upstream ranges prevents their contention from hiding
+the calendar-state conversion defect.
+
+The consumer reserves indexed reminder, inbox and calendar write-intent keys
+instead of first taking shared locks and later converting them during inserts.
+Reminder reconciliation precedes the outbox's inbox/calendar effects. Existing
+Event locks, Serializable transactions, lease fences and atomic effect/queue
+completion remain; adjacent missing keys can still wait. This is not a claim
+of lock-free concurrency or a globally deadlock-free workload.
+
+The cases check exact calendar sequence/payload and retained uncertainty,
+notification and transport deduplication, reminder key/revision/due instant,
+completed lease state and repeat-safe handling. Reverting only the calendar
+reservation fails the two separated-range cases with absent calendar state;
+the restored correction passes all eight. Parent verification passed 97
+combined SQL cases covering these regressions, publication, reminder behavior
+and adjacent Quest lifecycle contracts. Successful source-pinned hosted
+execution remains required before accepting the combined change.
+
 ## Remaining product automated follow-up
 
 Retain successful hosted **A13/A17** supplements and prioritize

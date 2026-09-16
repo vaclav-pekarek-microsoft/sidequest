@@ -116,6 +116,46 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<QuestParticipation?> FindQuestParticipationForUpdateAsync(Guid questId, Guid userId,
         CancellationToken cancellationToken = default);
+    /// <summary>Finds a recipient's calendar intent while reserving its exact Quest/account key for insertion or update.</summary>
+    /// <param name="questId">Nonempty internal Quest identifier whose parent Event lock is already held.</param>
+    /// <param name="userId">Nonempty internal recipient identifier.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>The tracked retained intent, including delivery uncertainty and sequence, or null when absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. Use before any shared calendar-state lookup.
+    /// The reservation lasts until transaction completion; adjacent missing keys may contend. This method neither
+    /// authorizes delivery nor changes sequences, saves, commits, or retries work.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned explicit Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<CalendarDeliveryState?> FindCalendarDeliveryStateForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default);
+    /// <summary>Checks for a logical inbox effect while reserving its exact change/account/kind key for possible insertion.</summary>
+    /// <param name="sourceChangeId">Nonempty durable change or reminder identifier.</param>
+    /// <param name="userId">Nonempty internal recipient identifier.</param>
+    /// <param name="kind">Defined notification kind belonging to the durable change.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for the write-intent reservation.</param>
+    /// <returns>True when the exact logical effect already exists; false when absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and the parent Event lock. Reserve before shared
+    /// inbox reads and calendar-state reservations. Adjacent absent keys may contend until transaction completion.
+    /// No entities are tracked, and this method does not authorize delivery, save, commit, or retry.</remarks>
+    /// <exception cref="DomainException">An identifier or kind is invalid (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned explicit Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<bool> HasNotificationForUpdateAsync(Guid sourceChangeId, Guid userId, NotificationKind kind,
+        CancellationToken cancellationToken = default);
+    /// <summary>Reads a recipient's retained reminder revisions while reserving their logical key range for replacement.</summary>
+    /// <param name="questId">Nonempty internal Quest identifier whose parent Event lock is held.</param>
+    /// <param name="userId">Nonempty internal recipient identifier.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>Tracked reminder schedules in every status with keys beginning <c>reminder:{questId:N}:{userId:N}:</c>.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. Reserve schedules before inbox or calendar intent.
+    /// The indexed logical-key reservation lasts until transaction completion, including empty ranges; adjacent
+    /// ranges may contend. This method does not change leases, authorize delivery, save, commit, or retry.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned explicit Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<List<ScheduledWork>> ReadReminderSchedulesForUpdateAsync(Guid questId, Guid userId,
+        CancellationToken cancellationToken = default);
     /// <summary>Acquires the addressed Event's mutation lock for the caller's explicit Serializable transaction.</summary>
     /// <param name="eventId">Internal Event identifier resolved before beginning the mutation transaction.</param>
     /// <param name="cancellationToken">Cancels waiting for the database lock.</param>
