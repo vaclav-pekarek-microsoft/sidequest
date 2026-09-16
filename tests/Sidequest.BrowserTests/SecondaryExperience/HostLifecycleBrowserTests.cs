@@ -319,6 +319,7 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
         var initializerCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var initializerRequests = 0;
         var initializerRoute = AuthenticationStartupBrowserTests.InitializerRoute(fixture.Settings);
+        var signingOut = nativeLogout ? await context.NewPageAsync() : old;
         async Task HoldInitializerAsync(IRoute route)
         {
             if (Interlocked.Increment(ref initializerRequests) != 1)
@@ -341,19 +342,23 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
             // The cookie is now Bob's: obtain his real antiforgery form before the later native logout.
             if (nativeLogout)
             {
-                await old.RouteAsync(initializerRoute, HoldInitializerAsync);
-                await old.GotoAsync("/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+                await context.RouteAsync(initializerRoute, HoldInitializerAsync);
+                var response = await signingOut.GotoAsync("/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+                Assert.NotNull(response);
+                Assert.Equal(200, response.Status);
+                Assert.Equal("/", new Uri(signingOut.Url).AbsolutePath);
+                var mapped = await signingOut.EvaluateAsync<string>(AuthenticationStartupBrowserTests.InitializerImportScript);
                 var intercepted = await initializerCaptured.Task.WaitAsync(TimeSpan.FromSeconds(30));
-                Assert.Equal(await old.EvaluateAsync<string>(AuthenticationStartupBrowserTests.InitializerImportScript), intercepted);
-                await Expect(old.Locator("[data-connection]")).ToContainTextAsync("Connecting");
+                Assert.Equal(mapped, intercepted);
+                await Expect(signingOut.Locator("[data-connection]")).ToContainTextAsync("Connecting");
             }
             else
             {
-                await old.GotoAsync("/");
-                await SyntheticSignInSupport.WaitForInterceptorAsync(old);
+                await signingOut.GotoAsync("/");
+                await SyntheticSignInSupport.WaitForInterceptorAsync(signingOut);
             }
-            var logout = await old.RunAndWaitForRequestAsync(
-                () => old.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync(),
+            var logout = await signingOut.RunAndWaitForRequestAsync(
+                () => signingOut.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync(),
                 request =>
                 {
                     var isLogout = request.IsNavigationRequest && request.Method == "POST" &&
@@ -367,8 +372,8 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
                 field.Length > "__RequestVerificationToken=".Length);
             Assert.Equal(!nativeLogout, fields.Any(field => field.StartsWith("experienceEpoch=", StringComparison.Ordinal) &&
                 field.Length > "experienceEpoch=".Length));
-            await Expect(old.GetByRole(AriaRole.Link, new() { Name = "View sign-in options", Exact = true })).ToBeVisibleAsync();
-            Assert.Equal(401, await old.EvaluateAsync<int>("async () => (await fetch('/experience/session', {redirect:'manual'})).status"));
+            await Expect(signingOut.GetByRole(AriaRole.Link, new() { Name = "View sign-in options", Exact = true })).ToBeVisibleAsync();
+            Assert.Equal(401, await signingOut.EvaluateAsync<int>("async () => (await fetch('/experience/session', {redirect:'manual'})).status"));
         }
         finally
         {
@@ -377,7 +382,7 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
             if (initializerCaptured.Task.IsCompletedSuccessfully)
                 await initializerCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
             if (nativeLogout)
-                await old.UnrouteAsync(initializerRoute, HoldInitializerAsync);
+                await context.UnrouteAsync(initializerRoute, HoldInitializerAsync);
         }
         await completion;
         await Expect(signingIn.Locator("[data-authentication-result]")).ToContainTextAsync("superseded");
