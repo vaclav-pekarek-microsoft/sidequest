@@ -102,8 +102,8 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         Assert.Single(await read.AuditEntries.Where(x => x.ResourceId == id && x.Action == "Membership.Removed").ToListAsync());
     }
 
-    /// <summary>Retained withdrawn requests count toward the configured rate limit until the exact one-hour window expires.</summary>
-    /// <returns>A task completing after idempotent repeats, limit rejection, and a later successful request.</returns>
+    /// <summary>Retained requests count through the inclusive hourly boundary, then permit a request one tick later without partial failure side effects.</summary>
+    /// <returns>A task completing after idempotent repeats, exact boundary rejections, and atomic request/audit/outbox assertions.</returns>
     [Fact]
     public async Task RequestRateLimitCountsHistoryAndResetsAfterWindow()
     {
@@ -114,12 +114,24 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         await sut.RequestMembershipAsync(seed.Event.Id);
         var request = Assert.Single((await sut.ListRequestsAsync(null, new())).Items);
         await sut.WithdrawRequestAsync(request.Id);
-        Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() => sut.RequestMembershipAsync(seed.Event.Id))).Code);
+        foreach (var elapsed in new[] { TimeSpan.Zero, TimeSpan.FromHours(1).Subtract(TimeSpan.FromTicks(1)), TimeSpan.FromHours(1) })
+        {
+            context.Clock.Now = FoundationSeed.Now.Add(elapsed);
+            var error = await Assert.ThrowsAsync<DomainException>(() => sut.RequestMembershipAsync(seed.Event.Id));
+            Assert.Equal(ErrorCode.Conflict, error.Code);
+            Assert.Equal("The request rate limit was reached. Try again later.", error.Message);
+            await using var rejected = database.CreateContext();
+            Assert.Single(await rejected.MembershipRequests.Where(x => x.EventId == seed.Event.Id).ToListAsync());
+            Assert.Single(await rejected.AuditEntries.Where(x => x.ResourceId == seed.Event.Id && x.Action == "Membership.Requested").ToListAsync());
+            Assert.Single(await rejected.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
+        }
         context.Clock.Now = FoundationSeed.Now.AddHours(1).AddTicks(1);
         await sut.RequestMembershipAsync(seed.Event.Id);
         await using var read = database.CreateContext();
         Assert.Equal(2, await read.MembershipRequests.CountAsync(x => x.EventId == seed.Event.Id));
         Assert.Single(await read.MembershipRequests.Where(x => x.EventId == seed.Event.Id && x.Status == MembershipRequestStatus.Pending).ToListAsync());
+        Assert.Equal(2, await read.AuditEntries.CountAsync(x => x.ResourceId == seed.Event.Id && x.Action == "Membership.Requested"));
+        Assert.Equal(2, await read.OutboxMessages.CountAsync(x => x.AggregateId == seed.Event.Id));
     }
 
     /// <summary>Rejects excess queued bulk starts atomically and reports frozen recipients through owner-only deterministic paging.</summary>
