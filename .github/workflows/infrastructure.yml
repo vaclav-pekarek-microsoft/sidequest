@@ -6,6 +6,7 @@ on:
       - infra/**
       - .github/workflows/infrastructure.yml
       - .github/workflows/infrastructure-plan.yml
+      - .github/workflows/infrastructure-apply.yml
   push:
     branches: [main]
   workflow_dispatch:
