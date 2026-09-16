@@ -112,6 +112,17 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
         DateTimeOffset since, CancellationToken cancellationToken = default);
+    /// <summary>Checks for an exact scheduled-work key in any status while reserving it for a possible insertion.</summary>
+    /// <param name="deduplicationKey">Nonblank complete key, at most 300 characters, compared using database equality rather than prefix matching.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>True when the exact key exists, including Completed, DeadLetter, and Superseded work; false when absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. Acquire the parent Event lock and authorize first
+    /// for Event/Quest mutations, before any shared scheduling read. The reservation lasts until transaction completion;
+    /// adjacent absent keys may contend. No entities are tracked and no work is modified, saved, committed, or retried.</remarks>
+    /// <exception cref="DomainException">The key is invalid (Validation), or a competing operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">No caller-owned Serializable transaction exists.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default);
     /// <summary>Checks for pending or processing work while reserving the matching key range for a possible insertion.</summary>
     /// <param name="deduplicationPrefix">Literal nonblank key prefix, at most 300 characters; wildcard characters remain literal.</param>
     /// <param name="cancellationToken">Cancels the existence query or waiting for its write-intent range lock.</param>

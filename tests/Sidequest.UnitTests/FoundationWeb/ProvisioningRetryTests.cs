@@ -370,6 +370,10 @@ public sealed class ProvisioningRetryTests
             throw new NotSupportedException("Account provisioning does not request Event membership.");
 
         /// <inheritdoc/>
+        public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not schedule completion work.");
+
+        /// <inheritdoc/>
         public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not schedule completion work.");
 
