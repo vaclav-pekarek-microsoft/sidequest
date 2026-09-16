@@ -428,6 +428,10 @@ namespace Sidequest.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[Status] = 0");
 
+                    b.HasIndex("EventId", "UserId", "CreatedUtc");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("EventId", "UserId", "CreatedUtc"), new[] { "Status" });
+
                     b.ToTable("MembershipRequests");
                 });
 

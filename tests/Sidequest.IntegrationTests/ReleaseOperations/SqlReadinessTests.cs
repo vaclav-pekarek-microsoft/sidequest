@@ -61,8 +61,9 @@ public sealed class SqlReadinessTests
     {
         await using var scenario = await OperationalSqlScenario.CreateAsync();
         await using var setup = scenario.Database.CreateContext();
-        var migration = Assert.Single(setup.Database.GetMigrations());
-        await setup.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM [__EFMigrationsHistory] WHERE [MigrationId] = {migration}");
+        var migrations = setup.Database.GetMigrations().ToArray();
+        var migration = migrations.Last();
+        await setup.GetService<IMigrator>().MigrateAsync(migrations[^2]);
         IOperationalReadinessProbe probe = new SqlOperationalReadinessProbe(scenario);
         var failure = await Assert.ThrowsAsync<OperationalObservationException>(() => probe.ProbeAsync());
         Assert.Equal(OperationalFailureKind.SchemaMismatch, failure.Kind);
@@ -102,7 +103,8 @@ public sealed class SqlReadinessTests
         await setup.Database.ExecuteSqlRawAsync(
             "INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) VALUES ('99999999999999_Future', '10.0.12')");
         AssertSafe(await new SqlReadinessCheck(new SqlOperationalReadinessProbe(scenario), NullLogger<SqlReadinessCheck>.Instance).CheckHealthAsync(new()), HealthStatus.Unhealthy);
-        Assert.Equal(2, (await setup.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(setup.Database.GetMigrations().Append("99999999999999_Future"),
+            await setup.Database.GetAppliedMigrationsAsync());
     }
 
     /// <summary>Readiness succeeds using a SELECT-only principal and does not depend on worker or migration permissions.</summary>

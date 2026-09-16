@@ -37,6 +37,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddCheck<SqlReadinessCheck>("sql", tags: ["ready"]);
 
 var app = builder.Build();
+app.UseMiddleware<OperationalHttpMetricsMiddleware>();
 app.UseExceptionHandler();
 if (!app.Environment.IsDevelopment())
 {

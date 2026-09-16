@@ -85,6 +85,20 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default);
+    /// <summary>Reads pending and rate-limit facts while reserving the Event/account request range for a possible insertion.</summary>
+    /// <param name="eventId">Nonempty Event identifier; acquire its mutation lock and authorize the caller first.</param>
+    /// <param name="userId">Nonempty internal account identifier whose retained requests are counted.</param>
+    /// <param name="since">Inclusive creation-time cutoff for counting requests in every status.</param>
+    /// <param name="cancellationToken">Cancels the read or waiting for its write-intent reservation.</param>
+    /// <returns>Pending existence independent of age and the number of requests created at or after <paramref name="since"/>.</returns>
+    /// <remarks>The caller must own a Serializable transaction and read these facts before any shared request-history
+    /// reads. The reservation lasts until transaction completion, including absent ranges. Adjacent absent ranges may
+    /// contend. This method neither grants access nor tracks entities, saves, commits, or retries operations.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
+        DateTimeOffset since, CancellationToken cancellationToken = default);
     /// <summary>Checks for pending or processing work while reserving the matching key range for a possible insertion.</summary>
     /// <param name="deduplicationPrefix">Literal nonblank key prefix, at most 300 characters; wildcard characters remain literal.</param>
     /// <param name="cancellationToken">Cancels the existence query or waiting for its write-intent range lock.</param>

@@ -62,7 +62,8 @@ internal sealed class MetricCapture : IDisposable
     {
         listener.InstrumentPublished = (instrument, owner) =>
         {
-            if (instrument.Meter.Name == OperationalQueueMetrics.MeterName)
+            if (instrument.Meter.Name == OperationalQueueMetrics.MeterName &&
+                instrument.Name.StartsWith("sidequest.queue.", StringComparison.Ordinal))
                 owner.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) => Record(instrument, value, tags));

@@ -1,0 +1,4 @@
+@page "/quests/{Id:guid}"
+@attribute [Authorize]
+
+<QuestDetails Id="@Id" Moderation="@Moderation" />

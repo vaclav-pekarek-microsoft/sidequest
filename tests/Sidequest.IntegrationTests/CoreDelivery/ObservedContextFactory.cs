@@ -6,7 +6,7 @@ using Sidequest.IntegrationTests.FoundationPersistence;
 
 namespace Sidequest.IntegrationTests.CoreDelivery;
 
-internal sealed class ObservedContextFactory(SqlTestDatabase database, DbCommandInterceptor observer) : ISidequestDbContextFactory
+internal sealed class ObservedContextFactory(SqlTestDatabase database, IInterceptor observer) : ISidequestDbContextFactory
 {
     /// <inheritdoc/>
     public async Task<ISidequestDbContext> CreateAsync(CancellationToken cancellationToken = default)

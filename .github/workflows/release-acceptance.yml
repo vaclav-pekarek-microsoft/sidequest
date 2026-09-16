@@ -1,0 +1,28 @@
+name: Offline release evidence checks
+
+on:
+  pull_request:
+    paths:
+      - 'tools/release-acceptance/**'
+      - 'docs/release-readiness/**'
+      - '.github/workflows/release-acceptance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/release-acceptance/**'
+      - 'docs/release-readiness/**'
+      - '.github/workflows/release-acceptance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-evaluator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate deterministic offline evaluator
+        run: node --test tools/release-acceptance/evaluate.test.mjs

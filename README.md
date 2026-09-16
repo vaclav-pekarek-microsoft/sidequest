@@ -30,6 +30,16 @@ for EF tooling against another explicitly chosen development database. Configure
 running app with `ConnectionStrings__Sidequest` for that same database.
 Do not apply a development migration command to production accidentally.
 
+`20260916112116_ReserveMembershipRequestHistory` adds a nonfiltered covering
+`MembershipRequests(EventId, UserId, CreatedUtc)` index including `Status`; apply it
+before running this build. Membership requests read pending and hourly-history facts
+with one Infrastructure-owned write-intent reservation after authorization and the
+Event lock. Empty adjacent ranges can wait, but do not acquire compatible shared
+locks that later deadlock on insertion. Serializable isolation, inclusive hourly
+limits, pending-request idempotency, and atomic audit/outbox commits are unchanged.
+The migration changes no rows; rollback removes only the index and must be paired
+with the prior application build. Readiness rejects an unapplied migration.
+
 Development sign-in uses conspicuously labeled synthetic accounts only when the
 Development environment and explicit development authentication mode are both active.
 It is not proof that live Entra integration is configured. Production must use Entra,

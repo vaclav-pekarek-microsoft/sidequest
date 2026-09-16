@@ -12,6 +12,8 @@ namespace Sidequest.IntegrationTests.FoundationPersistence;
 public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
     private const string Initial = "20260914130053_InitialSidequest";
+    private const string MembershipHistory = "20260916112116_ReserveMembershipRequestHistory";
+    private static readonly string[] CurrentMigrations = [Initial, MembershipHistory];
     private static readonly Type[] BaselineTypes =
     [
         typeof(UserAccount), typeof(Administrator), typeof(Event), typeof(EventOwner),
@@ -20,13 +22,13 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
         typeof(EventStatusHistory), typeof(QuestStatusHistory), typeof(Notification), typeof(OutboxMessage)
     ];
 
-    /// <summary>Checks the exact baseline migration identifier and required tables on the real SQL Server provider.</summary>
+    /// <summary>Checks the exact ordered migration set and required tables on the real SQL Server provider.</summary>
     /// <returns>A task completing after deployed-schema assertions.</returns>
     [Fact]
     public async Task MigrateAsync_EmptyOwnedDatabase_AppliesInitialSidequest()
     {
         await using var db = database.CreateContext();
-        Assert.Equal([Initial], await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(CurrentMigrations, await db.Database.GetAppliedMigrationsAsync());
         var tables = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM sys.tables").ToListAsync();
         foreach (var type in BaselineTypes)
             Assert.Contains(db.Model.FindEntityType(type)!.GetTableName()!, tables);
@@ -42,7 +44,7 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
         await using (var db = database.CreateContext())
             await db.Database.MigrateAsync();
         await using var read = database.CreateContext();
-        Assert.Equal([Initial], await read.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(CurrentMigrations, await read.Database.GetAppliedMigrationsAsync());
         Assert.Equal("Sensitive Event sentinel", (await read.Events.SingleAsync(x => x.Id == seed.Event.Id)).Name);
         Assert.Equal("Sensitive Quest sentinel", (await read.Quests.SingleAsync(x => x.Id == seed.Quest.Id)).Title);
         Assert.Equal(seed.Event.Version, (await read.Events.SingleAsync(x => x.Id == seed.Event.Id)).Version);
@@ -66,7 +68,7 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
                 foreach (var type in BaselineTypes)
                     Assert.DoesNotContain(db.Model.FindEntityType(type)!.GetTableName()!, tables);
                 await db.Database.MigrateAsync();
-                Assert.Equal([Initial], await db.Database.GetAppliedMigrationsAsync());
+                Assert.Equal(CurrentMigrations, await db.Database.GetAppliedMigrationsAsync());
             }
             var fresh = await FoundationSeed.CreateAsync(owned);
             await using var read = owned.CreateContext();
@@ -178,7 +180,7 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
             firstContext.Users.Add(row);
             await firstContext.SaveChangesAsync();
             Assert.False(await secondContext.Users.AnyAsync(x => x.Id == row.Id));
-            Assert.Equal([Initial], await secondContext.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(CurrentMigrations, await secondContext.Database.GetAppliedMigrationsAsync());
         }
         finally
         {
@@ -186,11 +188,55 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
         }
         // This third fixture must survive cleanup of the other two.
         await using var surviving = database.CreateContext();
-        Assert.Equal([Initial], await surviving.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(CurrentMigrations, await surviving.Database.GetAppliedMigrationsAsync());
         Assert.Equal(0, await surviving.Database.SqlQuery<int>($"""
             SELECT COUNT(*) AS Value FROM sys.databases WHERE name = {firstName} OR name = {secondName}
             """).SingleAsync());
         await first.DisposeAsync();
         await second.DisposeAsync();
+    }
+
+    /// <summary>Adding and removing the covering request-history index preserves existing requests and their rowversions.</summary>
+    /// <returns>Completion after a baseline-to-current upgrade, usable reserved read, and data-preserving downgrade in an owned catalog.</returns>
+    [Fact]
+    public async Task MembershipHistoryMigration_UpgradeAndDowngradePreserveRequests()
+    {
+        var owned = new SqlTestDatabase();
+        try
+        {
+            await owned.InitializeAsync();
+            await using var db = owned.CreateContext();
+            await db.GetService<IMigrator>().MigrateAsync(Initial);
+            var seed = await FoundationSeed.CreateAsync(owned);
+            var request = new EventMembershipRequest
+            {
+                EventId = seed.Event.Id, UserId = seed.User.Id,
+                CreatedUtc = FoundationSeed.Now, Status = MembershipRequestStatus.Withdrawn
+            };
+            await FoundationSeed.PersistAsync(owned, request);
+            await db.Database.MigrateAsync();
+            Assert.Equal(CurrentMigrations, await db.Database.GetAppliedMigrationsAsync());
+            await using (var transaction = await db.BeginTransactionAsync())
+            {
+                await db.LockEventAsync(seed.Event.Id);
+                var state = await db.ReadMembershipRequestStateForUpdateAsync(seed.Event.Id, seed.User.Id, FoundationSeed.Now);
+                Assert.False(state.HasPendingRequest);
+                Assert.Equal(1, state.RecentRequestCount);
+                await transaction.CommitAsync();
+            }
+            await db.GetService<IMigrator>().MigrateAsync(Initial);
+            Assert.Equal([Initial], await db.Database.GetAppliedMigrationsAsync());
+            var stored = await db.MembershipRequests.AsNoTracking().SingleAsync();
+            Assert.Equal(request.Id, stored.Id);
+            Assert.Equal(request.Version, stored.Version);
+            Assert.Equal(MembershipRequestStatus.Withdrawn, stored.Status);
+            await db.Database.MigrateAsync();
+            Assert.Equal(CurrentMigrations, await db.Database.GetAppliedMigrationsAsync());
+            Assert.False(db.Database.HasPendingModelChanges());
+        }
+        finally
+        {
+            await owned.DisposeAsync();
+        }
     }
 }

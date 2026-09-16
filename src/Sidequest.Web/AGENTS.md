@@ -15,6 +15,15 @@ Keep actions and form controls disabled until `RendererInfo.IsInteractive` is tr
 Prerendered HTML has no event handlers; an enabled-looking button can otherwise lose
 an early click. Preserve prerendering and server reauthorization rather than adding
 arbitrary client delays or retrying mutations to hide this handoff.
+Query-dependent Quest routes bind query values in static `*Route` components and
+pass serializable parameters explicitly to their interactive views. An enhanced
+navigation can finish after `StartCircuit` captures the previous URL but before
+the interactive renderer attaches; that circuit can miss the navigation and
+supply obsolete query values. Do not move query binding into those interactive
+roots or parse their `NavigationManager.Uri` as a fallback. Keep route authorization,
+prerendering, service reauthorization and explicit parameter transfer together.
+The browser regression holds the unchanged source-URL startup frame until the
+target SSR page arrives, then verifies the enabled interactive moderation view.
 Bind Fluent input components' `Disabled` parameters explicitly as well as their
 native fieldset. Fieldset-only transitions can leave the web component and its
 shadow input disabled after the fieldset becomes enabled.
@@ -168,11 +177,19 @@ messages or secrets.
 
 `Operations:Monitoring:Enabled` explicitly enables sequential queue sampling, using
 a fresh scope/context per attempt. The interval defaults to 30 seconds (5–300 seconds);
-an observation becomes stale only after twice the interval. Export only aggregate
-queue gauges from `Sidequest.Operations`, never payloads or identifiers. Interpret
+an observation becomes stale only after twice the interval. Export only allowlisted aggregate
+queue gauges, fixed port-operation outcomes/durations and HTTP outcome counts from
+`Sidequest.Operations`, never payloads, identifiers, URLs or exception content. Interpret
 backlogs only with availability/staleness: failures and stale/missing samples are
 not healthy zero queues. Queue age does not measure delivery latency or reminder
-business deadlines. See `infra\README.md` for alert and deployment boundaries.
+business deadlines. Activity durations include internal provider retries and are not
+end-to-end command latency. Resource access observation wraps only the default scoped
+implementation, never replaces custom authorization, and never changes its result,
+exception, cancellation or transaction ownership. Register monitoring after Application
+composition; provider observers are chosen lazily during host resolution. HTTP outcome
+counts include health/static traffic and do not represent Blazor circuit commands.
+See `Operations\README.md` for metric semantics and response procedures, and
+`infra\README.md` for deployment boundaries.
 
 From the repository root:
 ```
@@ -193,5 +210,9 @@ Ordinary browser sign-in helpers observe initialized connection UI; a separate
 controlled native-startup journey verifies missing-generation guidance and explicit
 continuation. Route barriers must resolve fingerprinted assets through the rendered
 import map and use Playwright-compatible regular-expression options.
+Moderation navigation verifies the actual selected View and Event, not only the
+URL. Its failure diagnostics report bounded state categories and booleans, never
+titles, resource identities, authentication proofs or raw alert content; do not
+replace missing-state evidence with automatic retries or relaxed access checks.
 This is not live-provider, device-policy, load/restore or production release approval.
 Do not introduce fake success adapters to satisfy external contracts.
