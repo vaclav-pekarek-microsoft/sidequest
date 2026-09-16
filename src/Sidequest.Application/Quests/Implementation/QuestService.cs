@@ -245,13 +245,17 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             if (quest.Status == QuestStatus.Draft)
                 throw Conflict("Draft Quests do not accept participation.");
-            var participation = await db.Participations.SingleOrDefaultAsync(
-                x => x.QuestId == id && x.UserId == actor, token).ConfigureAwait(false);
+            var participation = await db.FindQuestParticipationForUpdateAsync(id, actor, token).ConfigureAwait(false);
             var previous = participation?.Status ?? ParticipationStatus.None;
             var next = ParticipationRules.Apply(previous, command);
             if (next == previous)
                 return;
-            var audience = await QuestChanges.CaptureAsync(db, id, token).ConfigureAwait(false);
+            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
+            // Participation delivery uses only owners and the actor. Unused audience scans
+            // can lock unrelated participation PK ranges despite the exact-key reservation.
+            var owners = calendar
+                ? await db.QuestOwners.Where(x => x.QuestId == id).Select(x => x.UserId).ToArrayAsync(token).ConfigureAwait(false)
+                : [];
             if (participation is null)
             {
                 participation = new QuestParticipation { QuestId = id, UserId = actor };
@@ -259,14 +263,13 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             participation.Status = next;
             participation.ChangedUtc = now;
-            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
             if (calendar)
                 quest.CalendarRevision++;
             var change = QuestChanges.Audit(db, quest, actor, $"Participation:{actor:N}:{previous}->{next}", "", now);
             if (calendar)
                 QuestChanges.Notify(db, writer, quest, change, actor,
                     next == ParticipationStatus.Joined ? NotificationKind.Joined : NotificationKind.Left,
-                    audience.Owners.Append(actor), now,
+                    owners.Append(actor), now,
                     previousAttendees: previous == ParticipationStatus.Joined ? [actor] : [],
                     calendarChanged: true, affectedUsers: [actor]);
         }, cancellationToken);
