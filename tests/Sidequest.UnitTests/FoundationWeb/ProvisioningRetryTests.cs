@@ -341,6 +341,14 @@ public sealed class ProvisioningRetryTests
             return Task.FromResult<IDbContextTransaction>(Transaction);
         }
 
+        /// <inheritdoc />
+        public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(IsolationLevel.Serializable, Isolation);
+            return users.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.ObjectId == objectId, cancellationToken);
+        }
+
         /// <inheritdoc/>
         /// <remarks>Records a save attempt and returns the configured failure or a successful affected-row count.</remarks>
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

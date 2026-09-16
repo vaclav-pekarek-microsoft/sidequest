@@ -74,6 +74,19 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="DbUpdateException">Another database update failure occurs that is not translated to a domain conflict.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    /// <summary>Finds an account while reserving its external identity for a possible insert or update.</summary>
+    /// <param name="tenantId">Nonempty tenant identifier already validated by trusted admission.</param>
+    /// <param name="objectId">Nonempty external account identifier within that tenant, not the local account ID.</param>
+    /// <param name="cancellationToken">Cancels the lookup or waiting for its write-intent reservation.</param>
+    /// <returns>The tracked persisted account, including current eligibility and rowversion, or null when the identity is absent.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and a fresh operation context. Call before any shared
+    /// account lookup. The reservation survives until transaction completion, including missing-key ranges; adjacent
+    /// absent identities may contend. This method does not admit identities, change eligibility, grant roles, save,
+    /// commit, or retry. The caller must recheck persisted eligibility before modifying the returned account.</remarks>
+    /// <exception cref="DomainException">An identifier is empty (Validation), or a competing database operation causes Conflict.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default);
     /// <summary>Acquires the addressed Event's mutation lock for the caller's explicit Serializable transaction.</summary>
     /// <param name="eventId">Internal Event identifier resolved before beginning the mutation transaction.</param>
     /// <param name="cancellationToken">Cancels waiting for the database lock.</param>
