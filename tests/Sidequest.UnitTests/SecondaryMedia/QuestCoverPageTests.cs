@@ -282,7 +282,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
     {
         SetRendererInfo(new("Server", true));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/create?eventId={EventStub.Id}");
-        var page = Render<QuestEdit>();
+        var page = Render<QuestEditRoute>();
         Assert.Equal(Guid.Empty, page.FindComponent<CoverEditor>().Instance.QuestId);
         Assert.True(page.Find("input[type=file]").HasAttribute("disabled"));
         Assert.Contains("Save your draft before adding a cover.", page.Markup);
@@ -308,7 +308,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         };
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/{quests.Detail.Summary.Id}?moderation={moderation}");
         var card = Render<QuestCard>(p => p.Add(x => x.Item, quests.Detail.Summary).Add(x => x.Moderation, moderation));
-        var detail = Render<QuestDetails>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        var detail = Render<QuestDetailsRoute>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
         foreach (var image in new[] { card.FindComponent<QuestCover>().Instance, detail.FindComponent<QuestCover>().Instance })
         {
             Assert.Equal(quests.Detail.Summary.CoverAssetId, image.AssetId);
