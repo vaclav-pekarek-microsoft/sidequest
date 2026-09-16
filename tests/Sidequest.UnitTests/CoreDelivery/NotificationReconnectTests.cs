@@ -597,7 +597,8 @@ public sealed class NotificationReconnectTests : BunitContext
         await component.InvokeAsync(() => component.Instance.DisposeAsync().AsTask());
         Assert.True(Assert.Single(service.Tokens).IsCancellationRequested);
         release();
-        await reconnect.WaitAsync(TimeSpan.FromSeconds(1));
+        // Verify disposal fencing after completion, not a one-second runner scheduling budget.
+        await reconnect;
         Assert.False((bool)typeof(NotificationViewBase)
             .GetProperty("Busy", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(component.Instance)!);
         Assert.Null(Field(component.Instance, stateField));
