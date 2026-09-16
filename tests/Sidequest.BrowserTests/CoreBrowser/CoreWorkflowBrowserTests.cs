@@ -270,6 +270,155 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(first.GetByText(unsaved, new() { Exact = true })).ToHaveCountAsync(0);
     }
 
+    /// <summary>An editor opened before a competing committed change cannot overwrite it; conflicts retain input while revoked private access clears the editor.</summary>
+    /// <param name="competingChange">Moderator suspension, equal-owner access revocation, or a committed content edit by another equal owner.</param>
+    /// <returns>Completion after one rejected stale save, exact persisted content/history checks, and explicit current-state reload or private-access denial.</returns>
+    [Theory]
+    [InlineData("suspension")]
+    [InlineData("ownership-revocation")]
+    [InlineData("content-edit")]
+    public async Task StaleQuestEditPreservesCommittedWinnerAndCurrentAccess(string competingChange)
+    {
+        await using var managerContext = await fixture.CreateContextAsync();
+        await using var editorContext = await fixture.CreateContextAsync();
+        var manager = await SignedInAsync(managerContext, "Alice");
+        var editor = await SignedInAsync(editorContext, "Bob");
+        var eventId = await CreateEventAsync(manager);
+        await BecomeMemberAsync(manager, editor, eventId, "Bob");
+        var questId = await CreateQuestAsync(editor, eventId, isPrivate: true);
+        var originalTitle = await editor.GetByRole(AriaRole.Heading, new() { Level = 1 }).InnerTextAsync();
+        if (competingChange != "suspension")
+        {
+            await ChooseMemberAsync(editor, "Alice");
+            await ConfirmQuestActionAsync(editor, "Add equal owner");
+        }
+        var originalTimes = editor.Locator("main p time");
+        await Expect(originalTimes).ToHaveCountAsync(2);
+        var originalStartUtc = await originalTimes.Nth(0).GetAttributeAsync("datetime");
+        var originalEndUtc = await originalTimes.Nth(1).GetAttributeAsync("datetime");
+        Assert.NotNull(originalStartUtc);
+        Assert.NotNull(originalEndUtc);
+        await editor.GotoAsync($"/quests/{questId}/edit");
+        var title = editor.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
+        await Expect(title).ToBeEditableAsync();
+        var start = editor.GetByLabel("Starts in Event zone", new() { Exact = true });
+        var end = editor.GetByLabel("Ends in Event zone", new() { Exact = true });
+        var originalStart = await start.InputValueAsync();
+        var originalEnd = await end.InputValueAsync();
+        var unsavedStart = DateTime.Parse(originalStart, CultureInfo.InvariantCulture).AddHours(2)
+            .ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture);
+        var unsavedEnd = DateTime.Parse(originalEnd, CultureInfo.InvariantCulture).AddHours(2)
+            .ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture);
+        var unsavedTitle = $"Unsent competing edit {Guid.NewGuid():N}";
+        const string unsavedDescription = "Unsent confidential edit description.";
+        const string unsavedLocation = "Unsent alternate meeting point";
+        await FillTextAsync(editor, unsavedTitle, unsavedDescription, unsavedLocation);
+        await start.FillAsync(unsavedStart);
+        await end.FillAsync(unsavedEnd);
+
+        var expectedTitle = originalTitle;
+        var expectedDescription = "Synthetic private-safe activity description.";
+        var expectedLocation = "Test meeting point";
+        var expectedStatus = competingChange == "suspension" ? "Suspended" : "Active";
+        var expectedEdits = competingChange == "content-edit" ? 1 : 0;
+        if (competingChange == "suspension")
+        {
+            await manager.GotoAsync($"/quests/{questId}?moderation=true");
+            await Expect(manager.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
+            await Expect(manager.GetByRole(AriaRole.Link, new() { Name = "Edit content", Exact = true })).ToHaveCountAsync(0);
+            await ConfirmQuestActionAsync(manager, "Suspend");
+        }
+        else if (competingChange == "ownership-revocation")
+        {
+            await manager.GotoAsync($"/quests/{questId}");
+            await ChooseMemberAsync(manager, "Bob");
+            await ConfirmQuestActionAsync(manager, "Remove owner access");
+        }
+        else
+        {
+            expectedTitle = $"Committed competing edit {Guid.NewGuid():N}";
+            expectedDescription = "Committed winner description.";
+            expectedLocation = "Committed winner meeting point";
+            await manager.GotoAsync($"/quests/{questId}/edit");
+            await Expect(manager.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true })).ToBeEditableAsync();
+            await FillTextAsync(manager, expectedTitle, expectedDescription, expectedLocation);
+            await manager.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true }).ClickAsync();
+            await Expect(manager).ToHaveURLAsync(fixture.Settings.At($"/quests/{questId}").AbsoluteUri);
+        }
+        await AssertWinnerAsync();
+
+        var save = editor.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true });
+        await save.ClickAsync();
+        if (competingChange == "ownership-revocation")
+        {
+            await Expect(editor.GetByRole(AriaRole.Alert)).ToHaveTextAsync("This resource is unavailable.");
+            await Expect(editor.Locator("main form")).ToHaveCountAsync(0);
+            await Expect(title).ToHaveCountAsync(0);
+            await Expect(save).ToHaveCountAsync(0);
+            await Expect(editor.Locator("main")).Not.ToContainTextAsync(unsavedDescription);
+        }
+        else
+        {
+            await Expect(editor.GetByRole(AriaRole.Alert)).ToHaveTextAsync("This item changed. Reload before saving.");
+            await Expect(save).ToBeDisabledAsync();
+            await Expect(title).ToHaveValueAsync(unsavedTitle);
+            await Expect(editor.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true })).ToHaveValueAsync(unsavedDescription);
+            await Expect(editor.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true })).ToHaveValueAsync(unsavedLocation);
+            await Expect(start).ToHaveValueAsync(unsavedStart);
+            await Expect(end).ToHaveValueAsync(unsavedEnd);
+        }
+        await manager.ReloadAsync();
+        await AssertWinnerAsync();
+        if (competingChange == "ownership-revocation")
+        {
+            await editor.GotoAsync($"/events/{eventId}");
+            await Expect(editor.GetByText("Member-only browser acceptance description.", new() { Exact = true })).ToBeVisibleAsync();
+            await AssertPrivateUnavailableAsync(editor, questId, originalTitle);
+        }
+        else
+        {
+            await editor.GetByRole(AriaRole.Button, new() { Name = "Reload current version (discards unsaved text)", Exact = true }).ClickAsync();
+            await Expect(save).ToBeEnabledAsync();
+            await Expect(title).ToHaveValueAsync(expectedTitle);
+            await Expect(editor.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true })).ToHaveValueAsync(expectedDescription);
+            await Expect(editor.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true })).ToHaveValueAsync(expectedLocation);
+            await Expect(start).ToHaveValueAsync(originalStart);
+            await Expect(end).ToHaveValueAsync(originalEnd);
+        }
+        await manager.ReloadAsync();
+        await AssertWinnerAsync();
+
+        async Task AssertWinnerAsync()
+        {
+            await Expect(manager.GetByRole(AriaRole.Heading, new() { Name = expectedTitle, Exact = true })).ToBeVisibleAsync();
+            await Expect(manager.Locator("p[role='status'] > strong")).ToHaveTextAsync(expectedStatus);
+            await Expect(manager.Locator("p.description")).ToHaveTextAsync(expectedDescription);
+            await Expect(manager.GetByText(expectedLocation, new() { Exact = true })).ToBeVisibleAsync();
+            var times = manager.Locator("main p time");
+            await Expect(times).ToHaveCountAsync(2);
+            await Expect(times.Nth(0)).ToHaveAttributeAsync("datetime", originalStartUtc);
+            await Expect(times.Nth(1)).ToHaveAttributeAsync("datetime", originalEndUtc);
+            await Expect(manager.Locator("main li").Filter(new() { HasText = "ContentEdited" })).ToHaveCountAsync(expectedEdits);
+            if (competingChange == "suspension")
+                await Expect(manager.Locator("main li").Filter(new() { HasText = "Status:Active->Suspended" })).ToHaveCountAsync(1);
+            if (competingChange == "ownership-revocation")
+            {
+                await Expect(manager.Locator("main li").Filter(new() { HasText = "OwnerRemoved:" })).ToHaveCountAsync(1);
+                var owners = manager.GetByRole(AriaRole.Heading, new() { Name = "Equal owners", Exact = true })
+                    .Locator("xpath=following-sibling::ul[1]").Locator("li");
+                await Expect(owners).ToHaveCountAsync(1);
+                await Expect(owners).ToContainTextAsync("Alice");
+            }
+        }
+
+        static async Task FillTextAsync(IPage page, string titleText, string description, string location)
+        {
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).FillAsync(titleText);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync(description);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync(location);
+        }
+    }
+
     /// <summary>Checks keyboard-reachable real participation and page layout at a 360 CSS-pixel viewport.</summary>
     /// <returns>A task completing after Event/Quest layouts and a keyboard join are verified.</returns>
     [Fact]
