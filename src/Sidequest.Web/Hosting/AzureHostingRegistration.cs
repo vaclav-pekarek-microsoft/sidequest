@@ -72,5 +72,15 @@ public static class AzureHostingRegistration
 
     internal static MeterProviderBuilder AddOperationalMetricSources(MeterProviderBuilder metrics) => metrics
         .AddMeter("Sidequest.Operations")
-        .AddView("sidequest.queue.*", new MetricStreamConfiguration { TagKeys = ["queue"] });
+        .AddView(instrument => instrument.Name switch
+        {
+            "sidequest.queue.pending" or "sidequest.queue.due" or "sidequest.queue.dead_letter" or
+            "sidequest.queue.oldest_due_age" or "sidequest.queue.observation_available" or
+            "sidequest.queue.observation_stale" or "sidequest.queue.observation_age" =>
+                new MetricStreamConfiguration { TagKeys = ["queue"] },
+            "sidequest.operation.completed" or "sidequest.operation.duration" =>
+                new MetricStreamConfiguration { TagKeys = ["operation", "outcome"] },
+            "sidequest.http.completed" => new MetricStreamConfiguration { TagKeys = ["outcome"] },
+            _ => MetricStreamConfiguration.Drop
+        });
 }

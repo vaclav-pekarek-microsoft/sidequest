@@ -168,11 +168,19 @@ messages or secrets.
 
 `Operations:Monitoring:Enabled` explicitly enables sequential queue sampling, using
 a fresh scope/context per attempt. The interval defaults to 30 seconds (5–300 seconds);
-an observation becomes stale only after twice the interval. Export only aggregate
-queue gauges from `Sidequest.Operations`, never payloads or identifiers. Interpret
+an observation becomes stale only after twice the interval. Export only allowlisted aggregate
+queue gauges, fixed port-operation outcomes/durations and HTTP outcome counts from
+`Sidequest.Operations`, never payloads, identifiers, URLs or exception content. Interpret
 backlogs only with availability/staleness: failures and stale/missing samples are
 not healthy zero queues. Queue age does not measure delivery latency or reminder
-business deadlines. See `infra\README.md` for alert and deployment boundaries.
+business deadlines. Activity durations include internal provider retries and are not
+end-to-end command latency. Resource access observation wraps only the default scoped
+implementation, never replaces custom authorization, and never changes its result,
+exception, cancellation or transaction ownership. Register monitoring after Application
+composition; provider observers are chosen lazily during host resolution. HTTP outcome
+counts include health/static traffic and do not represent Blazor circuit commands.
+See `Operations\README.md` for metric semantics and response procedures, and
+`infra\README.md` for deployment boundaries.
 
 From the repository root:
 ```
