@@ -5,13 +5,15 @@ import test from "node:test";
 
 const source = await readFile(new URL("../../../src/Sidequest.Web/Components/App.razor.js", import.meta.url), "utf8");
 
-async function host({ clear = async () => "attempt-epoch", complete = async () => {}, marker } = {}) {
+async function host({ clear = async () => "attempt-epoch", complete = async () => {}, marker,
+    binding = "protected-session", check = async () => ({ status: 204 }) } = {}) {
     const listeners = new Map();
     const reconnectListeners = new Map();
     const buttons = new Map();
     const reports = [];
     const navigation = [];
     const completions = [];
+    const checks = [];
     const warning = { hidden: true, textContent: "" };
     const message = { textContent: "" };
     const result = { textContent: "" };
@@ -27,7 +29,7 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
         }
     };
     const completion = marker === undefined ? null : {
-        dataset: { authenticationCompletion: marker },
+        dataset: { authenticationCompletion: marker, authenticationBinding: binding },
         querySelector(name) { return name === "[data-authentication-result]" ? result : { href: "http://localhost/quests" }; }
     };
     class Form {
@@ -57,6 +59,7 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
         replace(url) { navigation.push(url); },
         reload() { navigation.push("reload"); }
     };
+    globalThis.fetch = async (url, options) => { checks.push({ url, options }); return check(); };
     globalThis.__hostLifecycle = {
         beforeAuthenticationChange: clear,
         async afterAuthenticationSuccess(epoch) { completions.push(epoch); await complete(epoch); },
@@ -64,7 +67,7 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
     };
     const executable = source.replace(/^import [^\n]+\n/, "const { beforeAuthenticationChange, afterAuthenticationSuccess, reportCircuitConnection } = globalThis.__hostLifecycle;\n");
     const module = await import(`data:text/javascript;base64,${Buffer.from(executable + `\n// ${randomUUID()}`).toString("base64")}`);
-    return { module, listeners, reconnectListeners, buttons, reports, navigation, completions, warning, message, result, Form, modal };
+    return { module, listeners, reconnectListeners, buttons, reports, navigation, completions, checks, warning, message, result, Form, modal };
 }
 
 test("The native auth POST waits for clearing and preserves antiforgery form and submitter", async () => {
@@ -163,8 +166,14 @@ test("Ordinary pages and missing completion markers never activate a new authent
 
 test("Verified completion is awaited before navigation; superseded completion remains visibly blocked", async () => {
     let release;
-    const state = await host({ marker: "verified-epoch", complete: () => new Promise(resolve => { release = resolve; }) });
+    let completing;
+    const started = new Promise(resolve => { completing = resolve; });
+    const state = await host({ marker: "verified-epoch", complete: () => new Promise(resolve => {
+        release = resolve;
+        completing();
+    }) });
     const pending = state.module.beforeWebStart();
+    await started;
     assert.deepEqual(state.completions, ["verified-epoch"]);
     assert.deepEqual(state.navigation, []);
     release();
@@ -175,6 +184,48 @@ test("Verified completion is awaited before navigation; superseded completion re
     assert.deepEqual(stale.navigation, []);
     assert.match(stale.result.textContent, /superseded/);
     assert.match(stale.result.textContent, /Nothing was refreshed/);
+});
+
+test("Completion verifies current cookies and the exact protected session before activating a matching device generation", async () => {
+    let release;
+    const state = await host({ marker: "verified-epoch", check: () => new Promise(resolve => { release = resolve; }) });
+    const pending = state.module.beforeWebStart();
+    assert.equal(state.checks.length, 1);
+    assert.equal(state.checks[0].url, "/experience/session");
+    assert.equal(state.checks[0].options.credentials, "same-origin");
+    assert.equal(state.checks[0].options.cache, "no-store");
+    assert.equal(state.checks[0].options.redirect, "manual");
+    assert.deepEqual(state.checks[0].options.headers, { "X-Sidequest-Circuit-Binding": "protected-session" });
+    assert.ok(state.checks[0].options.signal instanceof AbortSignal);
+    assert.deepEqual(state.completions, []);
+    assert.deepEqual(state.navigation, []);
+    release({ status: 204 });
+    await pending;
+    assert.deepEqual(state.completions, ["verified-epoch"]);
+    assert.deepEqual(state.navigation, ["http://localhost/quests"]);
+});
+
+test("Logout, changed sessions, HTTP failures and network failures cannot activate stale completion HTML", async () => {
+    for (const status of [0, 200, 302, 401, 403, 409, 500]) {
+        const state = await host({ marker: "still-matching-device-epoch", check: async () => ({ status }) });
+        await state.module.beforeWebStart();
+        assert.deepEqual(state.completions, [], `HTTP ${status}`);
+        assert.deepEqual(state.navigation, [], `HTTP ${status}`);
+        assert.match(state.result.textContent, /superseded/);
+    }
+    for (const failure of [new TypeError("network"), new DOMException("timeout", "TimeoutError")]) {
+        const state = await host({ marker: "old-epoch", check: async () => { throw failure; } });
+        await state.module.beforeWebStart();
+        assert.deepEqual(state.completions, []);
+        assert.deepEqual(state.navigation, []);
+        assert.match(state.result.textContent, /Nothing was refreshed/);
+    }
+    const missing = await host({ marker: "old-epoch", binding: "" });
+    await missing.module.beforeWebStart();
+    assert.deepEqual(missing.checks, []);
+    assert.deepEqual(missing.completions, []);
+    assert.deepEqual(missing.navigation, []);
+    assert.match(missing.result.textContent, /superseded/);
 });
 
 test("Framework reconnect events gate immediately; failed/rejected connections never auto-reload or retry mutations", async () => {
