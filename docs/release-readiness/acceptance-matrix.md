@@ -31,7 +31,7 @@ suite. No unexecuted scenario is marked passed.
 | **A10** Invalid state/date transition rejects atomically | S `EventServiceTests.EditEnforcesRowversionPublishedZoneAndChildContainment`; S `QuestServiceTests.FailedMutation_RollsBackAuditOutboxAndContent`; S `QuestFailureTests.OutboxFailure_RollsBackParticipationCalendarAndAudit`; S `QuestBoundaryTests.Containment_UsesExactExclusiveEnd` | Actual rollback and boundary proof; failures are not automatically replayed. Retain explicit conflict/validation observations in representative UI run. |
 | **A11** Event cancellation atomically cancels relevant public/private children | S `EventCancellationCompositionTests.CancelEvent_RealProducers_CoalesceParentStatusAndPerQuestCalendarWithdrawals`; S `EventCancellationCompositionTests.CancelEvent_DraftAndTerminalChildren_PreservePrivateAndHistoricalSemantics`; S `EventServiceTests.CancellationCascadeFailureRollsBackChildAndParent` | Composed audience/calendar intent plus rollback proof. **OPEN** supported Outlook delivery/withdrawal evidence; terminal children must not receive invented new cancellation. |
 | **A12** Suspended edit, moderator reinstatement, latest same-UID restoration, completion without cancellation | S `QuestServiceTests.SuspendEditReinstateCancelArchive_PreservesLifecycleAndDeliveryRules`; S `DeliveryPipelineTests.SuspendedEditModeratorNoticeIsGenericAndOwnershipRechecked`; S `QuestCompletionHandlerTests.Completion_ChecksDueAndCurrentEnd_AndReplaysWithoutCalendarCancellation` | The original cited run does not alone prove the complete transport journey. **Supplemental A12 evidence below** adds composed public/private suspend→edit→reinstate→complete journeys with exact latest rendered details and no final withdrawal. Real client restoration remains **OPEN A23**. |
-| **A13** Inherited Event zone, DST gap/overlap, midnight, UTC/local display | S `QuestBoundaryTests.LocalTime_DstGapAndOverlap_RequireExplicitValidMapping`; U `TimeRulesTests.EventWindow_DstDays_HaveExactInclusiveDateBoundaries`; U `TimeRulesTests.ToUtc_AutumnOverlap_BothBranchesReturnIndependentInstants`; U `TimeRulesTests.ToUtc_InputKindDoesNotOverrideEventZone` | Exact time-rule support. **Gap**: explicit differing-user/Event-zone rendered product-display journey is not established here. Record on supported clients, including selected overlap offset and no override. |
+| **A13** Inherited Event zone, DST gap/overlap, midnight, UTC/local display | S `QuestBoundaryTests.LocalTime_DstGapAndOverlap_RequireExplicitValidMapping`; U `TimeRulesTests.EventWindow_DstDays_HaveExactInclusiveDateBoundaries`; U `TimeRulesTests.ToUtc_AutumnOverlap_BothBranchesReturnIndependentInstants`; U `TimeRulesTests.ToUtc_InputKindDoesNotOverrideEventZone` | Exact time-rule support. The original run lacks differing-user/Event-zone product-display proof. **Supplemental A13 cases below** add rendered inherited-zone and UTC/device-local next-date checks; require accepted-PR hosted execution evidence before citing them as passed. Supported-client gap/overlap input and display acceptance remains open. |
 | **A14** Same UID, ordered changes, exact retries, no roster/stale send | S `DeliveryPipelineTests.JoinLeaveRejoinRetainsUidAndMonotonicSequence`; S `DeliveryPipelineTests.CalendarRetryRetainsExactPayloadAndRecordsActualReceipt`; S `DeliveryPipelineTests.UncertainRequestThenSuspensionSendsWithdrawalAndSuppressesOldRetry`; U `RecipientCalendarRendererTests.Render_RoundTripsEscapesUtcAndOnlyRecipientWithExactRetries` | Calendar bytes/SQL ordering and controlled transport proof, not client ingestion. **OPEN A23**: original/update/withdraw/rejoin observed in mailbox/client; uncertain delivery may duplicate externally. |
 | **A15** Crash after commit/acceptance and racing workers recover durably | S `DeliveryPipelineTests.OutboxRecoveryDeduplicatesNotificationCalendarAndReminder`; S `DeliveryPipelineTests.ReceiptSurvivesCrashBeforeQueueCompletionWithoutResend`; S `SqlWorkQueueTests.ConcurrentClaimsAndExpiredRecoveryFenceOldCompletion`; S `DeliveryPipelineTests.StaleProviderCompletionCannotOverwriteReclaimedDelivery` | Controlled crash-boundary state and actual SQL worker race proof. **Gap/live**: actual host termination/restart at both boundaries, approved provider receipt reconciliation; these tests are not a killed deployment or SQL/Blob restore. |
 | **A16** Joined-only X-hour reminders; reschedule/rejoin/late windows; no stale/post-start work | S `ReminderCompositionTests.JoinedReminder_UsesDecimalLeadAndStartBoundary`; S `ReminderCompositionTests.EditQuestStart_SupersedesOldRevision_AndSchedulesOnlyJoinedRecipient`; S `ReminderCompositionTests.ReminderHandler_RejectsStaleOrIneligibleIntent_WithoutNotificationOrDelivery`; S `ReminderPipelineTests.LatenessAndStartBoundariesAreEnforced`; S `ReminderPipelineTests.ReminderCompletesOnceAcrossPreferenceToggleAndRejoin` | Rules include due+120s, +121s and start suppression; this is not actual elapsed healthy-provider latency. **OPEN A24** measured submission deadlines; do not count suppression as an on-time send. |
@@ -113,9 +113,31 @@ Retain the accepted PR's hosted evidence with the dossier. This proves composed
 producer/worker/rendering behavior, not actual provider submission, Outlook
 ingestion, a killed host or release approval.
 
+## Supplemental A13 rendered zone evidence
+
+`QuestTimeZoneBrowserTests.InheritedEventZonePreservesUtcAndDifferentDeviceDay`
+adds January and July cases after the original evidence baseline. The cases use
+the existing CI-only Chromium fixture and real synthetic sign-in, Event/Quest
+creation, publication and persisted reload; they do not launch local browsers.
+
+Each Event covers one `America/New_York` date. A 20:30-21:30 Quest fits that
+Event's local date while both UTC instants and the actual `Europe/Prague` device
+display belong to the next date. Independent expected standard/daylight offsets,
+exact `<time datetime>` UTC instants, Event-local text and device-local text are
+asserted before publication, after publication and after reload. Create and edit
+screens must show the inherited read-only zone without a zone override control;
+the edit form must recover the original Event-local inputs.
+
+Source presence is not execution evidence. Retain the accepted PR's successful
+hosted run and full source SHA before citing these cases as passed. These cases
+supplement the existing gap/overlap and containment rule evidence; they do not
+independently prove gap rejection or explicit overlap selection in the browser,
+nor supported physical-client acceptance or release approval.
+
 ## Remaining product automated follow-up
 
-Prioritize the uncited combined assertions for **A13 and A17**, and
+Retain the hosted **A13** supplement and complete the uncited combined assertions
+for **A17**, plus
 approved actual process-kill/restart exercises for **A15/A22/A25**. Define exact
 new case names only when implemented; proposed names are not executed evidence.
 The other rows' automated support must still be reviewed against every §58
