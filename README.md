@@ -193,6 +193,18 @@ Existing Active grants are unchanged; Revoked grants reuse their row without res
 participation. The existing unique index is reused, with no migration, added retry,
 or weaker isolation. Invitation, audit, outbox and Quest updates remain atomic.
 
+Participation mutations reserve the actor's exact `(QuestId, UserId)` through
+`FindQuestParticipationForUpdateAsync` after Event locking, authorization and
+lifecycle checks, before reading the prior state. The Infrastructure query uses
+write intent on the existing unique index for both absent and retained rows.
+Join/Leave delivery captures only owners plus the actor; unused attendee/follower
+audience scans must not acquire shared participation PK ranges before saving.
+An exact-key reservation alone does not protect those unrelated scans. Follow/Unfollow
+changes do not need an audience read. Exclusive states, advisory capacity, repeat safety,
+calendar revision and atomic audit/outbox remain unchanged. No migration, automatic
+retry, global application lock or isolation change is introduced; adjacent missing
+index ranges may still wait for transaction completion.
+
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes
 are prohibited. Shared contracts and migrations have one integration owner. See
