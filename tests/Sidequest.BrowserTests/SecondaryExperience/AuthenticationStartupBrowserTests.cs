@@ -69,6 +69,14 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
             }
         }
         await context.RouteAsync(moduleRoute, HoldFirstInitializerAsync);
+        // Retire the old page before releasing its module, without blocking the destination's DOM/load boundary.
+        void ReleaseOnCompletionCommit(object? sender, IFrame frame)
+        {
+            if (frame == page.MainFrame && fixture.Settings.IsSameOrigin(frame.Url) &&
+                new Uri(frame.Url).AbsolutePath == "/auth/complete")
+                release.TrySetResult();
+        }
+        page.FrameNavigated += ReleaseOnCompletionCommit;
         try
         {
             await page.GotoAsync("/signin", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
@@ -80,17 +88,22 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
             await Expect(page.Locator("select#persona")).ToBeEnabledAsync();
             await page.Locator("select#persona").SelectOptionAsync("Alice");
             await Expect(page.Locator("form[action='/auth/development'] input[name='experienceEpoch']")).ToHaveCountAsync(0);
-            var post = await page.RunAndWaitForRequestAsync(
-                () => page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync(),
-                request => request.IsNavigationRequest && request.Method == "POST" &&
-                    new Uri(request.Url).AbsolutePath == "/auth/development");
-            var fields = (post.PostData ?? "").Split('&');
-            Assert.True(fields.Any(field => field.StartsWith("__RequestVerificationToken=", StringComparison.Ordinal) &&
-                field.Length > "__RequestVerificationToken=".Length), "The native POST must carry its actual antiforgery field.");
-            Assert.False(fields.Any(field => field.StartsWith("experienceEpoch=", StringComparison.Ordinal)),
-                "The unintercepted native POST must not manufacture an initiating generation.");
-            await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/auth/complete",
-                new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await SyntheticLoginDiagnostics.ObserveAsync(page, fixture.Settings, "Native startup", async () =>
+            {
+                var post = await page.RunAndWaitForRequestAsync(
+                    () => page.GetByRole(AriaRole.Button, new() { Name = "Sign in with synthetic identity", Exact = true }).ClickAsync(),
+                    request => request.IsNavigationRequest && request.Method == "POST" &&
+                        new Uri(request.Url).AbsolutePath == "/auth/development");
+                var fields = (post.PostData ?? "").Split('&');
+                Assert.Contains(fields, field => field.StartsWith("__RequestVerificationToken=", StringComparison.Ordinal) &&
+                    field.Length > "__RequestVerificationToken=".Length);
+                Assert.DoesNotContain(fields, field => field.StartsWith("experienceEpoch=", StringComparison.Ordinal));
+                var response = await post.ResponseAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.NotNull(response);
+                Assert.Equal(302, response.Status);
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/auth/complete",
+                    new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            });
             var completion = page.Locator("[data-authentication-completion]");
             await Expect(completion).ToHaveAttributeAsync("data-authentication-completion", "");
             await Expect(completion.Locator("[data-authentication-result]")).ToHaveTextAsync(
@@ -118,6 +131,7 @@ public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture f
         }
         finally
         {
+            page.FrameNavigated -= ReleaseOnCompletionCommit;
             release.TrySetResult();
             if (intercepted.Task.IsCompletedSuccessfully)
                 await routeCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
