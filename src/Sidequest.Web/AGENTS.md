@@ -55,6 +55,14 @@ synchronous read alone did not reproduce that loss. This does not establish the
 cause of the separate intermittent Quest-creation text-field loss; bounded
 failure-only browser diagnostics distinguish retained elements from replacement
 and compare native, host and attribute value lengths without recording contents.
+Browser input automation must respect the bridge's inherited `inert` gate as
+well as disabled/readonly controls. Playwright `FillAsync` and `ToBeEditableAsync`
+do not establish that an element can receive events: keyboard-filled text can
+remain empty inside an inert ancestor while native date assignment still succeeds.
+Use the shared browser-test `FillWhenActionableAsync` helper for ordinary input;
+its trial click checks actionability without clicking, forcing, changing the
+application gate, or replaying a submission. Direct `FillAsync` is reserved for
+the helper implementation and the standalone synthetic negative controls.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.

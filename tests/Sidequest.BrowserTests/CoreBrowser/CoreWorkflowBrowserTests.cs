@@ -213,7 +213,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         const string enteredReason = "Retained reason for one explicit cancellation.";
         await QuestConfirmationDiagnostics.ObserveAsync(owner, reason, "Cancel Quest after revalidation", async () =>
         {
-            await reason.FillAsync(enteredReason);
+            await reason.FillWhenActionableAsync(enteredReason);
             await Expect(owner.Locator("main fluent-text-area")).ToHaveAttributeAsync("value", enteredReason);
             if (reconnect)
             {
@@ -257,10 +257,10 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var secondName = NameInput(second);
         await Expect(firstName).ToBeEditableAsync();
         await Expect(secondName).ToBeEditableAsync();
-        await firstName.FillAsync(winner);
+        await firstName.FillWhenActionableAsync(winner);
         await first.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
         await Expect(first).ToHaveURLAsync(fixture.Settings.At($"/events/{eventId}").AbsoluteUri);
-        await secondName.FillAsync(unsaved);
+        await secondName.FillWhenActionableAsync(unsaved);
         await second.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
         await Expect(second.GetByRole(AriaRole.Alert)).ToHaveTextAsync(
             "This action is no longer allowed or the item changed. Reload and review the current state before retrying.");
@@ -313,8 +313,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         const string unsavedDescription = "Unsent confidential edit description.";
         const string unsavedLocation = "Unsent alternate meeting point";
         await FillTextAsync(editor, unsavedTitle, unsavedDescription, unsavedLocation);
-        await start.FillAsync(unsavedStart);
-        await end.FillAsync(unsavedEnd);
+        await start.FillWhenActionableAsync(unsavedStart);
+        await end.FillWhenActionableAsync(unsavedEnd);
 
         var expectedTitle = originalTitle;
         var expectedDescription = "Synthetic private-safe activity description.";
@@ -413,9 +413,9 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
         static async Task FillTextAsync(IPage page, string titleText, string description, string location)
         {
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).FillAsync(titleText);
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync(description);
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync(location);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true }).FillWhenActionableAsync(titleText);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillWhenActionableAsync(description);
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillWhenActionableAsync(location);
         }
     }
 
@@ -450,7 +450,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var title = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
         await Expect(title).ToBeEditableAsync();
         var unsaved = $"Cover failure preserves {Guid.NewGuid():N}";
-        await title.FillAsync(unsaved);
+        await title.FillWhenActionableAsync(unsaved);
         var upload = page.GetByLabel("Upload cover", new() { Exact = true });
         await Expect(upload).ToBeEnabledAsync();
         await TabToAsync(page, upload);
@@ -572,12 +572,12 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
                 """));
             throw;
         }
-        await NameInput(page).FillAsync($"Journey {Guid.NewGuid():N}");
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Discovery summary (visible to eligible users)", Exact = true }).FillAsync("A synthetic browser acceptance Event.");
-        await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (members only; plain text)", Exact = true }).FillAsync("Member-only browser acceptance description.");
+        await NameInput(page).FillWhenActionableAsync($"Journey {Guid.NewGuid():N}");
+        await page.GetByRole(AriaRole.Textbox, new() { Name = "Discovery summary (visible to eligible users)", Exact = true }).FillWhenActionableAsync("A synthetic browser acceptance Event.");
+        await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (members only; plain text)", Exact = true }).FillWhenActionableAsync("Member-only browser acceptance description.");
         var date = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillAsync(date);
-        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillAsync(date);
+        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
+        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
@@ -608,9 +608,9 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(title).ToBeEditableAsync();
         await QuestCreationDiagnostics.ObserveAsync(page, title, async () =>
         {
-            await title.FillAsync($"Activity {Guid.NewGuid():N}");
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillAsync("Synthetic private-safe activity description.");
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillAsync("Test meeting point");
+            await title.FillWhenActionableAsync($"Activity {Guid.NewGuid():N}");
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Description (plain text)", Exact = true }).FillWhenActionableAsync("Synthetic private-safe activity description.");
+            await page.GetByRole(AriaRole.Textbox, new() { Name = "Location (required to publish)", Exact = true }).FillWhenActionableAsync("Test meeting point");
             await page.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Visibility\\b") }).SelectOptionAsync(isPrivate ? "Private" : "Public");
             await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
@@ -636,7 +636,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
         await QuestConfirmationDiagnostics.ObserveAsync(page, reason, action, async () =>
         {
-            await reason.FillAsync("Browser acceptance action.");
+            await reason.FillWhenActionableAsync("Browser acceptance action.");
             await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
             await Expect(reason).ToHaveValueAsync("");

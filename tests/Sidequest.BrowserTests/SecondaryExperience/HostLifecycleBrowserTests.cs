@@ -168,7 +168,7 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
             await page.GotoAsync("/events/create");
             var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
             await Expect(name).ToBeEditableAsync();
-            await name.FillAsync("Unsaved reconnect input");
+            await name.FillWhenActionableAsync("Unsaved reconnect input");
             await Expect(page.Locator("[data-connection]")).ToHaveCountAsync(1);
             await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
             var initialChecks = Volatile.Read(ref checks);
