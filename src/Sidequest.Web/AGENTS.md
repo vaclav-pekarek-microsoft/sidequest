@@ -30,6 +30,31 @@ shadow input disabled after the fieldset becomes enabled.
 Quest management reasons bind on input with no debounce, before confirmation can
 dispatch a command. Do not depend solely on a later Fluent blur/change event to
 capture required reasons; server validation still applies.
+The detail page owns its unsent management draft separately from its authorized
+projection. Revalidation hides/removes controls and waits for pending commands,
+but preserves the reason, selected person and original version in circuit memory.
+Confirmed revocation, navigation, explicit reload and successful commands clear
+the draft; validation failures retain it without restoring confirmation. An
+indeterminate revalidation failure hides the projection and retains the draft
+until access is verified again. Only actual retained management input (a reason
+or selected person) owns a stale-intent version fence; empty drafts and ordinary
+viewers adopt newly authorized versions without blocking participation.
+Ownership loss discards management intent without fencing remaining ordinary
+access. Retained-intent version changes require explicit reload even after an
+indeterminate failure.
+Route ownership and authorization generations are separate. Every disconnect
+invalidates the displayed projection; overlapping reconnect reports await the
+newest serialized read-only check, never a mutation replay. Detail, history and
+member queries must all finish for that generation before projection publication.
+Captured participation, management, paging, reload and draft callbacks are scoped
+to their originating route and authorization generation. Late mutation completion
+cannot refresh or clear a replacement Quest's draft. The coordinator readiness
+contract is unchanged. The controlled bUnit regression includes an authorization read
+that yields while a queued callback causes an intervening render; a purely
+synchronous read alone did not reproduce that loss. This does not establish the
+cause of the separate intermittent Quest-creation text-field loss; bounded
+failure-only browser diagnostics distinguish retained elements from replacement
+and compare native, host and attribute value lengths without recording contents.
 
 ## Adding components and data access
 - Routable pages live in `Components\Pages`; shared UI in `Components`.

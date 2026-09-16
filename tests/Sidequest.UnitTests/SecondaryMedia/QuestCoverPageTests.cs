@@ -231,13 +231,14 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         Assert.Equal((quests.Detail.Summary.Id, ParticipationCommand.Join), Assert.Single(quests.Participations));
         Assert.Equal(1, refreshed);
         Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+        var change = control.Instance.Change;
         await experience.ReportConnectionAsync(false, null);
-        Assert.True(control.Instance.Busy);
-        await page.InvokeAsync(() => control.Instance.Change.InvokeAsync(ParticipationCommand.Leave));
+        Assert.Empty(page.FindComponents<QuestParticipationControls>());
+        await page.InvokeAsync(() => change.InvokeAsync(ParticipationCommand.Leave));
         Assert.Single(quests.Participations);
         await experience.ReportConnectionAsync(true, null);
         Assert.Single(quests.Participations);
-        Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+        Assert.Equal(ParticipationStatus.Joined, page.FindComponent<QuestParticipationControls>().Instance.Summary.Participation);
     }
 
     /// <summary>A detail query finishing after disposal cannot request history, publish protected state, or report a disposed cancellation source as a failure.</summary>
