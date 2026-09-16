@@ -35,7 +35,7 @@ suite. No unexecuted scenario is marked passed.
 | **A14** Same UID, ordered changes, exact retries, no roster/stale send | S `DeliveryPipelineTests.JoinLeaveRejoinRetainsUidAndMonotonicSequence`; S `DeliveryPipelineTests.CalendarRetryRetainsExactPayloadAndRecordsActualReceipt`; S `DeliveryPipelineTests.UncertainRequestThenSuspensionSendsWithdrawalAndSuppressesOldRetry`; U `RecipientCalendarRendererTests.Render_RoundTripsEscapesUtcAndOnlyRecipientWithExactRetries` | Calendar bytes/SQL ordering and controlled transport proof, not client ingestion. **OPEN A23**: original/update/withdraw/rejoin observed in mailbox/client; uncertain delivery may duplicate externally. |
 | **A15** Crash after commit/acceptance and racing workers recover durably | S `DeliveryPipelineTests.OutboxRecoveryDeduplicatesNotificationCalendarAndReminder`; S `DeliveryPipelineTests.ReceiptSurvivesCrashBeforeQueueCompletionWithoutResend`; S `SqlWorkQueueTests.ConcurrentClaimsAndExpiredRecoveryFenceOldCompletion`; S `DeliveryPipelineTests.StaleProviderCompletionCannotOverwriteReclaimedDelivery` | Controlled crash-boundary state and actual SQL worker race proof. **Gap/live**: actual host termination/restart at both boundaries, approved provider receipt reconciliation; these tests are not a killed deployment or SQL/Blob restore. |
 | **A16** Joined-only X-hour reminders; reschedule/rejoin/late windows; no stale/post-start work | S `ReminderCompositionTests.JoinedReminder_UsesDecimalLeadAndStartBoundary`; S `ReminderCompositionTests.EditQuestStart_SupersedesOldRevision_AndSchedulesOnlyJoinedRecipient`; S `ReminderCompositionTests.ReminderHandler_RejectsStaleOrIneligibleIntent_WithoutNotificationOrDelivery`; S `ReminderPipelineTests.LatenessAndStartBoundariesAreEnforced`; S `ReminderPipelineTests.ReminderCompletesOnceAcrossPreferenceToggleAndRejoin` | Rules include due+120s, +121s and start suppression; this is not actual elapsed healthy-provider latency. **OPEN A24** measured submission deadlines; do not count suppression as an on-time send. |
-| **A17** Stale edit vs suspend/revoke/edit preserves invariant and shows conflict | B `CoreWorkflowBrowserTests.ConcurrentEventEditorsPreserveWinnerAndUnsavedConflictInput`; S `QuestCoordinationTests.MembershipRemovalRacingOwnerAssignment_PreservesCrossResourceContinuity`; S `MediaServiceTests.ProviderRace_ReauthorizesAndNeverPublishesStaleCover` | **Gap**: browser competing Event editors and other resource races do not establish the full stale **Quest edit versus suspension/revocation** combination. Add composed SQL/UI cases retaining unsaved input and checking no partial effects. |
+| **A17** Stale edit vs suspend/revoke/edit preserves invariant and shows conflict | B `CoreWorkflowBrowserTests.ConcurrentEventEditorsPreserveWinnerAndUnsavedConflictInput`; S `QuestCoordinationTests.MembershipRemovalRacingOwnerAssignment_PreservesCrossResourceContinuity`; S `MediaServiceTests.ProviderRace_ReauthorizesAndNeverPublishesStaleCover` | The original run lacks stale Quest-edit composition. **Supplemental A17 cases below** add SQL-backed browser journeys against suspension, owner-access revocation and another Quest edit. Require accepted-PR execution evidence; retained conflict input and confirmed-access-loss redaction are distinct outcomes. |
 | **A18** Active published discovery summaries only; duplicate similarity/overlap | S `EventQueryTests.DuplicateSearchNormalizesAndHonorsJaccardOverlapAndPrivacy`; S `EventQueryTests.DuplicateSearchReturnsStableTopFive`; S `EventServiceTests.NonmemberSeesSummaryButNotDraftHistoryOrRoster`; S `QuestAuthorizationTests.DiscoveryPaging_UsesStableIdTieBreak_AndExcludesPrivateHints` | Bounded discovery/privacy proof. Representative data run must include nonmembers, drafts, private records, overlaps and boundary names; no all-owner-only workload. |
 | **A19** Equal owners, concurrent self-removal, verified last-owner departure, last admin | S `EventMembershipTests.RacingEqualOwnerRemovalsRetainLastEligibleOwner`; S `QuestBoundaryTests.ConcurrentOwnerRemovals_RetainOneEligibleOwner`; S `AdministratorTests.CompetingSelfRemovalsRetainLastEligibleAdministrator`; S `RecoveryTests.UnverifiedOrExistingEligibleOwnerDeniesRecovery`; S `QuestAuthorizationTests.DepartedActor_EveryServiceEntryPointReauthorizes` | Actual SQL concurrency and admission rules supported. **OPEN live** workforce-departure verification and approved recovery procedure, not a checkbox replacing external facts. |
 | **A20** Safe exact media/template boundaries; no public unvalidated asset/AI path | U `SkiaImageSanitizerTests.ActualByteLimit_IgnoresLyingAndNonseekableLength`; U `SkiaImageSanitizerTests.PixelLimit_IsInclusiveBeforeRasterAllocation`; U `SkiaImageSanitizerTests.PixelLimit_RejectsExactlyOnePixelOver`; U `SkiaImageSanitizerTests.InvalidContent_IsRejectedAfterRealDecode`; U `BusinessEmailRulesTests.SubstitutionCannotIntroduceMarkupOrSecondPassVariables`; U `BusinessEmailRulesTests.RejectsActiveOrMalformedLiteralHtml`; S `MediaServiceTests.ProviderRace_ReauthorizesAndNeverPublishesStaleCover` | Real decoding/template tests, storage doubles. **OPEN live** approved Blob isolation and upload rejection with real transport. Absence of a V1 AI path remains source/config review, not proven by a sanitizer test. |
@@ -134,10 +134,35 @@ supplement the existing gap/overlap and containment rule evidence; they do not
 independently prove gap rejection or explicit overlap selection in the browser,
 nor supported physical-client acceptance or release approval.
 
+## Supplemental A17 stale Quest edit evidence
+
+`CoreWorkflowBrowserTests.StaleQuestEditPreservesCommittedWinnerAndCurrentAccess`
+adds three cases after the original evidence baseline. Each opens a private Quest
+editor, changes all text fields and both local times without saving, commits a
+competing action through a different real synthetic identity, then submits the
+old editor exactly once.
+
+Moderator suspension and another equal owner's content edit must return an
+explicit version conflict, disable saving and retain all unsent inputs until
+explicit reload. Removing the original owner's access instead must clear the
+protected editor and deny private Quest access, while ordinary Event membership
+remains usable. The revocation case concerns Quest ownership, not membership or
+invitation revocation.
+
+Fresh authorized views check the winning status, text, both UTC instants and
+exact content-edit/action history counts before the stale save, after rejection
+and after explicit recovery. The ownership case also checks the remaining equal
+owner. These assertions establish no partial content edit or additional
+`ContentEdited` history; they do not inspect exact outbox or transport counts.
+
+These are deterministically ordered stale-snapshot journeys through real SQL,
+not tests of simultaneous SQL transaction scheduling. Retain the accepted PR's
+successful hosted run and source SHA before citing the new cases as executed.
+Existing SQL race/rollback evidence and live release review remain separate.
+
 ## Remaining product automated follow-up
 
-Retain the hosted **A13** supplement and complete the uncited combined assertions
-for **A17**, plus
+Retain successful hosted **A13/A17** supplements and prioritize
 approved actual process-kill/restart exercises for **A15/A22/A25**. Define exact
 new case names only when implemented; proposed names are not executed evidence.
 The other rows' automated support must still be reviewed against every §58
