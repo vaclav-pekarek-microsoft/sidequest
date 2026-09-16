@@ -5,22 +5,22 @@ using Sidequest.Web.Authentication;
 
 namespace Sidequest.Web.Experience;
 
-/// <summary>Protects a circuit's admitted identity and sign-in instance for comparison with independently authenticated HTTP cookies.</summary>
+/// <summary>Protects a circuit or static sign-in completion's admitted identity and sign-in instance for comparison with current HTTP cookies.</summary>
 /// <param name="protection">The host's existing Data Protection provider; a feature-specific purpose prevents cross-protocol reuse.</param>
 /// <param name="settings">Validated workforce admission settings for this host.</param>
 /// <param name="clock">The same clock used to enforce the absolute authentication-session deadline.</param>
-/// <remarks>The proof is a transient consistency check, not authentication or a resource-access grant. Keep it in bridge memory only,
+/// <remarks>The proof is a transient consistency check, not authentication or a resource-access grant. Keep it in bridge memory or no-store completion HTML only,
 /// never URLs, logs, IndexedDB, localStorage or offline snapshots. Cookie validation and resource authorization remain mandatory.</remarks>
 public sealed class ExperienceSessionBinding(IDataProtectionProvider protection,
     FoundationAuthenticationSettings settings, TimeProvider clock)
 {
     private readonly IDataProtector protector = protection.CreateProtector("Sidequest.Experience.CircuitSession.v1");
 
-    /// <summary>The request header carrying the in-memory circuit proof to the current-cookie comparison endpoint.</summary>
+    /// <summary>The request header carrying a transient circuit or completion proof to the current-cookie comparison endpoint.</summary>
     public const string HeaderName = "X-Sidequest-Circuit-Binding";
 
-    /// <summary>Captures a proof from the server-owned circuit principal, never a client-supplied identity.</summary>
-    /// <param name="principal">The current circuit AuthenticationStateProvider's principal.</param>
+    /// <summary>Captures a proof from a server-owned circuit or successfully authenticated cookie principal, never a client-supplied identity.</summary>
+    /// <param name="principal">The circuit AuthenticationStateProvider's principal or the authenticated static completion ticket's principal.</param>
     /// <returns>A protected proof, or null for anonymous, expired, malformed or pre-session-identifier authentication.</returns>
     public string? Create(ClaimsPrincipal principal)
     {
@@ -28,7 +28,7 @@ public sealed class ExperienceSessionBinding(IDataProtectionProvider protection,
         return payload is null ? null : protector.Protect(payload);
     }
 
-    /// <summary>Compares a protected circuit proof with an independently authenticated HTTP principal and its exact sign-in instance.</summary>
+    /// <summary>Compares a protected session proof with an independently authenticated HTTP principal and its exact sign-in instance.</summary>
     /// <param name="proof">Untrusted, bounded header data; absent, invalid and tampered values fail closed.</param>
     /// <param name="principal">The current HTTP cookie principal, already subject to host eligibility validation.</param>
     /// <returns>True only for the same admitted tenant/object identity, unique sign-in identifier and unexpired deadline.</returns>

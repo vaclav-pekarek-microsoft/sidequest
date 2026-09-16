@@ -9,7 +9,7 @@ namespace Sidequest.BrowserTests.SecondaryExperience;
 /// <param name="fixture">The existing CI-only Chromium fixture with unchanged synthetic origin and browser isolation policies.</param>
 public sealed class AuthenticationStartupBrowserTests(FoundationBrowserFixture fixture) : IClassFixture<FoundationBrowserFixture>
 {
-    private const string InitializerImportScript = """
+    internal const string InitializerImportScript = """
         () => {
             const element = document.querySelector('script[type="importmap"]');
             if (!element) throw new Error('The sign-in page has no import map.');

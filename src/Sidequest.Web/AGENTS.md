@@ -44,11 +44,17 @@ capture required reasons; server validation still applies.
   preserve valid local drafts and original versions, and clear confirmed revoked data.
   Authentication changes clear/block device state before submission; storage failure
   must remain visible without preventing sign-out.
+  Native authentication forms can submit before the App initializer exists. A delayed
+  sign-in completion must check its protected sign-in-instance proof against current
+  HTTP cookies before activating the matching device generation; the generation alone
+  cannot detect an unintercepted native logout. Missing/denied checks stay visibly
+  blocked with explicit continuation, never automatic navigation or activation.
 - Before enabling a surviving circuit, the session check must match the current
   HTTP cookie to a server-protected proof of that circuit's tenant/object identity,
   unique sign-in instance and deadline. A different authenticated cookie is not a
   successful reconnect. Keep this proof in bridge memory and the no-store check
-  header, never offline storage; it cannot authenticate independently. Older
+  header (or transient no-store sign-in completion HTML), never offline storage; it
+  cannot authenticate independently. Older
   tickets without a sign-in identifier require fresh sign-in.
 - The earliest scoped circuit handler invalidates online readiness on transport
   down/up without invoking view callbacks or JavaScript. Revalidation during
