@@ -145,7 +145,10 @@ public sealed class DeliveryRegistrationTests
         Assert.Equal("test-only-configuration-value", settings.ConnectionString);
         var gateway = Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IEmailGateway));
         Assert.Null(gateway.ImplementationInstance);
-        Assert.Equal(typeof(AcsEmailGateway), gateway.ImplementationType);
+        Assert.NotNull(gateway.ImplementationFactory);
+        var provider = Assert.Single(services, descriptor => descriptor.ServiceType == typeof(AcsEmailGateway));
+        Assert.Null(provider.ImplementationInstance);
+        Assert.Equal(typeof(AcsEmailGateway), provider.ImplementationType);
     }
 
     /// <summary>Rejects missing host inputs with exact parameter diagnostics before modifying service registrations.</summary>

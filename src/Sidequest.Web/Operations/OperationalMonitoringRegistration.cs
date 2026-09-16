@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sidequest.Application.Abstractions;
+using Sidequest.Application.Security;
 
 namespace Sidequest.Web.Operations;
 
-/// <summary>Composes opt-in SQL queue sampling without public diagnostics routes or external provider probes.</summary>
+/// <summary>Composes opt-in aggregate queue and activity metrics without public diagnostics routes or external provider probes.</summary>
 public static class OperationalMonitoringRegistration
 {
-    /// <summary>Registers disabled-state logging or a sequential scoped sampler with a container-owned Meter.</summary>
+    /// <summary>Registers disabled-state logging or sequential queue sampling and transparent activity observers with container-owned meters.</summary>
     /// <param name="services">Host services with logging and the provider-neutral operational queue reader registered.</param>
     /// <param name="configuration">Operations:Monitoring:Enabled (false by default) and :SampleInterval (default 00:00:30).</param>
     /// <returns>The supplied collection for subsequent host composition.</returns>
@@ -16,6 +18,8 @@ public static class OperationalMonitoringRegistration
     /// Call once before building the host. No connection is opened at registration. Missing settings keep
     /// synthetic/unit hosts inactive. Reuses an existing TimeProvider, otherwise registers TimeProvider.System.
     /// Operational persistence ports are registered separately; readiness must remain wired even when this sampler is disabled.
+    /// Call after application registration to observe the default scoped ResourceAccess implementation; custom authorization
+    /// registrations are preserved rather than replaced. Directory, email and image composition selects observation lazily.
     /// Parent hosting must enable deployment settings and configure an exporter for Sidequest.Operations;
     /// registering this method alone proves neither telemetry ingestion nor production release approval.
     /// Stop hosted services before disposing the container so in-flight SQL and its scope are awaited.
@@ -44,6 +48,15 @@ public static class OperationalMonitoringRegistration
             return services;
         }
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton(provider => new OperationalActivityMetrics(provider.GetRequiredService<TimeProvider>()));
+        var access = services.LastOrDefault(descriptor => descriptor.ServiceType == typeof(IResourceAccess) && !descriptor.IsKeyedService);
+        if (access?.ImplementationType == typeof(ResourceAccess) && access.Lifetime == ServiceLifetime.Scoped)
+        {
+            services.Remove(access);
+            services.AddScoped<ResourceAccess>();
+            services.AddScoped<IResourceAccess>(provider => new ObservedResourceAccess(provider.GetRequiredService<ResourceAccess>(),
+                provider.GetRequiredService<OperationalActivityMetrics>()));
+        }
         services.AddScoped<SqlQueueSampler>();
         services.AddSingleton<OperationalQueueMetrics>();
         services.AddHostedService<OperationalMonitoringService>();

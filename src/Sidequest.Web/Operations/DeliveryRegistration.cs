@@ -35,7 +35,13 @@ public static class DeliveryRegistration
         services.AddSingleton(email);
         services.AddSingleton(work);
         services.AddSingleton<IRecipientCalendarRenderer, RecipientCalendarRenderer>();
-        services.AddSingleton<IEmailGateway, AcsEmailGateway>();
+        services.AddSingleton<AcsEmailGateway>();
+        services.AddSingleton<IEmailGateway>(provider =>
+        {
+            var inner = provider.GetRequiredService<AcsEmailGateway>();
+            return provider.GetService<OperationalActivityMetrics>() is { } metrics
+                ? new ObservedEmailGateway(inner, metrics) : inner;
+        });
         services.AddScoped<RecipientPolicy>();
         services.AddScoped<ReminderScheduler>();
         services.AddScoped<INotificationService, NotificationService>();
