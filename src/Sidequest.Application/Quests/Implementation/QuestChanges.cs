@@ -70,7 +70,11 @@ internal static class QuestChanges
         if (quest.Status == next)
             return;
         var previous = quest.Status;
-        var audience = await CaptureAsync(db, quest.Id, token).ConfigureAwait(false);
+        // Draft publication has no participation audience; public fan-out is resolved
+        // by the outbox handler. Reading unused audiences can deadlock a concurrent Join.
+        var audience = previous == QuestStatus.Draft && next == QuestStatus.Active
+            ? new QuestAudience([], [], [], [])
+            : await CaptureAsync(db, quest.Id, token).ConfigureAwait(false);
         quest.Status = next;
         quest.StatusReason = reason;
         var changeId = Audit(db, quest, actor, $"Status:{previous}->{next}", reason, now);

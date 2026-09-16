@@ -57,8 +57,8 @@ public sealed class ReminderWorkHandler(ISidequestDbContextFactory factory, Reci
             !await db.Participations.AnyAsync(x => x.QuestId == quest.Id && x.UserId == payload.UserId &&
                 x.Status == ParticipationStatus.Joined, cancellationToken).ConfigureAwait(false))
             return;
-        if (await db.Notifications.AnyAsync(x => x.SourceChangeId == row.Id && x.UserId == payload.UserId &&
-            x.Kind == NotificationKind.Reminder, cancellationToken).ConfigureAwait(false))
+        if (await db.HasNotificationForUpdateAsync(row.Id, payload.UserId, NotificationKind.Reminder,
+            cancellationToken).ConfigureAwait(false))
             return;
         var change = new ChangeEnvelope(row.Id, NotificationKind.Reminder, quest.EventId, quest.Id, null,
             [payload.UserId], now);

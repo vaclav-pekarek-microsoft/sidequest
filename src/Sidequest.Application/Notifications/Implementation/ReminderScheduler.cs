@@ -26,7 +26,7 @@ public sealed class ReminderScheduler(TimeProvider clock)
     }
 
     /// <summary>Replaces one recipient's obsolete schedule while preserving one logical key per start revision.</summary>
-    /// <param name="db">Caller-owned Serializable context holding the Quest's parent Event lock.</param>
+    /// <param name="db">Caller-owned Serializable context holding the Quest's parent Event lock, before inbox or calendar reservations.</param>
     /// <param name="quest">Current Quest state.</param>
     /// <param name="userId">Sole intended attendee.</param>
     /// <param name="preference">Optional current settings; null selects accepted defaults.</param>
@@ -37,8 +37,9 @@ public sealed class ReminderScheduler(TimeProvider clock)
     {
         var now = clock.GetUtcNow();
         var key = $"reminder:{quest.Id:N}:{userId:N}:{quest.StartRevision}";
-        var existing = await db.ScheduledWork.Where(x => x.Type == WorkTypes.Reminder &&
-            x.QuestId == quest.Id && x.UserId == userId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var existing = await db.ReadReminderSchedulesForUpdateAsync(quest.Id, userId, cancellationToken).ConfigureAwait(false);
+        if (existing.Any(x => x.Type != WorkTypes.Reminder || x.QuestId != quest.Id || x.UserId != userId))
+            throw new DomainException(ErrorCode.Validation, "Stored reminder identity requires repair before rescheduling.");
         foreach (var stale in existing.Where(x => x.DeduplicationKey != key &&
                      x.Status is WorkStatus.Pending or WorkStatus.Processing))
         {
@@ -48,8 +49,8 @@ public sealed class ReminderScheduler(TimeProvider clock)
         }
         var work = existing.SingleOrDefault(x => x.DeduplicationKey == key);
         if (work?.Status == WorkStatus.Completed ||
-            await db.Notifications.AnyAsync(n => n.SourceChangeId == (work == null ? Guid.Empty : work.Id) &&
-                n.UserId == userId && n.Kind == NotificationKind.Reminder, cancellationToken).ConfigureAwait(false))
+            work is not null && await db.HasNotificationForUpdateAsync(work.Id, userId, NotificationKind.Reminder,
+                cancellationToken).ConfigureAwait(false))
             return;
         var parent = await db.Events.SingleAsync(x => x.Id == quest.EventId, cancellationToken).ConfigureAwait(false);
         var joined = await db.Participations.AnyAsync(x => x.QuestId == quest.Id && x.UserId == userId &&

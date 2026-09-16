@@ -67,6 +67,24 @@ Neither queue age nor ACS acceptance proves reminder timing, notification submis
 percentiles, Outlook interoperability or mailbox arrival. Keep representative
 interactive load and provider/recovery evidence as independent release gates.
 
+### Durable worker polling diagnostics
+
+The worker's availability error records `FailureType` and a nullable `SqlNumber`,
+not raw exceptions, messages, connection details or work payloads. These are
+structured log fields, not new metric dimensions. A healthy web endpoint or queue
+sample does not prove that the worker can claim or process work.
+
+SQL error 650 identifies an isolation level incompatible with `READPAST`.
+Queue claims explicitly establish ReadCommitted on their own connection before
+executing the existing atomic autocommit updates. The `UPDLOCK`, `READPAST` and
+`READCOMMITTEDLOCK` hints remain intact, including support for snapshot-enabled
+read-committed databases. Application mutation transactions retain their existing
+isolation; do not weaken them or disable pooling to work around a worker failure.
+
+If polling errors recur, preserve the deployed source/configuration and numeric
+classification, then investigate that failure. Do not assume every SQL error is
+650, count retained work as processed, reset leases, or replay user commands.
+
 ## Operator response and staging rehearsal
 
 Before enabling live alerts, an approved operational owner must verify actual metric
