@@ -3,9 +3,10 @@
 **M4 draft, not deployment-ready.** `main.bicep` compiles and its compiled ARM
 contracts are checked without an Azure login. Azure-hosted Data Protection and
 metrics-only managed-identity export and queue sampling are wired behind explicit
-opt-in. Provider settings, SQL identity/migration bootstrap and the
-approval-gated OIDC deployment workflow remain unfinished. Do not enable or deploy
-this draft as a release.
+opt-in. Approval-gated infrastructure planning and separate disabled-application
+apply workflows are prepared but remain disabled and unverified live. Provider
+settings, private SQL identity/migration bootstrap and application release remain
+unfinished. Do not enable or deploy this draft as a release.
 
 The template defines one Linux .NET 10 App Service instance with WebSockets,
 Always On and affinity; private-endpoint-only SQL, Blob and Key Vault; separate
@@ -32,7 +33,8 @@ equality, template limits and canonical non-overlapping IPv4 ranges, and emits
 only disabled-application ARM parameters. Its account context must come from the
 authenticated deployment job, not untrusted PR inputs. It proves neither actual
 identity/group existence nor approval, network suitability or runtime availability.
-Environment approval enforcement and live Azure validation remain unfinished.
+Actual environment protection/federation configuration and live Azure validation
+remain external, unverified prerequisites.
 
 The accepted planning approval model (handoff decision D39) uses GitHub environment
 reviews plus deployment-owner manual verification of administrator-bypass controls.
@@ -55,6 +57,19 @@ what-if only, emits a bounded summary and never applies resources or enables the
 It has not been dispatched or verified against live federation/providers.
 Offline infrastructure checks include its regression suite and run on every main
 commit so a planning candidate can have exact-source validation evidence.
+
+The separate [infrastructure apply preparation](deployment/APPLY.md) requires
+`SIDEQUEST_INFRASTRUCTURE_APPLY_ENABLED=true` and
+`SIDEQUEST_APPLY_ADMIN_CONTROLS_VERIFIED=true`, separate protected
+`sidequest-apply-staging`/`sidequest-apply-production` environments, a distinct
+least-privilege deployment identity and a fresh run-bound owner approval record.
+It compares exact source/template/disabled-parameter/full-private-what-if
+fingerprints before one infrastructure-only ARM create. Planning approval and
+its Reader identity cannot substitute. No application artifact is accepted;
+the application remains disabled. This preparation has not been enabled,
+dispatched or live-validated and grants no external permissions. See its runbook
+for the exact masked configuration schema, private review, partial-failure
+handling, and remaining SQL/application prerequisites.
 
 No SQL password administrator or public data-service firewall exception is
 created. An approved runner with private network/DNS access must bootstrap the
@@ -81,9 +96,14 @@ credentials, query strings or fragments are required. Denied storage or wrapping
 does not fall back to local/plaintext keys.
 
 The monitoring flag enables the release sampler with a default 30-second interval.
-The managed-identity-authenticated metrics exporter subscribes only to
-`Sidequest.Operations`, retaining only the fixed `queue` dimension. It does not automatically
-export traces, application logs, SQL statements or request headers, and disables
+The managed-identity-authenticated metrics exporter follows the
+[Web operations contract](../src/Sidequest.Web/Operations/README.md) for explicitly allowed
+instrument names and aggregate dimensions: port-attempt counters/durations, HTTP
+outcomes and the unchanged queue gauges. Other tags are stripped and unknown
+metrics are dropped. Monitoring remains opt-in through
+`Operations:Monitoring:Enabled`. No payload, identity, URL or dynamic tags are
+exported. The exporter does not export traces, application logs, SQL statements
+or request headers, and disables
 local offline telemetry spooling. Named exporter options avoid mixing future
 signal settings. The template sets `APPLICATIONINSIGHTS_STATSBEAT_DISABLED=true`
 and `APPLICATIONINSIGHTS_SDKSTATS_DISABLED=true`; enabled hosting rejects missing
@@ -93,8 +113,9 @@ Microsoft-owned diagnostic endpoints outside the application's telemetry resourc
 Live metrics, standard metrics and performance counters are also explicitly disabled.
 A connection string and role assignment alone do not prove
 telemetry delivery. Data-plane access propagation, key-reference resolution and
-actual ingestion must be checked before enabling the app. Application latency and
-other release signals still need separate instrumentation and acceptance evidence.
+actual ingestion must be checked before enabling the app. Port-attempt durations
+are not end-to-end user-command performance measurements or proof of notification/
+reminder SLOs; those require separate instrumentation and acceptance evidence.
 
 Local hosting checks use the actual Azure Data Protection repository/encryptor with
 synthetic storage and RSA-backed key resolvers: restart, wrapping-key rotation,
@@ -137,8 +158,9 @@ Alert/dashboard requirements, not yet deployed alert rules:
   delivery latency or a reminder business deadline. It does not establish the
   two-minute release targets.
 
-Application latency, authorization/error signals, Graph throttling, image failures,
-email rejections and live alert delivery still require release work and evidence.
+Aggregate operation/HTTP outcomes do not establish end-to-end user-command
+performance, notification/reminder SLOs, provider-specific acceptance or live
+alert delivery. Those still require separate release work and evidence.
 
 ## Recovery and cost boundaries
 

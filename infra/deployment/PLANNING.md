@@ -6,6 +6,12 @@ Owner assignment, actual administrator-control verification, environment/identit
 creation, role assignment, and enabling or dispatching this workflow remain
 external actions. This implementation authorizes none of them.
 
+The separate [infrastructure apply preparation](APPLY.md) has independent
+enablement, protected environments, identity and exact full-change-review
+provenance. Planning review, its identity and this workflow's count-only output
+cannot authorize apply. Both paths keep the application disabled; no application
+artifact or activation is accepted.
+
 ## Accepted trust model
 
 The user-selected model is **`github-environment-with-manual-verification`**:
@@ -62,9 +68,10 @@ not a step environment variable that would echo arbitrary input before validatio
    - `.github\workflows\ci.yml`: `push`;
    - `.github\workflows\infrastructure.yml`: `push` or `workflow_dispatch`.
    Old-source success, PR runs, skipped/failed/pending latest runs and mismatched
-   workflow identities do not pass. Infrastructure CI has path filters; if no
-   same-source evidence exists, its existing **offline** workflow must be run
-   separately through the approved process. This workflow does not dispatch it.
+   workflow identities do not pass. Infrastructure CI runs on every main push
+   (only PR validation has path filters). If same-source evidence is missing,
+   the existing **offline** workflow must be run separately through the approved
+   process. This workflow does not dispatch it.
 3. The selected environment must **already exist**, named exactly
    `sidequest-staging` or `sidequest-production`. It must have 1–6 explicit,
    distinct, non-bot `User` reviewers and `prevent_self_review=true`, plus custom
@@ -185,7 +192,7 @@ There is no artifact upload and no public full-plan artifact.
 ARM failures, non-success states, missing expected response shapes, validation
 diagnostics, unknown what-if change types, `Ignore` or `Unsupported` changes
 fail instead of producing a success summary. Count output is **not a full change
-review**; a future apply workflow needs separately approved full change review.
+review**; the separate apply preparation requires its own full private review.
 What-if predictions, including `Deploy`/`Modify`, do not establish actual effects.
 
 Local parser/transport safety limits (not Azure/GitHub service limits): 1 KiB

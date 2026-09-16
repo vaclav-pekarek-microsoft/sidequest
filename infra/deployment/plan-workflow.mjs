@@ -7,6 +7,7 @@ import { atStage, getJson, parseJson, PlanError, readResponse, requirePlan, runC
 
 export const REPOSITORY = "vaclav-pekarek-microsoft/sidequest";
 export const WORKFLOW = ".github/workflows/infrastructure-plan.yml";
+export const APPLY_WORKFLOW = ".github/workflows/infrastructure-apply.yml";
 export const AUDIENCE = "api://AzureADTokenExchange";
 export const BICEP_URL = "https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64";
 export const BICEP_SHA256 = "64c345a58e0c3e48b1bc98a4e62d6b3adb1d238281297de3400aeafb2697aa5a";
@@ -21,21 +22,23 @@ const sameGuid = (a, b) => typeof a === "string" && typeof b === "string" && a.t
 const changeTypes = ["Create", "Delete", "Deploy", "Ignore", "Modify", "NoChange", "Unsupported"];
 
 /** GitHub context and the two owner-controlled assertions are never dispatch inputs. */
-export function contextFromEnvironment(env) {
+export function contextFromEnvironment(env, workflow = WORKFLOW) {
+    requirePlan([WORKFLOW, APPLY_WORKFLOW].includes(workflow), "context");
+    const applying = workflow === APPLY_WORKFLOW;
     const inputs = parseJson(env.PLAN_INPUTS, "context", 1024);
     requirePlan(object(inputs) && Object.keys(inputs).length === 1
         && ["staging", "production"].includes(inputs.environment), "context");
     requirePlan(env.GITHUB_REPOSITORY === REPOSITORY && env.GITHUB_EVENT_NAME === "workflow_dispatch"
         && env.GITHUB_REF === "refs/heads/main" && env.GITHUB_RUN_ATTEMPT === "1"
         && shaPattern.test(env.GITHUB_SHA ?? "") && env.GITHUB_WORKFLOW_SHA === env.GITHUB_SHA
-        && env.GITHUB_WORKFLOW_REF === `${REPOSITORY}/${WORKFLOW}@refs/heads/main`
+        && env.GITHUB_WORKFLOW_REF === `${REPOSITORY}/${workflow}@refs/heads/main`
         && decimalId(env.GITHUB_RUN_ID) && decimalId(env.GITHUB_REPOSITORY_ID), "context");
-    requirePlan(env.PLAN_ENABLED === "true", "optin");
-    requirePlan(env.PLAN_ADMIN_CONTROLS_VERIFIED === "true", "acknowledgement");
+    requirePlan((applying ? env.APPLY_ENABLED : env.PLAN_ENABLED) === "true", "optin");
+    requirePlan((applying ? env.APPLY_ADMIN_CONTROLS_VERIFIED : env.PLAN_ADMIN_CONTROLS_VERIFIED) === "true", "acknowledgement");
     return {
         sourceSha: env.GITHUB_SHA, runId: Number(env.GITHUB_RUN_ID),
         repositoryId: Number(env.GITHUB_REPOSITORY_ID),
-        environment: inputs.environment, environmentName: `sidequest-${inputs.environment}`,
+        environment: inputs.environment, environmentName: `sidequest-${applying ? "apply-" : ""}${inputs.environment}`,
     };
 }
 
@@ -109,7 +112,8 @@ export function verifyCi(workflow, runs, context, filename) {
 }
 
 /** All endpoints are fixed read-only routes. The caller cannot supply metadata URLs. */
-export async function metadataGate(context, get, checkedOutSha) {
+export async function metadataGate(context, get, checkedOutSha, workflowPath = WORKFLOW) {
+    requirePlan([WORKFLOW, APPLY_WORKFLOW].includes(workflowPath), "context");
     requirePlan(checkedOutSha === context.sourceSha, "source");
     const repository = await get(api);
     requirePlan(repositoryMatches(repository, context) && repository.default_branch === "main"
@@ -117,10 +121,10 @@ export async function metadataGate(context, get, checkedOutSha) {
     const head = await get(`${api}/git/ref/heads/main`);
     requirePlan(object(head) && head.ref === "refs/heads/main" && object(head.object)
         && head.object.type === "commit" && head.object.sha === context.sourceSha, "source");
-    const workflow = await get(`${api}/actions/workflows/infrastructure-plan.yml`);
-    requirePlan(object(workflow) && workflow.path === WORKFLOW && workflow.state === "active" && positiveId(workflow.id), "source");
+    const workflow = await get(`${api}/actions/workflows/${workflowPath.split("/").at(-1)}`);
+    requirePlan(object(workflow) && workflow.path === workflowPath && workflow.state === "active" && positiveId(workflow.id), "source");
     const run = await get(`${api}/actions/runs/${context.runId}`);
-    verifyRun(run, context, WORKFLOW, workflow.id, ["workflow_dispatch"]);
+    verifyRun(run, context, workflowPath, workflow.id, ["workflow_dispatch"]);
     requirePlan(run.id === context.runId && run.run_attempt === 1 && run.status === "in_progress"
         && user(run.actor) && user(run.triggering_actor) && run.actor.id === run.triggering_actor.id, "source");
     for (const filename of ["ci.yml", "infrastructure.yml"]) {
@@ -165,7 +169,8 @@ export function oidcRequest(url, token) {
     return endpoint.href;
 }
 
-export function validateOidcToken(value, context, now = Math.floor(Date.now() / 1000)) {
+export function validateOidcToken(value, context, now = Math.floor(Date.now() / 1000), workflow = WORKFLOW) {
+    requirePlan([WORKFLOW, APPLY_WORKFLOW].includes(workflow), "oidc");
     requirePlan(typeof value === "string" && value.length <= 32768 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value), "oidc");
     const claims = parseJson(Buffer.from(value.split(".")[1], "base64url").toString("utf8"), "oidc", 32768);
     requirePlan(object(claims) && claims.iss === "https://token.actions.githubusercontent.com" && claims.aud === AUDIENCE
@@ -173,7 +178,7 @@ export function validateOidcToken(value, context, now = Math.floor(Date.now() / 
         && claims.ref === "refs/heads/main" && claims.ref_type === "branch" && claims.sha === context.sourceSha
         && claims.event_name === "workflow_dispatch" && claims.environment === context.environmentName
         && claims.run_id === String(context.runId) && claims.run_attempt === "1"
-        && claims.workflow_ref === `${REPOSITORY}/${WORKFLOW}@refs/heads/main` && claims.workflow_sha === context.sourceSha
+        && claims.workflow_ref === `${REPOSITORY}/${workflow}@refs/heads/main` && claims.workflow_sha === context.sourceSha
         && Number.isSafeInteger(claims.exp) && claims.exp > now
         && Number.isSafeInteger(claims.nbf) && claims.nbf <= now, "oidc");
     // Parsing is only defense in depth. Entra validates signature and federation.
@@ -275,7 +280,7 @@ export async function executePlan(context, settings, io) {
 }
 
 function childEnvironment(env, directory, template) {
-    const result = Object.fromEntries(Object.entries(env).filter(([key]) => !/^(?:GH_|GITHUB_|ACTIONS_|PLAN_|AZURE_|SIDEQUEST_)/.test(key)));
+    const result = Object.fromEntries(Object.entries(env).filter(([key]) => !/^(?:GH_|GITHUB_|ACTIONS_|PLAN_|APPLY_|AZURE_|SIDEQUEST_)/.test(key)));
     return {
         ...result, AZURE_CONFIG_DIR: join(directory, "azure"), AZURE_CORE_COLLECT_TELEMETRY: "false",
         AZURE_EXTENSION_USE_DYNAMIC_INSTALL: "no", AZURE_CORE_ONLY_SHOW_ERRORS: "true",
@@ -309,8 +314,8 @@ export function runtimeIo(env, fetcher = fetch) {
         removeDirectory: path => rm(path, { recursive: true, force: true }),
         write: (path, data, mode) => writeFile(path, data, { flag: "wx", mode }),
         compilerBytes: async () => readResponse(await fetcher(BICEP_URL, { signal: AbortSignal.timeout(120_000) }), "compiler", 128 * 1024 * 1024),
-        run: (file, args, stage, directory, template) => runCaptured(file, args, {
-            stage, cwd, env: childEnvironment(env, directory, template), timeout: 300_000,
+        run: (file, args, stage, directory, template, timeout = 300_000) => runCaptured(file, args, {
+            stage, cwd, env: childEnvironment(env, directory, template), timeout,
         }),
         oidc: async () => {
             const url = oidcRequest(env.ACTIONS_ID_TOKEN_REQUEST_URL, env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
@@ -331,6 +336,20 @@ export function runtimeIo(env, fetcher = fetch) {
     return io;
 }
 
+export async function readWorkflowInputs(runtime) {
+    return atStage("context", async () => {
+        const file = await open(runtime.GITHUB_EVENT_PATH, "r");
+        try {
+            requirePlan((await file.stat()).size <= 2 * 1024 * 1024, "context");
+            const event = parseJson(await file.readFile("utf8"), "context");
+            requirePlan(object(event), "context");
+            return JSON.stringify(event.inputs);
+        } finally {
+            await file.close();
+        }
+    });
+}
+
 export async function main(args, env = process.env, dependencies = {}) {
     const output = dependencies.output ?? (text => process.stdout.write(text));
     const append = dependencies.append ?? appendFile;
@@ -341,17 +360,7 @@ export async function main(args, env = process.env, dependencies = {}) {
             + "No apply authorization. See infra/deployment/PLANNING.md; never supply credentials as arguments.\n");
         return;
     }
-    const readInputs = dependencies.readInputs ?? (async runtime => atStage("context", async () => {
-        const file = await open(runtime.GITHUB_EVENT_PATH, "r");
-        try {
-            requirePlan((await file.stat()).size <= 2 * 1024 * 1024, "context");
-            const event = parseJson(await file.readFile("utf8"), "context");
-            requirePlan(object(event), "context");
-            return JSON.stringify(event.inputs);
-        } finally {
-            await file.close();
-        }
-    }));
+    const readInputs = dependencies.readInputs ?? readWorkflowInputs;
     const context = contextFromEnvironment({ ...env, PLAN_INPUTS: await readInputs(env) });
     requirePlan(typeof env.GH_TOKEN === "string" && /^[A-Za-z0-9._~-]{20,16384}$/.test(env.GH_TOKEN), "metadata");
     const get = dependencies.get ?? (url => getJson(url, env.GH_TOKEN));
