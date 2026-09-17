@@ -103,6 +103,22 @@ function Invoke-SqlBatch {
     finally { $command.Dispose() }
 }
 
+function New-BootstrapSqlConnection {
+    param([string] $ServerName)
+
+    $builder = [System.Data.SqlClient.SqlConnectionStringBuilder]::new()
+    # PowerShell adapts this IDictionary: use SQL keywords, not CLR property names.
+    $builder['Data Source'] = "tcp:$ServerName.database.windows.net,1433"
+    $builder['Initial Catalog'] = 'sidequest'
+    $builder['Encrypt'] = $true
+    $builder['TrustServerCertificate'] = $false
+    $builder['Connect Timeout'] = 30
+    $builder['ConnectRetryCount'] = 0
+    $builder['Pooling'] = $false
+    $builder['Application Name'] = 'Sidequest.BudgetStaging.Bootstrap'
+    return [System.Data.SqlClient.SqlConnection]::new($builder.ConnectionString)
+}
+
 try {
     if ($ServerName -cnotmatch '^sidequest-sql-[a-z0-9](?:[a-z0-9-]{0,45}[a-z0-9])?$') {
         throw 'Unexpected server name.'
@@ -179,16 +195,7 @@ try {
         throw 'Unexpected token metadata.'
     }
     $phase = 'sql-connect'
-    $builder = [System.Data.SqlClient.SqlConnectionStringBuilder]::new()
-    $builder.DataSource = "tcp:$ServerName.database.windows.net,1433"
-    $builder.InitialCatalog = $database
-    $builder.Encrypt = $true
-    $builder.TrustServerCertificate = $false
-    $builder.ConnectTimeout = 30
-    $builder.ConnectRetryCount = 0
-    $builder.Pooling = $false
-    $builder.ApplicationName = 'Sidequest.BudgetStaging.Bootstrap'
-    $connection = [System.Data.SqlClient.SqlConnection]::new($builder.ConnectionString)
+    $connection = New-BootstrapSqlConnection $ServerName
     $connection.AccessToken = $tokenResponse.accessToken
     $tokenResponse = $null
     $connection.Open()

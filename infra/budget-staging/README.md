@@ -50,6 +50,10 @@ meets the production 300-user and recovery targets.
   address. Use a unique temporary rule name and identical start/end addresses;
   remove that exact rule in `finally`, including on migration failure. Do not
   delete existing rules or widen ranges to make a connection succeed.
+  Where the owner's connection uses multiple observed egress addresses, use
+  separate exact-IP rules for only that verified set, never a covering range.
+  Allow up to five minutes for firewall propagation before the read-only owner
+  connection preflight; do not repeatedly execute migrations to probe connectivity.
 - When the app is deployed later, allow only its verified outbound addresses.
   App Service egress addresses are not an identity boundary: managed identity
   and SQL permissions remain mandatory. Reverify firewall rules after hosting

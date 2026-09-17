@@ -197,6 +197,27 @@ test("ARM tenant, account, server, database, SKU and identity drift stop before 
     }
 });
 
+test("real SQL connection construction preserves TLS, target, timeout and disabled retry without opening a socket", () => {
+    const result = powershell(`${loadFunction("New-BootstrapSqlConnection")}
+        $connection = New-BootstrapSqlConnection 'sidequest-sql-test123'
+        try {
+            $builder = [System.Data.SqlClient.SqlConnectionStringBuilder]::new($connection.ConnectionString)
+            @{
+                server = $builder['Data Source']; database = $builder['Initial Catalog']
+                encrypt = $builder['Encrypt']; trust = $builder['TrustServerCertificate']
+                timeout = $builder['Connect Timeout']; retry = $builder['ConnectRetryCount']
+                pooling = $builder['Pooling']; application = $builder['Application Name']
+                state = $connection.State.ToString()
+            } | ConvertTo-Json -Compress
+        } finally { $connection.Dispose() }`);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+        server: "tcp:sidequest-sql-test123.database.windows.net,1433", database: "sidequest",
+        encrypt: true, trust: false, timeout: 30, retry: 0, pooling: false,
+        application: "Sidequest.BudgetStaging.Bootstrap", state: "Closed",
+    });
+});
+
 test("a failed SQL batch is disposed and never retried or followed by another execution", () => {
     const result = powershell(`${loadFunction("Invoke-SqlBatch")}
         $global:executions = 0
@@ -278,6 +299,4 @@ test("runtime SQL rejects identity and grant drift and verifies DDL and history 
     assert.match(proof, /BEGIN CATCH\s+IF @Impersonating = 1 REVERT;\s+THROW;/);
     assert.doesNotMatch(source, /Start-Transcript|Write-(?:Output|Host|Error).*accessToken|&\s*sqlcmd/i);
     assert.match(source, /\$connection\.AccessToken = \$tokenResponse\.accessToken/);
-    assert.match(source, /\$builder\.ConnectRetryCount = 0/);
-    assert.match(source, /\$builder\.Pooling = \$false/);
 });
