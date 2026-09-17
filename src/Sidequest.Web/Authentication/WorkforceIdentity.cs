@@ -7,7 +7,7 @@ namespace Sidequest.Web.Authentication;
 /// <remarks>There is no shared mutable state. Principals must not be mutated concurrently with claim inspection.</remarks>
 public static class WorkforceIdentity
 {
-    /// <summary>Enforces configured tenant, object, workforce app-role, and synthetic-mode claim requirements.</summary>
+    /// <summary>Enforces tenant, object and admission role, plus the explicit non-production participant list or synthetic-mode claim when applicable.</summary>
     /// <param name="principal">The authenticated principal whose claims have already been validated by its authentication handler.</param>
     /// <param name="settings">The allowed tenant, admission role, and authentication mode.</param>
     /// <returns>An identity with bounded display/contact fields, or <see langword="null"/> when any admission requirement fails.</returns>
@@ -29,7 +29,8 @@ public static class WorkforceIdentity
         if (principal.Identity?.IsAuthenticated != true ||
             !Guid.TryParse(principal.FindFirstValue("tid"), out var tenant) || tenant != settings.TenantId ||
             !Guid.TryParse(principal.FindFirstValue("oid"), out var objectId) || objectId == Guid.Empty ||
-            !principal.HasClaim("roles", settings.WorkforceRole))
+            !principal.HasClaim("roles", settings.WorkforceRole) ||
+            (settings.IsHackathon && !settings.HackathonParticipants.Contains(objectId)))
             return null;
         var synthetic = principal.HasClaim(FoundationAuthenticationSettings.SyntheticClaim, "true");
         if (settings.IsDevelopment != synthetic ||

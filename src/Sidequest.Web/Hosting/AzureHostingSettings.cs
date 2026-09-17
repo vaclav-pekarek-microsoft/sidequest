@@ -3,12 +3,13 @@ namespace Sidequest.Web.Hosting;
 /// <summary>Validated, immutable configuration for explicit managed-identity Azure hosting, never a cloud approval.</summary>
 public sealed class AzureHostingSettings
 {
-    private AzureHostingSettings(string applicationName, Uri blobUri, Uri keyUri, string telemetryConnectionString)
+    private AzureHostingSettings(string applicationName, Uri blobUri, Uri keyUri, string telemetryConnectionString, bool appServiceProxyEnabled)
     {
         ApplicationName = applicationName;
         BlobUri = blobUri;
         KeyUri = keyUri;
         TelemetryConnectionString = telemetryConnectionString;
+        AppServiceProxyEnabled = appServiceProxyEnabled;
     }
 
     /// <summary>Stable Data Protection discriminator shared by restarts of this deployment, but not unrelated environments.</summary>
@@ -22,6 +23,9 @@ public sealed class AzureHostingSettings
 
     /// <summary>Application Insights routing connection string; managed identity, not the instrumentation key, authenticates ingestion.</summary>
     public string TelemetryConnectionString { get; }
+
+    /// <summary>Whether the explicitly opted-in Staging App Service trusts one HTTPS scheme header from private platform proxy addresses.</summary>
+    public bool AppServiceProxyEnabled { get; }
 
     /// <summary>Loads the opt-in Azure hosting configuration before any client registration or network operation.</summary>
     /// <param name="configuration">Deployment configuration, with secrets supplied outside source control.</param>
@@ -43,6 +47,12 @@ public sealed class AzureHostingSettings
             return null;
         if (environment.IsDevelopment() || !string.Equals(configuration["Authentication:Mode"], "Entra", StringComparison.Ordinal))
             throw new InvalidOperationException("Azure hosting requires a non-Development host with explicit Entra authentication.");
+        var proxyFlag = configuration["Hosting:Azure:AppServiceProxyEnabled"];
+        var proxyEnabled = false;
+        if (proxyFlag is not null && !bool.TryParse(proxyFlag, out proxyEnabled))
+            throw new InvalidOperationException("Hosting:Azure:AppServiceProxyEnabled must be true or false.");
+        if (proxyEnabled && !environment.IsStaging())
+            throw new InvalidOperationException("The hackathon App Service proxy configuration is restricted to Staging.");
 
         var name = Required(configuration, "Hosting:DataProtection:ApplicationName");
         if (name.Length > 128 || name != name.Trim())
@@ -56,7 +66,7 @@ public sealed class AzureHostingSettings
         if (key.Segments.Length != 3 || key.Segments[1] != "keys/" || key.Segments[2].Length is < 1 or > 127 ||
             !key.Segments[2].All(character => char.IsAsciiLetterOrDigit(character) || character == '-'))
             throw new InvalidOperationException("The Data Protection wrapping key must use a versionless /keys/name URI.");
-        return new(name, blob, key, Required(configuration, "APPLICATIONINSIGHTS_CONNECTION_STRING"));
+        return new(name, blob, key, Required(configuration, "APPLICATIONINSIGHTS_CONNECTION_STRING"), proxyEnabled);
     }
 
     private static string Required(IConfiguration configuration, string name) =>

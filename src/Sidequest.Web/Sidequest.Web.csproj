@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-Sidequest_Web-c0a01f43-25b9-411b-8761-85c1fe8517de</UserSecretsId>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <SidequestStyleRoot>$(MSBuildProjectDirectory)\..\..</SidequestStyleRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,5 +25,34 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Sidequest.UnitTests" />
   </ItemGroup>
+
+  <ItemGroup>
+    <SidequestStyleSource Include="Components\**\*.scss;wwwroot\**\*.scss" Exclude="**\_*.scss" />
+    <SidequestGeneratedStyle Include="@(SidequestStyleSource->'%(RelativeDir)%(Filename).css')" />
+    <Content Include="@(SidequestGeneratedStyle)" Exclude="@(Content)" />
+    <None Remove="@(SidequestGeneratedStyle)" />
+    <Content Remove="wwwroot\**\*.scss" />
+    <Content Include="appsettings.Development.json" Condition="!Exists('appsettings.Development.json')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Development.json;appsettings.Development.example.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <Target Name="CreateLocalDevelopmentSettings" BeforeTargets="PrepareForBuild" Condition="!Exists('$(MSBuildProjectDirectory)\appsettings.Development.json')">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\appsettings.Development.example.json" DestinationFiles="$(MSBuildProjectDirectory)\appsettings.Development.json" />
+  </Target>
+
+  <Target Name="RestoreSidequestStyles"
+          Inputs="$(SidequestStyleRoot)\package.json;$(SidequestStyleRoot)\package-lock.json"
+          Outputs="$(SidequestStyleRoot)\node_modules\.sidequest-styles-restored;$(SidequestStyleRoot)\node_modules\sass\sass.js">
+    <Exec Command="npm ci --ignore-scripts --no-audit --no-fund" WorkingDirectory="$(SidequestStyleRoot)" />
+    <Touch Files="$(SidequestStyleRoot)\node_modules\.sidequest-styles-restored" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="CompileSidequestStyles" BeforeTargets="PrepareForBuild;ResolveScopedCssInputs"
+          DependsOnTargets="RestoreSidequestStyles" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="npm run styles" WorkingDirectory="$(SidequestStyleRoot)" />
+    <ItemGroup>
+      <FileWrites Include="@(SidequestGeneratedStyle)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -8,6 +8,8 @@
         <QuestDashboard />
     </Authorized>
     <NotAuthorized>
+<section class="landing">
+<p class="eyebrow">Find your people. Make a little time.</p>
 <h1>Small activities. Shared experiences.</h1>
 <p>Organize activities with colleagues during company Events.</p>
 <FluentCard Class="foundation-card">
@@ -18,13 +20,14 @@
 <h2>Sign-in information</h2>
 @if (Authentication.IsDevelopment)
 {
-    <p>This local demo uses named synthetic personas and real local SQL storage. It does not verify Entra authentication, workforce eligibility or production readiness.</p>
+    <p>This local demo uses named synthetic personas and the configured development SQL database. It does not verify Entra authentication, workforce eligibility or production readiness.</p>
 }
 else
 {
-    <p>Sign-in requires a workforce account explicitly assigned the approved eligibility app role in the configured Entra tenant. Tenant membership or an email address alone does not grant access.</p>
+    <p>Sign-in requires an account explicitly assigned the approved participant role in the configured Entra tenant. Tenant membership or an email address alone does not grant access to Events or private Quests.</p>
 }
-        <a href="/signin" data-enhance-nav="false">View sign-in options</a>
+        <a class="button-link" href="/signin" data-enhance-nav="false">View sign-in options</a>
         <p><a href="/install">Install and device privacy</a></p>
+</section>
     </NotAuthorized>
 </AuthorizeView>

@@ -13,9 +13,12 @@ live tenant, email, hosting, and data-policy approval gates remain open.
 
 ## Local development
 
-Prerequisites: the SDK pinned in `global.json`, SQL Server (Windows LocalDB is supported),
+Prerequisites: the SDK pinned in `global.json`, Node.js 20+ with npm, SQL Server (Windows LocalDB is supported),
 and GitHub CLI authenticated as `vaclav-pekarek-microsoft` for publishing changes.
-All package dependencies restore from the repository's public NuGet source configuration.
+All NuGet dependencies restore through `https://packagefeedproxy.microsoft.io/nuget/v3/index.json`;
+the package-source mapping uses that proxy exclusively.
+NodaTime 3.3.3 and bUnit 2.10.3 are pinned to versions available through this proxy;
+the newer previously selected versions were unavailable during clean hosted restore.
 
 ```powershell
 dotnet restore Sidequest.slnx
@@ -29,6 +32,53 @@ The design-time default database is `SidequestDevelopment` on
 for EF tooling against another explicitly chosen development database. Configure the
 running app with `ConnectionStrings__Sidequest` for that same database.
 Do not apply a development migration command to production accidentally.
+
+`src\Sidequest.Web\appsettings.Development.json` is **local-only and ignored by Git**.
+The first build copies `appsettings.Development.example.json` if that local file is
+missing; it never overwrites an existing configuration. The example deliberately
+uses synthetic personas and isolated LocalDB, so a clean checkout and CI cannot
+accidentally target the shared Azure database. Neither file is published with the app.
+
+For the approved shared hackathon database, configure the ignored file with
+`ConnectionStrings:Sidequest` targeting
+`sidequest-sql-b7ljjkoqcaedc.database.windows.net`, database `sidequest`,
+`Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False`.
+Sign Azure CLI into the approved subscription and use real Entra app authentication
+locally; put the app credential in user secrets, not this JSON file. Local access also
+requires explicit owner-IP SQL firewall entries. Keep `SIDEQUEST_TEST_SQL` isolated:
+tests must never use the shared staging database. Starting the local app against shared
+staging can mutate its data and process its queued work.
+
+## Styles and Home board
+
+Edit **SCSS**, not generated CSS. The build restores the pinned Dart Sass dependency
+from `package-lock.json`, compiles global and isolated styles, and includes the generated
+assets in Razor CSS isolation and publishing. Generated CSS and `node_modules` are
+ignored; no authored inline styles are needed.
+
+```powershell
+npm run styles
+npm run styles:watch
+npm run styles:test
+```
+
+Theme colors and radii live in `src\Sidequest.Web\wwwroot\_tokens.scss`; global
+controls live in `app.scss`. Component styles live beside their Razor files as
+`Component.razor.scss`. The UI uses custom teal/neutral styling, without a second
+component framework or third-party font/CDN dependency.
+
+Signed-in Home defaults to all ordinarily accessible Quests in the user's current
+Event memberships: **Joined first**, then each Event's local start date/time.
+Equal civil times use the actual UTC instant and identifier as deterministic ties.
+The same bundled IANA/TZDB rules drive scheduling, display and ordering, including
+daylight-saving overlaps. Sorting uses authorized scalar keys before paging; full
+card projections and statistics remain bounded to the selected page. Private and
+draft access rules are unchanged, and past/cancelled Quests retain their status.
+The other participation/history filters remain available. Compatibility diagnostics
+are still reachable at `/foundation`, but neither that link nor Switch account
+appears in navigation; protected sign-out remains available.
+
+## Runtime configuration and providers
 
 `20260916112116_ReserveMembershipRequestHistory` adds a nonfiltered covering
 `MembershipRequests(EventId, UserId, CreatedUtc)` index including `Status`; apply it
@@ -46,6 +96,10 @@ It is not proof that live Entra integration is configured. Production must use E
 an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
+The approved hackathon deployment instead uses the explicitly assigned-participant
+policy, including the approved guest owner, without changing production workforce
+rules. Its resource, permission and owner-supervised execution contract is in
+[`infra\budget-staging\APPLICATION.md`](infra/budget-staging/APPLICATION.md).
 
 If native sign-in starts before browser initialization, successful authentication can
 reach a completion page without a device generation. That page deliberately shows

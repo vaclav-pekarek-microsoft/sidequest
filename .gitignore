@@ -62,3 +62,9 @@ nunit-*.xml
 
 .vs
 *.user
+
+# Local application configuration and generated Sass assets
+src/Sidequest.Web/appsettings.Development.json
+src/Sidequest.Web/Components/**/*.razor.css
+src/Sidequest.Web/wwwroot/**/*.css
+node_modules/

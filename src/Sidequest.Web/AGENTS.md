@@ -129,6 +129,15 @@ prove employment.** A guest mistakenly assigned this role is a tenant policy fai
 Entra owners must verify guest exclusion and role issuance with live accounts before release.
 No Graph call, email check or group membership grants application permissions.
 
+The explicitly approved D41 hackathon profile selects
+`Authentication:AdmissionPolicy=hackathon-assigned-users` only in Staging or real-Entra
+Development. It requires both the dedicated participant role and immutable configured
+object-ID allowlist. The same list governs enabled Member/Guest directory eligibility.
+Keep enterprise-app assignment and the list synchronized; removal must revoke local
+eligibility, not merely wait for role claims to expire. Production/default workforce
+rules above are unchanged. Follow `infra\budget-staging\APPLICATION.md` for the exact
+initial owner, permissions, credential and deployment gates.
+
 Optionally configure both `Authentication:BootstrapAdministrator:TenantId` and
 `:ObjectId`. Only that identity receives an administrator row when first provisioned.
 Bootstrap does not confer Event membership or ownership, and never restores a removed
@@ -164,8 +173,13 @@ privacy and actual cloud permissions/ingestion as separate release gates.
 No automatic database creation/migration runs on startup.
 
 ## Local synthetic development
-`appsettings.Development.json` explicitly selects `Authentication:Mode=Development`
+`appsettings.Development.example.json` explicitly selects `Authentication:Mode=Development`
 and `(localdb)\MSSQLLocalDB`, database `SidequestDevelopment`, integrated authentication.
+The build copies this template to an ignored `appsettings.Development.json` only when
+that local file is absent; existing settings are never overwritten. Neither file
+is published. A real local Entra configuration may instead target the approved
+hackathon staging SQL database with encrypted Azure-credential authentication.
+That shared database is not a test fixture; keep all automated tests isolated.
 This mode additionally requires environment **Development** and loopback connections
 (including circuit traffic). Do not proxy it publicly or enable forwarded headers for it.
 No synthetic login endpoint is mapped in Entra/Production. Cookies are mode-isolated.
@@ -189,6 +203,15 @@ page works without SQL. The authenticated dashboard performs authorized SQL quer
 Synthetic sign-in is not evidence of live Entra correctness.
 
 ## Compatibility / operations
+Author UI styles in `.scss` and `.razor.scss`, not inline attributes or generated CSS.
+The Web build compiles Sass before Razor CSS isolation/static asset discovery.
+Global theme tokens live in `wwwroot\_tokens.scss`; generated CSS is ignored by Git.
+Home defaults to the authorized all-Quest board, Joined first and then Event-local
+civil start time (UTC instant/ID ties). Reuse existing membership/private/draft
+authorization and reconnect handling. Full cards remain page-bounded.
+Compatibility and Switch account links are intentionally absent from navigation;
+the direct diagnostic route and protected sign-out still exist.
+
 `/foundation` is an authenticated compatibility screen (not product logic): Fluent
 4.14.4 with .NET 10, text-field binding, EditForm/DataAnnotations errors, modal dialog
 and close feedback. No database writes occur from this screen. Fluent is MIT licensed;

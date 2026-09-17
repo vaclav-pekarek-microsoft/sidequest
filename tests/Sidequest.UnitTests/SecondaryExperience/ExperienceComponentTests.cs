@@ -47,13 +47,13 @@ public sealed class ExperienceComponentTests : BunitContext
         Assert.DoesNotContain("img", component.Markup);
     }
 
-    /// <summary>Filters expose all five required views and remain unavailable while prerendered or disconnected.</summary>
+    /// <summary>Filters expose the all-Quest board, focused upcoming views and history while retaining disconnected and civil-date guidance.</summary>
     [Fact]
     public void FiltersHaveInvitedViewAndExplicitUtcDateSemantics()
     {
         var component = Render<DashboardFilters>(p => p.Add(c => c.Disabled, true));
         Assert.True(component.Find("fieldset").HasAttribute("disabled"));
-        Assert.Equal(new[] { "Joined", "Following", "Organizing", "Discover", "Invited" },
+        Assert.Equal(new[] { "Board", "Joined", "Following", "Organizing", "Discover", "Invited", "History" },
             component.FindAll("select")[0].QuerySelectorAll("option").Select(o => o.GetAttribute("value")));
         Assert.Contains("UTC (across Events)", component.Markup);
         Assert.Contains("inclusive civil dates", component.Markup);

@@ -1,0 +1,38 @@
+.dashboard-intro {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-block: .5rem 1.5rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    background: linear-gradient(110deg, #e6f0e8, #f4f6ec);
+    border: 1px solid var(--sq-line);
+    border-radius: 1.2rem;
+    p { margin: .25rem 0; max-width: 42rem; }
+    .button-link { flex-shrink: 0; }
+}
+.dashboard-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem 1.5rem;
+    margin-block: 1rem 1.75rem;
+    a { font-size: .9rem; font-weight: 600; }
+}
+.dashboard-results { margin-top: 2rem; }
+.result-caption { color: var(--sq-muted); font-size: .9rem; }
+.quest-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    align-items: stretch;
+    gap: 1.2rem;
+}
+.dashboard-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-block: 1.75rem 1rem;
+    span { color: var(--sq-muted); font-size: .9rem; }
+}

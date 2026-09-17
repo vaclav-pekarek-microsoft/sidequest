@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NodaTime;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
 using Sidequest.Application.Media.Implementation;
@@ -61,14 +62,46 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                 q.Status == QuestStatus.Cancelled || q.Status == QuestStatus.Archived),
             _ => query
         };
-        if (kind != QuestListKind.History)
+        if (kind is not (QuestListKind.History or QuestListKind.Board))
             query = query.Where(q => q.EndUtc > now && q.Status != QuestStatus.Cancelled &&
                 q.Status != QuestStatus.Completed && q.Status != QuestStatus.Archived);
+        if (kind == QuestListKind.Board)
+        {
+            var board = await BoardPageAsync(db, query, actor.Id, page, now, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return board;
+        }
         var count = await query.CountAsync(cancellationToken).ConfigureAwait(false);
         var items = await Summaries(db, query.OrderBy(q => q.StartUtc).ThenBy(q => q.Id).Skip(offset).Take(page.Limit),
             actor.Id, moderation, now).ToListAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(items, count, page.Page, page.Limit);
+    }
+
+    private static async Task<PageResult<QuestSummary>> BoardPageAsync(ISidequestDbContext db,
+        IQueryable<Quest> query, Guid actor, PageRequest page, DateTimeOffset now, CancellationToken token)
+    {
+        // SQL Server's zone catalog is not TZDB. Sort only authorized scalar keys with
+        // the same bundled IANA rules as scheduling, then fetch one bounded card page.
+        var keys = await (from quest in query
+                          join parent in db.Events on quest.EventId equals parent.Id
+                          select new
+                          {
+                              quest.Id,
+                              quest.StartUtc,
+                              parent.TimeZoneId,
+                              Joined = db.Participations.Any(p => p.QuestId == quest.Id &&
+                                  p.UserId == actor && p.Status == ParticipationStatus.Joined)
+                          }).ToListAsync(token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        var ids = keys.OrderByDescending(key => key.Joined)
+            .ThenBy(key => Instant.FromDateTimeOffset(key.StartUtc).InZone(TimeRules.Zone(key.TimeZoneId)).LocalDateTime)
+            .ThenBy(key => key.StartUtc)
+            .ThenBy(key => key.Id)
+            .Skip(page.Offset).Take(page.Limit).Select(key => key.Id).ToArray();
+        var items = await Summaries(db, query.Where(quest => ids.Contains(quest.Id)), actor, false, now)
+            .ToDictionaryAsync(quest => quest.Id, token).ConfigureAwait(false);
+        return new(ids.Select(id => items[id]).ToArray(), keys.Count, page.Page, page.Limit);
     }
 
     /// <inheritdoc />

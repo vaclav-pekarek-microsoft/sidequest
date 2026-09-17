@@ -1,0 +1,12 @@
+{
+  "name": "sidequest-styles",
+  "private": true,
+  "scripts": {
+    "styles": "node tools/styles.mjs",
+    "styles:watch": "sass --watch --no-source-map --style=expanded src/Sidequest.Web/Components:src/Sidequest.Web/Components src/Sidequest.Web/wwwroot:src/Sidequest.Web/wwwroot",
+    "styles:test": "node --test tools/styles.test.mjs"
+  },
+  "devDependencies": {
+    "sass": "1.97.3"
+  }
+}

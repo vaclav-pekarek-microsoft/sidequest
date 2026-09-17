@@ -1,5 +1,9 @@
 # Low-cost hackathon SQL staging
 
+The separate complete-app profile is implemented in
+[`APPLICATION.md`](APPLICATION.md), `application.bicep`, `application.ps1` and
+`identity.ps1`. This document describes the existing SQL-only slice.
+
 This is the separate **D40 dev/test profile**, not the production deployment in
 `infra/main.bicep`. The owner authorized only subscription
 `b75472bd-4174-4f66-b159-bae420212abc`, tenant
@@ -60,7 +64,9 @@ meets the production 300-user and recovery targets.
   changes. No generic Azure-wide firewall exception is allowed.
 - Workforce application admission is separate from deployment ownership. A
   subscription Owner or tenant administrator is not automatically an eligible
-  Sidequest user; guest rejection remains unchanged.
+  Sidequest user; default workforce guest rejection remains unchanged. The
+  separately approved Staging/local real-Entra Development participant exception is documented
+  in `APPLICATION.md` and never grants admission merely from deployment ownership.
 
 ## Reviewed local deployment
 

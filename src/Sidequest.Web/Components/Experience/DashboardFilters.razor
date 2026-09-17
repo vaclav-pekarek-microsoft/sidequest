@@ -1,15 +1,17 @@
 @using Sidequest.Application.Events
 @using Sidequest.Application.Quests
 @using Sidequest.Web.Experience
-<fieldset disabled="@Disabled" data-online-actions>
+<fieldset class="dashboard-filters" disabled="@Disabled" data-online-actions>
     <legend>Find your Quests</legend>
     <label>View
         <select @bind="kind" @bind:after="NotifyAsync">
+            <option value="Board">All Quests</option>
             <option value="Joined">Upcoming Joined</option>
             <option value="Following">Following</option>
             <option value="Organizing">Organizing</option>
             <option value="Discover">Discover</option>
             <option value="Invited">Invited</option>
+            <option value="History">History</option>
         </select>
     </label>
     @if (EventTotal > 100)
@@ -38,7 +40,7 @@
 </fieldset>
 
 @code {
-    private QuestListKind kind;
+    private QuestListKind kind = QuestListKind.Board;
     private Guid? eventId;
     private DateOnly? from;
     private DateOnly? through;
