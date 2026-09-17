@@ -162,6 +162,8 @@ const publishHarness = `
     $script:attempts = 0
     $script:sleeps = 0
     $script:deploys = 0
+    $script:lifecycle = [Collections.Generic.List[string]]::new()
+    $script:deploymentFails = $false
     $script:referenceResponse = [pscustomobject]@{
         nextLink = $null
         value = @(
@@ -172,8 +174,18 @@ const publishHarness = `
     function Start-Sleep { $script:sleeps++ }
     function Invoke-SidequestStagingAzure {
         param([string[]] $Arguments)
-        if ($Arguments -contains 'stop') { $script:stops++; return }
-        if ($Arguments -contains 'deploy') { $script:deploys++; return }
+        if ($Arguments -contains 'stop') { $script:lifecycle.Add('stop'); $script:stops++; return }
+        if ($Arguments -contains 'properties.enabled=true') { $script:lifecycle.Add('enable'); return }
+        if ($Arguments -contains 'start') { $script:lifecycle.Add('start'); return }
+        if ($Arguments -contains 'deploy') {
+            $script:lifecycle.Add('deploy')
+            $script:deploys++
+            if (($Arguments -join ' ') -notmatch '--restart true --track-status false') {
+                throw 'Deployment must restart the artifact and leave readiness tracking to the bounded application probe'
+            }
+            if ($script:deploymentFails) { throw [InvalidOperationException]::new('deployment-failed-sentinel') }
+            return
+        }
         if (($Arguments -join ' ') -match '/config/configreferences/') {
             if ($Arguments -notcontains 'get' -or $Arguments -notcontains
                 'https://management.azure.com/subscriptions/b75472bd-4174-4f66-b159-bae420212abc/resourceGroups/sidequest-rg/providers/Microsoft.Web/sites/sidequest-hackathon-b7ljjkoqcaedc/config/configreferences/appsettings?api-version=2022-03-01') {
@@ -187,6 +199,34 @@ const publishHarness = `
     }
 `;
 const publishInvocation = "Publish-SidequestApplication -SourceCommit accepted-source -ApplicationName sidequest-hackathon-b7ljjkoqcaedc -ZipPath unused -ManifestPath unused -IdentityAndProviderGatesVerified";
+
+test("Publishing enables SCM before upload and restarts only the validated artifact", () => {
+    const result = ps(`${publishHarness}
+        function Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
+        $result = ${publishInvocation}
+        if (($script:lifecycle -join ',') -cne 'enable,start,deploy' -or $result.readiness -cne 'Healthy') {
+            throw 'Incorrect stopped-site deployment sequence'
+        }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+});
+
+test("Deployment failure after enabling SCM stops the host before readiness probing", () => {
+    const result = ps(`${publishHarness}
+        $script:deploymentFails = $true
+        $caught = $false
+        try { $null = ${publishInvocation} }
+        catch {
+            if ($_.Exception.Message -cne 'deployment-failed-sentinel') { throw }
+            $caught = $true
+        }
+        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,start,deploy,stop' -or
+            $script:stops -ne 1 -or $script:attempts -ne 0) {
+            throw 'Failed deployment did not close the activated hosting boundary'
+        }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+});
 
 for (const [name, mutation] of [
     ["missing", "$script:referenceResponse.value = @($script:referenceResponse.value[0])"],
@@ -203,7 +243,7 @@ for (const [name, mutation] of [
                 if ($_.Exception.Message -notmatch 'credential reference') { throw }
                 $caught = $true
             }
-            if (-not $caught -or $script:deploys -ne 0 -or $script:attempts -ne 0) {
+            if (-not $caught -or $script:deploys -ne 0 -or $script:attempts -ne 0 -or $script:lifecycle.Count -ne 0) {
                 throw 'Invalid references reached deployment or activation'
             }
         `);

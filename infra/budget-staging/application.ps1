@@ -230,12 +230,13 @@ function Publish-SidequestApplication {
             throw 'Required Key Vault credential reference is not uniquely resolved.'
         }
     }
-    $null = Invoke-SidequestStagingAzure @('webapp', 'deploy', '--resource-group', $script:ResourceGroup,
-        '--name', $ApplicationName, '--src-path', $ZipPath, '--type', 'zip', '--restart', 'false')
     try {
         $null = Invoke-SidequestStagingAzure @('resource', 'update', '--ids',
             $path.Replace('https://management.azure.com', ''), '--set', 'properties.enabled=true', '--api-version', '2024-04-01')
         $null = Invoke-SidequestStagingAzure @('webapp', 'start', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
+        $null = Invoke-SidequestStagingAzure @('webapp', 'deploy', '--resource-group', $script:ResourceGroup,
+            '--name', $ApplicationName, '--src-path', $ZipPath, '--type', 'zip',
+            '--restart', 'true', '--track-status', 'false')
         $ready = $false
         for ($attempt = 0; $attempt -lt 18; $attempt++) {
             try {
