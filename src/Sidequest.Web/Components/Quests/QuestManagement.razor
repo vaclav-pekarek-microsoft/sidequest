@@ -12,7 +12,7 @@
             <a href="@($"/quests/{Detail.Summary.Id}/edit")">Edit content</a>
         }
         <label>Event member / current owner
-            <select @bind="selected" disabled="@Busy">
+            <select @bind="selected" @bind:after="PublishDraftAsync" disabled="@Busy">
                 <option value="">Choose a person</option>
                 @foreach (var person in Candidates)
                 {
@@ -23,7 +23,7 @@
         <FluentButton Disabled="@(Busy || MemberPage <= 1)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage - 1))">Previous members</FluentButton>
         <FluentButton Disabled="@(Busy || !MoreMembers)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage + 1))">More members</FluentButton>
     }
-    <FluentTextArea Label="Reason (10–2000 characters for cancellation, moderation, or removal)" @bind-Value="reason" Disabled="@Busy" />
+    <FluentTextArea Label="Reason (10–2000 characters for cancellation, moderation, or removal)" @bind-Value="reason" @bind-Value:after="PublishDraftAsync" Immediate="true" Disabled="@Busy" />
     <label>
         <input type="checkbox" @bind="confirmed" disabled="@Busy" />
         I confirm this action. Cancellation/suspension withdraws attendee calendars; removal can end access

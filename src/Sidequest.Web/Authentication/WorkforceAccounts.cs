@@ -43,8 +43,7 @@ public sealed class WorkforceAccounts(
             {
                 await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
                 await using var transaction = await db.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
-                var user = await db.Users.SingleOrDefaultAsync(
-                    u => u.TenantId == identity.TenantId && u.ObjectId == identity.ObjectId, cancellationToken).ConfigureAwait(false);
+                var user = await db.FindUserForUpdateAsync(identity.TenantId, identity.ObjectId, cancellationToken).ConfigureAwait(false);
                 var isNew = user is null;
                 if (user is null)
                 {

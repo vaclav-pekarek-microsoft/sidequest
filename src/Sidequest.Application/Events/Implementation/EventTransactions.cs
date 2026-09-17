@@ -100,7 +100,7 @@ internal static class EventTransactions
     {
         var end = End(item);
         var key = $"event.complete.v1:{item.Id:N}:{end.UtcTicks}";
-        if (await db.ScheduledWork.AnyAsync(x => x.DeduplicationKey == key, cancellationToken).ConfigureAwait(false))
+        if (await db.HasScheduledWorkForUpdateAsync(key, cancellationToken).ConfigureAwait(false))
             return;
         db.ScheduledWork.Add(new ScheduledWork
         {

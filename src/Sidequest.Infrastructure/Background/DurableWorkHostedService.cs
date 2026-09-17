@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,8 @@ public sealed class DurableWorkHostedService(IServiceScopeFactory scopes, Durabl
             }
             catch (Exception error)
             {
-                logger.LogError("Durable work polling is unavailable ({FailureType}). Pending work remains in SQL.", error.GetType().Name);
+                logger.LogError("Durable work polling is unavailable ({FailureType}, SQL number {SqlNumber}). Pending work remains in SQL.",
+                    error.GetType().Name, error is SqlException sql ? sql.Number : (int?)null);
             }
             if (!worked)
             {

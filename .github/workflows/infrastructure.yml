@@ -1,0 +1,49 @@
+name: Infrastructure validation
+
+on:
+  pull_request:
+    paths:
+      - infra/**
+      - .github/workflows/infrastructure.yml
+      - .github/workflows/infrastructure-plan.yml
+      - .github/workflows/infrastructure-apply.yml
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Acquire pinned offline compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64 \
+            --output "$RUNNER_TEMP/bicep"
+          echo "64c345a58e0c3e48b1bc98a4e62d6b3adb1d238281297de3400aeafb2697aa5a  $RUNNER_TEMP/bicep" | sha256sum --check --status
+          chmod +x "$RUNNER_TEMP/bicep"
+      - name: Compile infrastructure without Azure credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/bicep" build infra/main.bicep --outfile "$RUNNER_TEMP/sidequest-infrastructure.json"
+          "$RUNNER_TEMP/bicep" build infra/budget-staging/sql.bicep --outfile "$RUNNER_TEMP/sidequest-budget-sql.json"
+      - name: Verify compiled deployment safeguards
+        env:
+          SIDEQUEST_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-infrastructure.json
+        run: node --test infra/tests/template.test.mjs
+      - name: Verify offline deployment parameter preflight
+        run: node --test infra/deployment/tests/*.test.mjs
+      - name: Verify isolated budget staging safeguards
+        env:
+          SIDEQUEST_BUDGET_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-budget-sql.json
+        run: node --test infra/budget-staging/*.test.mjs

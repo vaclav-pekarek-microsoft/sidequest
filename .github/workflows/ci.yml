@@ -44,8 +44,8 @@ jobs:
       - run: dotnet restore Sidequest.slnx
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
       - name: Check offline and authentication lifecycle JavaScript
-        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs
-      - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
+        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/moderation-diagnostics.test.mjs
+      - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
       - name: Install browser test runtime
         shell: pwsh
@@ -57,6 +57,7 @@ jobs:
           export ConnectionStrings__Sidequest="$SIDEQUEST_SQL_CONNECTION"
           export ASPNETCORE_ENVIRONMENT=Development
           export Authentication__Mode=Development
+          export Operations__Monitoring__Enabled=true
           export Delivery__Email__SenderAddress=calendar@sidequest.example.test
           dotnet tool restore
           dotnet ef database update --project src/Sidequest.Infrastructure --startup-project src/Sidequest.Infrastructure --configuration Release --no-build
@@ -87,7 +88,7 @@ jobs:
         env:
           SIDEQUEST_BASE_URL: http://127.0.0.1:5078
         run: |
-          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
+          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Require executed foundation scenarios
         shell: pwsh
@@ -106,7 +107,7 @@ jobs:
             }
           }
       - name: Capture isolated browser database deadlocks
-        if: failure() && steps.browser_diagnostics.outcome == 'success'
+        if: (failure() || cancelled()) && steps.browser_diagnostics.outcome == 'success'
         shell: bash
         run: |
           docker exec -i sidequest-test-sql bash -c '
@@ -120,6 +121,7 @@ jobs:
           name: test-results
           path: |
             **/TestResults/*.trx
+            **/TestResults/**/Sequence*.xml
             ${{ runner.temp }}/sidequest-web.log
             ${{ runner.temp }}/sidequest-deadlocks.xml
           if-no-files-found: warn

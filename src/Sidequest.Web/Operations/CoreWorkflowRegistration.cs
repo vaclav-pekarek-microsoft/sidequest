@@ -44,8 +44,14 @@ public static class CoreWorkflowRegistration
         services.AddSingleton(credentials);
         services.AddHttpClient<IGraphAccessTokenProvider, GraphClientCredentialTokenProvider>()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        services.AddHttpClient<IDirectoryGateway, GraphDirectoryGateway>()
+        services.AddHttpClient<GraphDirectoryGateway>(nameof(IDirectoryGateway))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddTransient<IDirectoryGateway>(provider =>
+        {
+            var inner = provider.GetRequiredService<GraphDirectoryGateway>();
+            return provider.GetService<OperationalActivityMetrics>() is { } metrics
+                ? new ObservedDirectoryGateway(inner, metrics) : inner;
+        });
         services.AddScoped<IQuestService, QuestService>();
         services.AddScoped<IQuestEventLifecycle, QuestEventLifecycle>();
         services.AddScoped<IBackgroundWorkHandler, QuestCompletionHandler>();

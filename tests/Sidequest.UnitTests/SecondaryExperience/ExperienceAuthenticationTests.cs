@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sidequest.Web.Authentication;
 using Sidequest.Web.Components.Pages.Experience;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.SecondaryExperience;
 
@@ -17,18 +18,23 @@ public sealed class ExperienceAuthenticationTests : BunitContext
     public ExperienceAuthenticationTests()
     {
         Services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
+        Services.AddSingleton(TimeProvider.System);
+        Services.AddSingleton(new FoundationAuthenticationSettings(true, DevelopmentPersonas.TenantId,
+            DevelopmentPersonas.WorkforceRole, null));
+        Services.AddSingleton<ExperienceSessionBinding>();
         Services.AddAuthentication(FoundationAuthenticationSettings.CookieScheme)
             .AddCookie(FoundationAuthenticationSettings.CookieScheme);
     }
 
-    /// <summary>Only a successful protected cookie with the initiating device generation renders a usable completion marker; native sign-in without that generation retains manual continuation, and query data cannot substitute it.</summary>
-    /// <param name="kind">Valid, generation-free, tampered, or absent cookie input.</param>
+    /// <summary>Completion pairs the protected cookie generation with its exact current-session proof; missing generations and legacy sessions cannot enable activation, and query data cannot substitute either value.</summary>
+    /// <param name="kind">Valid, generation-free, tampered, absent, or legacy-session cookie input.</param>
     /// <returns>Completion after real cookie issuance/authentication and rendered boundary assertions.</returns>
     [Theory]
     [InlineData("valid")]
     [InlineData("without-generation")]
     [InlineData("tampered")]
     [InlineData("absent")]
+    [InlineData("legacy-session")]
     public async Task CompletionUsesProtectedCookieGenerationNotQuery(string kind)
     {
         const string epoch = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -36,7 +42,9 @@ public sealed class ExperienceAuthenticationTests : BunitContext
         await using (var issuance = Services.CreateAsyncScope())
         {
             var context = new DefaultHttpContext { RequestServices = issuance.ServiceProvider };
-            var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "synthetic")], "test"));
+            var principal = DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All.Single(p => p.Name == "Alice"));
+            if (kind != "legacy-session")
+                WorkforceSession.Stamp(principal, DateTimeOffset.UtcNow);
             await context.SignInAsync(FoundationAuthenticationSettings.CookieScheme, principal,
                 ExperienceAuthentication.CreateProperties("/quests", kind == "without-generation" ? null : epoch));
             cookie = Assert.IsType<string>(Assert.Single(context.Response.Headers.SetCookie)).Split(';')[0];
@@ -46,10 +54,23 @@ public sealed class ExperienceAuthenticationTests : BunitContext
         if (kind != "absent") http.Request.Headers.Cookie = kind == "tampered" ? cookie + "tampered" : cookie;
         http.Request.QueryString = new QueryString("?experienceEpoch=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
         var result = await http.AuthenticateAsync(FoundationAuthenticationSettings.CookieScheme);
-        Assert.Equal(kind is "valid" or "without-generation", result.Succeeded);
+        Assert.Equal(kind is "valid" or "without-generation" or "legacy-session", result.Succeeded);
         var component = Render<CascadingValue<HttpContext>>(p => p.Add(c => c.Value, http).AddChildContent<AuthenticationComplete>());
-        Assert.Equal(kind == "valid" ? epoch : "", component.Find("[data-authentication-completion]")
+        Assert.Equal(kind is "valid" or "legacy-session" ? epoch : "", component.Find("[data-authentication-completion]")
             .GetAttribute("data-authentication-completion"));
+        var proof = component.Find("[data-authentication-completion]").GetAttribute("data-authentication-binding");
+        var binding = Services.GetRequiredService<ExperienceSessionBinding>();
+        if (kind == "valid")
+        {
+            Assert.False(string.IsNullOrEmpty(proof));
+            Assert.NotNull(result.Principal);
+            Assert.True(binding.Matches(proof, result.Principal));
+            Assert.False(binding.Matches(proof, new ClaimsPrincipal()));
+            WorkforceSession.Stamp(result.Principal, DateTimeOffset.UtcNow);
+            Assert.False(binding.Matches(proof, result.Principal));
+        }
+        else
+            Assert.Equal("", proof);
         Assert.DoesNotContain("bbbbbbbb-bbbb", component.Markup);
         Assert.Empty(component.FindAll("[data-connection]"));
         if (kind == "without-generation")

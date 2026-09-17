@@ -30,6 +30,16 @@ for EF tooling against another explicitly chosen development database. Configure
 running app with `ConnectionStrings__Sidequest` for that same database.
 Do not apply a development migration command to production accidentally.
 
+`20260916112116_ReserveMembershipRequestHistory` adds a nonfiltered covering
+`MembershipRequests(EventId, UserId, CreatedUtc)` index including `Status`; apply it
+before running this build. Membership requests read pending and hourly-history facts
+with one Infrastructure-owned write-intent reservation after authorization and the
+Event lock. Empty adjacent ranges can wait, but do not acquire compatible shared
+locks that later deadlock on insertion. Serializable isolation, inclusive hourly
+limits, pending-request idempotency, and atomic audit/outbox commits are unchanged.
+The migration changes no rows; rollback removes only the index and must be paired
+with the prior application build. Readiness rejects an unapplied migration.
+
 Development sign-in uses conspicuously labeled synthetic accounts only when the
 Development environment and explicit development authentication mode are both active.
 It is not proof that live Entra integration is configured. Production must use Entra,
@@ -69,6 +79,20 @@ or the deployment secret store; never commit them. Missing Graph policy or crede
 fails directory operations explicitly without preventing existing Event access.
 Calendar downloads require a configured organizer. CI uses a reserved synthetic organizer
 address solely for local calendar rendering, with no ACS credentials or live email calls.
+
+Explicit `Hosting:Azure:Enabled=true` selects managed-identity Blob/Key Vault Data
+Protection and metrics-only Azure Monitor export. It requires non-Development Entra
+hosting, stable key-ring settings, an Application Insights connection string and
+the process-level SDK diagnostic opt-outs described in the infrastructure guide.
+The default synthetic host never opts in. The [M4 infrastructure draft](infra/README.md)
+documents these settings and its remaining deployment/approval gates; no cloud
+resources are created by registering services or running the offline checks.
+
+Readiness also verifies applied SQL migration history; migrations remain a separate
+authorized deployment step. Optional `Operations:Monitoring:Enabled=true` collects
+aggregate queue observations without provider calls or writes. Failed, missing and
+stale samples are unavailable, not healthy zero backlogs; see the infrastructure
+guide before configuring alerts.
 
 ## Verification
 
@@ -149,6 +173,37 @@ Completion scheduling reserves its pending-work key range with write intent befo
 insertion in the same transaction. This avoids compatible shared-range reads turning
 into competing insert conversions during concurrent Quest publication; it does not
 change completion deadlines, retry user commands, or commit outside the caller.
+
+Event publication and Active Event date edits reserve the **exact** completion key
+`event.complete.v1:<EventId>:<end UTC ticks>` through `HasScheduledWorkForUpdateAsync`.
+Unlike Quest's pending-prefix check, every existing exact Event key suppresses a new
+intent, including Completed, DeadLetter and Superseded rows. Revisited deadlines reuse
+their retained intent; changing the end creates a different immutable key, and stale
+work cannot complete an extended Event. Both contracts share the Infrastructure-owned
+write-intent query and existing deduplication index, with no migration or isolation
+change. Publication, history, audit, outbox and scheduling still commit or roll back
+together; an already-published Event still rejects another publication.
+
+Private Quest invitations reserve their exact `(QuestId, UserId)` key through
+`FindQuestInvitationForUpdateAsync` before inserting or reactivating a grant.
+Authorization still requires an eligible owner with current Event membership, but
+does not read unrelated invitation grants for owner-only operations or moderation.
+This avoids taking shared empty invitation ranges before the write-intent reservation.
+Existing Active grants are unchanged; Revoked grants reuse their row without restoring
+participation. The existing unique index is reused, with no migration, added retry,
+or weaker isolation. Invitation, audit, outbox and Quest updates remain atomic.
+
+Participation mutations reserve the actor's exact `(QuestId, UserId)` through
+`FindQuestParticipationForUpdateAsync` after Event locking, authorization and
+lifecycle checks, before reading the prior state. The Infrastructure query uses
+write intent on the existing unique index for both absent and retained rows.
+Join/Leave delivery captures only owners plus the actor; unused attendee/follower
+audience scans must not acquire shared participation PK ranges before saving.
+An exact-key reservation alone does not protect those unrelated scans. Follow/Unfollow
+changes do not need an audience read. Exclusive states, advisory capacity, repeat safety,
+calendar revision and atomic audit/outbox remain unchanged. No migration, automatic
+retry, global application lock or isolation change is introduced; adjacent missing
+index ranges may still wait for transaction completion.
 
 Use isolated task branches and pull requests for every change under
 `vaclav-pekarek-microsoft`. Verified PRs may be merged automatically; direct main pushes

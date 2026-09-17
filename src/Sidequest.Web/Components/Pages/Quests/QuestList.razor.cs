@@ -30,9 +30,9 @@ public partial class QuestList : IAsyncDisposable
     [Inject] private ILogger<QuestList> Logger { get; set; } = default!;
     [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
     /// <summary>Optional list view from a deep link; invalid values use Joined.</summary>
-    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+    [Parameter] public string? View { get; set; }
     /// <summary>Optional internal Event filter, never an access grant.</summary>
-    [SupplyParameterFromQuery(Name = "eventId")] public Guid? EventId { get; set; }
+    [Parameter] public Guid? EventId { get; set; }
 
     /// <inheritdoc />
     protected override void OnInitialized() =>
