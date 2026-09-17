@@ -221,10 +221,14 @@ function Publish-SidequestApplication {
         $manifest.sha256 -cne (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash) {
         throw 'The publish artifact does not match its accepted source/hash manifest.'
     }
-    $references = Invoke-SidequestStagingAzure @('rest', '--method', 'post', '--url',
-        "$path/config/configreferences/appsettings/list?api-version=2024-04-01")
+    $references = Invoke-SidequestStagingAzure @('rest', '--method', 'get', '--url',
+        "$path/config/configreferences/appsettings?api-version=2022-03-01")
+    if ($references.nextLink) { throw 'Credential reference status is incomplete.' }
     foreach ($name in @('AzureAd__ClientSecret', 'Directory__Credentials__ClientSecret')) {
-        if ($references.properties.$name.status -cne 'Resolved') { throw 'Required Key Vault credential reference is not resolved.' }
+        $matching = @($references.value | Where-Object { $_.name -ceq $name })
+        if ($matching.Count -ne 1 -or $matching[0].properties.status -cne 'Resolved') {
+            throw 'Required Key Vault credential reference is not uniquely resolved.'
+        }
     }
     $null = Invoke-SidequestStagingAzure @('webapp', 'deploy', '--resource-group', $script:ResourceGroup,
         '--name', $ApplicationName, '--src-path', $ZipPath, '--type', 'zip', '--restart', 'false')
