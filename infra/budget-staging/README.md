@@ -142,6 +142,9 @@ no SQL user or grants. Do not describe this as managed-identity migration execut
 `runtime-permissions.sql` allows DML on exactly the 26 application tables and
 SELECT on migration history. It rejects identity/grant drift and checks effective
 table, DDL and principal-management permissions under database impersonation.
+The proof checks database `CONTROL` and `IMPERSONATE` on the `dbo` user:
+`IMPERSONATE ANY USER` is not a supported database permission, and querying an
+invalid permission returns `NULL`, not evidence of a grant or a denial.
 The Entra service-principal **object ID** selects the identity with `WITH OBJECT_ID`;
 the SQL external user's SID must match its **application/client ID**, not that
 object ID. Both values come from the verified managed-identity ARM resource
