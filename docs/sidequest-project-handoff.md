@@ -1,7 +1,7 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-09-15.
+**Last revised:** 2026-09-17.
 **Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
@@ -2257,6 +2257,7 @@ not V1 release requirements.
 | D37 | 2026-09-14 | C# implementation must follow good engineering standards, including pragmatic SOLID. All public classes/types and members, methods, properties, constructors, fields, and enum values require proper XML documentation; enforce missing-documentation failures in builds and review semantic quality before merging. |
 | D38 | 2026-09-14 | Adopt PlagueHO/github-copilot-assets-library's csharp-best-practices.instructions.md as the C# baseline for all development agents, pinned at commit ea4125167b98053f083cffcc79883221f872da30. Record its application in repository instructions and EditorConfig; retain D37's public XML documentation requirement and apply the baseline before foundation integration. |
 | D39 | 2026-09-15 | Use standard GitHub environment reviews for Azure planning, with deployment-owner manual verification of administrator-bypass controls before planning is enabled. Supported API checks do not prove that bypass is disabled or distinguish every bypass from an ordinary approval. A manual-verification acknowledgement is a trusted operator assertion, not API evidence. Planning remains disabled by default, main-source-bound and environment-reviewed; relevant protection/identity changes require disabling planning and reverification. This accepts the approval model only: it does not verify current settings, assign an owner, create an identity/environment, authorize cloud access, deploy resources or enable the application. |
+| D40 | 2026-09-17 | Authorize a separate low-cost hackathon dev/test staging profile, exclusively in subscription `b75472bd-4174-4f66-b159-bae420212abc`, resource group `sidequest-rg`. Prefer economical US/Europe placement for a mainly US audience; West US 3 was selected from checked prices and subscription SQL availability. The owner clarified that the earlier USD 30/month figure is guidance, not a strict ceiling: favor simplicity and low total cost rather than elaborate budget enforcement. The owner expressly permits dropping private SQL networking: use Entra-only authentication, TLS, narrow explicit firewall entries and no "Allow Azure services" rule. Omit NAT/private endpoints and premium sizing in this separate profile; do not modify or activate the production template. Owner-supervised local SQL provisioning/bootstrap from an accepted, source-pinned PR is authorized for this dev/test subscription; production federated deployment controls under D39 remain unchanged. SQL uses Basic 5 DTUs/2 GB, an Entra administrator group, separate application/migration identities and explicit runtime table permissions. Do not claim production capacity, restore objectives or workforce/provider acceptance from this profile. Preserve the existing subscription spending limit; production use requires a separately approved eligible subscription. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2284,7 +2285,8 @@ implementation in this documentation session.
 | Email provider/domain, organizer mailbox identity, test recipients | Live notification/calendar integration | Verified sender and Outlook delivery/update/cancellation smoke-test results |
 | Retention, residency, employee-data/device access and recovery targets | Before production data | Organizational approval including offline joined/private Quest basics, shared-device disclosure, and documented cleanup/restore procedure |
 
-All external gates above remain open/unverified. No live tenant/provider resources,
+Except for the bounded subscription, budget and staging provisioning authorization
+in D40, external gates above remain open/unverified. No live tenant/provider resources,
 compatibility evidence, operational owner, or organizational policy approval is implied
 by product acceptance. Record each gate's actual evidence when it is satisfied.
 

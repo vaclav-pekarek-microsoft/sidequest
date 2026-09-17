@@ -1,5 +1,11 @@
 # Azure infrastructure
 
+The owner-approved [low-cost hackathon SQL staging profile](budget-staging/README.md)
+is separate from the production-oriented template described below. D40 confines it
+to the explicitly approved dev/test subscription and resource group, permits
+restricted public SQL access and keeps application activation separate. Do not
+apply this document's premium/private template to that budget staging environment.
+
 **M4 draft, not deployment-ready.** `main.bicep` compiles and its compiled ARM
 contracts are checked without an Azure login. Azure-hosted Data Protection and
 metrics-only managed-identity export and queue sampling are wired behind explicit
