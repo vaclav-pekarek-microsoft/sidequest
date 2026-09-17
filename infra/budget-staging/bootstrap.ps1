@@ -210,7 +210,10 @@ try {
     $phase = 'migration-completion'
     Invoke-SqlBatch "IF @@TRANCOUNT <> 0 OR DB_NAME() COLLATE Latin1_General_100_BIN2 <> N'sidequest' THROW 51001, 'Migration context or transaction mismatch.', 1;"
     $phase = 'runtime-permissions-and-verification'
-    Invoke-SqlBatch $permissionsSql @{ '@RuntimeObjectId' = [guid]$identities['sidequest-app'].principalId }
+    Invoke-SqlBatch $permissionsSql @{
+        '@RuntimeObjectId' = [guid]$identities['sidequest-app'].principalId
+        '@RuntimeClientId' = [guid]$identities['sidequest-app'].clientId
+    }
     Write-Output 'Bootstrap completed using the Entra operator. Runtime database impersonation checks passed.'
     Write-Output 'Migration managed identity was ARM-verified only: no SQL user/grants or actual MI authentication/execution were proved.'
 }
