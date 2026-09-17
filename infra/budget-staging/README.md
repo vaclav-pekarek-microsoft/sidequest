@@ -102,6 +102,7 @@ even though script generation does not open it. Do not accidentally use the
 design-time factory's `SidequestDevelopment` fallback.
 
 ```powershell
+$env:SIDEQUEST_SQL_CONNECTION = 'Server=localhost;Database=SidequestTests_00000000000000000000000000000001;Integrated Security=True;Encrypt=True;TrustServerCertificate=True'
 dotnet ef migrations script --idempotent `
     --project src\Sidequest.Infrastructure --startup-project src\Sidequest.Web `
     --output $outsideRepositoryMigrationSql
@@ -117,13 +118,38 @@ managed identities or SQL impersonation checks as proof that an application
 host can obtain a token or connect. The application and its activation remain
 the next separate deployment slice.
 
+Run the offline artifact check first, still using the accepted clean source:
+
+```powershell
+pwsh -NoProfile -File .\infra\budget-staging\bootstrap.ps1 `
+    -ServerName $provisionedServerName -MigrationSqlPath $outsideRepositoryMigrationSql `
+    -MigrationSqlSha256 $reviewedSqlHash -ValidateOnly
+```
+
+After verifying the live ARM outputs and temporary owner-IP firewall rule, use
+the same command without `-ValidateOnly`. The bootstrap reads the artifact once,
+checks its hash, validates the exact live SQL/identity targets and applies its
+three EF batches without automatic retry. The signed-in **Entra operator**
+executes migrations; `sidequest-migration` is only reserved and ARM-verified, with
+no SQL user or grants. Do not describe this as managed-identity migration execution.
+
+`runtime-permissions.sql` allows DML on exactly the 26 application tables and
+SELECT on migration history. It rejects identity/grant drift and checks effective
+table, DDL and principal-management permissions under database impersonation.
+These are database-local checks, not an actual managed-identity login. Keep the
+SQL access token only in process memory; never enable tracing or print/store a
+token, connection string or raw SQL exception. Failures report a phase and SQL
+error number. Inspect partial state before an explicitly authorized rerun.
+Independently compare live migration-history IDs with the reviewed artifact,
+retain the result and verify removal of the temporary firewall rule.
+
 ## Offline checks
 
 Compile `sql.bicep` with the pinned compiler, set
 `SIDEQUEST_BUDGET_ARM_TEMPLATE` to that JSON, and run:
 
 ```powershell
-node --test infra\budget-staging\sql.test.mjs
+node --test (Get-ChildItem infra\budget-staging\*.test.mjs | ForEach-Object FullName)
 ```
 
 These checks use compiled ARM plus an isolated PowerShell command stub; they do
