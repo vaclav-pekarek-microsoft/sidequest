@@ -21,8 +21,12 @@ actual template output before registering or publishing.
   `Hosting:Azure:AppServiceProxyEnabled=true` is an explicit Staging-only
   opt-in that restores the external HTTPS scheme before redirects/authentication.
   It trusts at most one `X-Forwarded-Proto` value from a known private
-  App Service proxy address (RFC1918/loopback), never forwarded host or a public/
+  App Service proxy address (RFC1918, IPv4 link-local or loopback), never forwarded host or a public/
   unknown peer. Do not enable a trust-all forwarded-header environment switch.
+  App Service Linux can use the `169.254.0.0/16` link-local transport; excluding
+  it leaves real Entra callbacks incorrectly using HTTP despite external HTTPS.
+  Verify the actual `/auth/login` challenge's HTTPS callback after deployment,
+  without logging its state, nonce or correlation cookies.
 - A system-assigned identity for Blob, Key Vault, metrics and ACS; the existing
   `sidequest-app` user-assigned identity is attached for SQL only. SQL uses the
   actual identity **client ID** in `User Id`, managed-identity authentication,

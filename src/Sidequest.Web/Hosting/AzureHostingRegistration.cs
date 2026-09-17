@@ -58,6 +58,7 @@ public static class AzureHostingRegistration
                 options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
                 options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
                 options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("169.254.0.0/16"));
             });
             services.TryAddEnumerable(ServiceDescriptor.Transient<IStartupFilter, AzureAppServiceProxyStartupFilter>());
         }
