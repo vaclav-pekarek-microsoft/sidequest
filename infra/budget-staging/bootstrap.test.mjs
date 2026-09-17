@@ -109,7 +109,7 @@ function preflight(overrides = {}) {
         account: { id: subscription, tenantId: tenant, state: "Enabled", user: { type: "user" } },
         server: { id: serverId, name: "sidequest-sql-test123", location: "westus3",
             fullyQualifiedDomainName: "sidequest-sql-test123.database.windows.net", minimalTlsVersion: "1.2" },
-        admins: [{ tenantId: tenant, principalType: "Group" }],
+        admins: { properties: { administrators: { tenantId: tenant, principalType: "Group" } } },
         entraOnly: { azureAdOnlyAuthentication: true },
         db: { id: `${serverId}/databases/sidequest`, name: "sidequest", location: "westus3",
             sku: { name: "Basic", tier: "Basic", capacity: 5 }, maxSizeBytes: 2147483648, status: "Online" },
@@ -139,7 +139,13 @@ function preflight(overrides = {}) {
             $key = if ($arguments[0] -eq 'account') { 'account' }
                 elseif ($arguments[0] -eq 'identity') { $arguments[[Array]::IndexOf($arguments, '--name') + 1] }
                 elseif ($arguments[1] -eq 'db') { 'db' }
-                elseif ($arguments[2] -eq 'ad-admin') { 'admins' }
+                elseif ($arguments[0] -eq 'rest') {
+                    if ($arguments[[Array]::IndexOf($arguments, '--url') + 1] -ne
+                        'https://management.azure.com${serverId}?api-version=2023-08-01') {
+                        throw 'Unexpected administrator ARM endpoint'
+                    }
+                    'admins'
+                }
                 elseif ($arguments[2] -eq 'ad-only-auth') { 'entraOnly' }
                 else { 'server' }
             [Console]::Out.WriteLine("MOCK:$key")
@@ -171,6 +177,9 @@ test("ARM tenant, account, server, database, SKU and identity drift stop before 
         { server: { id: serverId.replace("sidequest-rg", "unapproved") } },
         { server: { location: "eastus" } },
         { server: { fullyQualifiedDomainName: "unapproved.database.windows.net" } },
+        { admins: { properties: { administrators: { tenantId: tenant, principalType: "User" } } } },
+        { admins: { properties: { administrators: { tenantId: randomUUID(), principalType: "Group" } } } },
+        { admins: { properties: { administrators: { tenantId: tenant } } } },
         { entraOnly: { azureAdOnlyAuthentication: false } },
         { db: { name: "SidequestDevelopment" } },
         { db: { maxSizeBytes: 2147483649 } },

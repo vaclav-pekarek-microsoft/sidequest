@@ -129,7 +129,9 @@ pwsh -NoProfile -File .\infra\budget-staging\bootstrap.ps1 `
 After verifying the live ARM outputs and temporary owner-IP firewall rule, use
 the same command without `-ValidateOnly`. The bootstrap reads the artifact once,
 checks its hash, validates the exact live SQL/identity targets and applies its
-three EF batches without automatic retry. The signed-in **Entra operator**
+EF batches without automatic retry. The SQL administrator's group type is read
+from the versioned ARM server response: the Azure CLI administrator-list projection
+omits that field. The signed-in **Entra operator**
 executes migrations; `sidequest-migration` is only reserved and ARM-verified, with
 no SQL user or grants. Do not describe this as managed-identity migration execution.
 

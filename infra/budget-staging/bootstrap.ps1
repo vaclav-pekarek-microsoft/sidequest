@@ -140,7 +140,10 @@ try {
         $server.minimalTlsVersion -ne '1.2') {
         throw 'SQL server target mismatch.'
     }
-    $admins = @(Invoke-PinnedAz -Arguments @('sql', 'server', 'ad-admin', 'list', '--server', $ServerName, '--resource-group', $resourceGroup))
+    # The CLI ad-admin list projection omits principalType; inspect the ARM contract.
+    $armServer = Invoke-PinnedAz -Arguments @('rest', '--method', 'get', '--url',
+        "https://management.azure.com/$($serverId.TrimStart('/'))?api-version=2023-08-01")
+    $admins = @($armServer.properties.administrators)
     $entraOnly = Invoke-PinnedAz -Arguments @('sql', 'server', 'ad-only-auth', 'get', '--name', $ServerName, '--resource-group', $resourceGroup)
     if ($admins.Count -ne 1 -or $admins[0].tenantId -ine $tenant -or
         $admins[0].principalType -ne 'Group' -or $entraOnly.azureAdOnlyAuthentication -ne $true) {
