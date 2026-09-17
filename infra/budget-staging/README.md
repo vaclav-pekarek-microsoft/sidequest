@@ -142,6 +142,10 @@ no SQL user or grants. Do not describe this as managed-identity migration execut
 `runtime-permissions.sql` allows DML on exactly the 26 application tables and
 SELECT on migration history. It rejects identity/grant drift and checks effective
 table, DDL and principal-management permissions under database impersonation.
+The Entra service-principal **object ID** selects the identity with `WITH OBJECT_ID`;
+the SQL external user's SID must match its **application/client ID**, not that
+object ID. Both values come from the verified managed-identity ARM resource
+([Microsoft's identity verification guidance](https://learn.microsoft.com/sql/relational-databases/security/authentication-access/authentication-microsoft-entra-create-users-with-nonunique-names#identify-the-user-created-for-the-application)).
 These are database-local checks, not an actual managed-identity login. Keep the
 SQL access token only in process memory; never enable tracing or print/store a
 token, connection string or raw SQL exception. The operator bootstrap requests

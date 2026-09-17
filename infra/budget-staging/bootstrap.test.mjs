@@ -240,28 +240,34 @@ test("a failed SQL batch is disposed and never retried or followed by another ex
     });
 });
 
-test("runtime identity is bound as a GUID parameter rather than interpolated into SQL", () => {
+test("runtime object and client identities remain distinct GUID parameters rather than SQL interpolation", () => {
     const result = powershell(`${loadFunction("Invoke-SqlBatch")}
-        $global:parameter = [pscustomobject]@{ Value = $null }
+        $global:boundParameters = [Collections.Generic.List[object]]::new()
         $parameters = [pscustomobject]@{}
         $parameters | Add-Member ScriptMethod Add {
             param($name, $type)
-            $global:parameterName = $name
-            $global:parameterType = $type.ToString()
-            return $global:parameter
+            $parameter = [pscustomobject]@{ name = $name; type = $type.ToString(); Value = $null }
+            $global:boundParameters.Add($parameter)
+            return $parameter
         }
         $global:mockCommand = [pscustomobject]@{ CommandTimeout = 0; CommandText = ''; Parameters = $parameters }
         $mockCommand | Add-Member ScriptMethod ExecuteNonQuery { return 0 }
         $mockCommand | Add-Member ScriptMethod Dispose {}
         $connection = [pscustomobject]@{}
         $connection | Add-Member ScriptMethod CreateCommand { return $global:mockCommand }
-        Invoke-SqlBatch 'SELECT @RuntimeObjectId;' @{ '@RuntimeObjectId' = [guid]'${identities["sidequest-app"].principalId}' }
-        @{ name = $parameterName; type = $parameterType; value = $parameter.Value.ToString();
+        Invoke-SqlBatch 'SELECT @RuntimeObjectId, @RuntimeClientId;' @{
+            '@RuntimeObjectId' = [guid]'${identities["sidequest-app"].principalId}'
+            '@RuntimeClientId' = [guid]'${identities["sidequest-app"].clientId}'
+        }
+        @{ parameters = @($boundParameters | Sort-Object name);
             sql = $mockCommand.CommandText } | ConvertTo-Json -Compress`);
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), {
-        name: "@RuntimeObjectId", type: "UniqueIdentifier",
-        value: identities["sidequest-app"].principalId, sql: "SELECT @RuntimeObjectId;",
+        parameters: [
+            { name: "@RuntimeClientId", type: "UniqueIdentifier", Value: identities["sidequest-app"].clientId },
+            { name: "@RuntimeObjectId", type: "UniqueIdentifier", Value: identities["sidequest-app"].principalId },
+        ],
+        sql: "SELECT @RuntimeObjectId, @RuntimeClientId;",
     });
 });
 
@@ -281,7 +287,12 @@ test("runtime DML allowlist exactly matches all 26 EF application tables and exc
 });
 
 test("runtime SQL rejects identity and grant drift and verifies DDL and history boundaries under impersonation", () => {
-    assert.match(permissions, /sid <> CONVERT\(binary\(16\), @RuntimeObjectId\)/);
+    assert.match(permissions, /sid <> CONVERT\(binary\(16\), @RuntimeClientId\)/);
+    assert.equal([...permissions.matchAll(/sid (?:<>|=) CONVERT\(binary\(16\), @RuntimeClientId\)/g)].length, 3);
+    assert.doesNotMatch(permissions, /sid (?:<>|=) CONVERT\(binary\(16\), @RuntimeObjectId\)/);
+    assert.match(permissions, /CONVERT\(nvarchar\(36\), @RuntimeObjectId\)/);
+    assert.match(source, /'@RuntimeObjectId' = \[guid\]\$identities\['sidequest-app'\]\.principalId/);
+    assert.match(source, /'@RuntimeClientId' = \[guid\]\$identities\['sidequest-app'\]\.clientId/);
     assert.match(permissions, /FROM EXTERNAL PROVIDER WITH OBJECT_ID/);
     assert.match(permissions, /THROW 51014, 'Existing runtime user identity mismatch.'/);
     assert.match(permissions, /@RoleId IS NULL OR role_principal_id <> @RoleId/);

@@ -1,10 +1,9 @@
--- Input: @RuntimeObjectId uniqueidentifier, obtained from the ARM-verified
--- sidequest-app user-assigned identity by bootstrap.ps1. Execute as Entra admin.
+-- Inputs: @RuntimeObjectId and @RuntimeClientId uniqueidentifier, obtained from
+-- the ARM-verified sidequest-app identity by bootstrap.ps1. Execute as Entra admin.
 -- Directory resolution is intentionally delegated to FROM EXTERNAL PROVIDER;
 -- failure is a hard stop, never a reason to grant Graph directory permissions.
--- https://learn.microsoft.com/sql/t-sql/statements/create-user-transact-sql
--- Do not substitute hand-encoded SID/TYPE: Fabric/service-principal login SID
--- documentation differs from Azure SQL contained-user object-ID mapping.
+-- WITH OBJECT_ID resolves the service principal; its SQL SID stores the client ID.
+-- https://learn.microsoft.com/sql/relational-databases/security/authentication-access/authentication-microsoft-entra-create-users-with-nonunique-names#identify-the-user-created-for-the-application
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
@@ -12,6 +11,8 @@ IF DB_NAME() COLLATE Latin1_General_100_BIN2 <> N'sidequest' OR USER_NAME() <> N
     THROW 51010, 'Unexpected runtime bootstrap context.', 1;
 IF @RuntimeObjectId IS NULL OR @RuntimeObjectId = '00000000-0000-0000-0000-000000000000'
     THROW 51011, 'Missing runtime identity.', 1;
+IF @RuntimeClientId IS NULL OR @RuntimeClientId = '00000000-0000-0000-0000-000000000000'
+    THROW 51024, 'Missing runtime application identity.', 1;
 
 -- The current EF snapshot contains 26 application tables, plus its history table.
 -- A model change must update this reviewed allowlist, not broaden schema access.
@@ -37,10 +38,10 @@ IF EXISTS (
 
 IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'sidequest-app'
     AND (type <> 'E' OR authentication_type <> 4
-        OR sid <> CONVERT(binary(16), @RuntimeObjectId)))
+        OR sid <> CONVERT(binary(16), @RuntimeClientId)))
     THROW 51014, 'Existing runtime user identity mismatch.', 1;
 IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name <> N'sidequest-app'
-    AND sid = CONVERT(binary(16), @RuntimeObjectId))
+    AND sid = CONVERT(binary(16), @RuntimeClientId))
     THROW 51015, 'Runtime identity already has another database alias.', 1;
 IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'sidequest_runtime'
     AND (type <> 'R' OR owning_principal_id <> DATABASE_PRINCIPAL_ID(N'dbo')))
@@ -77,7 +78,7 @@ BEGIN
     EXEC sys.sp_executesql @CreateUser;
 END;
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'sidequest-app'
-    AND type = 'E' AND authentication_type = 4 AND sid = CONVERT(binary(16), @RuntimeObjectId))
+    AND type = 'E' AND authentication_type = 4 AND sid = CONVERT(binary(16), @RuntimeClientId))
     THROW 51020, 'Resolved runtime user identity mismatch.', 1;
 IF @RoleId IS NULL
     CREATE ROLE [sidequest_runtime] AUTHORIZATION [dbo];
