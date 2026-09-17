@@ -1,0 +1,9 @@
+.event-card {
+    border: 1px solid var(--sq-line);
+    border-radius: var(--sq-radius);
+    padding: 1.5rem;
+    margin-block: 1rem;
+    background: var(--sq-surface);
+    box-shadow: 0 4px 20px rgb(22 50 36 / 4%);
+    overflow-wrap: anywhere;
+}

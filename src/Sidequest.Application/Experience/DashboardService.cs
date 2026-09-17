@@ -13,7 +13,7 @@ namespace Sidequest.Application.Experience;
 public sealed class DashboardService(IQuestService quests, ISidequestDbContextFactory factory, IResourceAccess access)
 {
     /// <summary>Loads one authorized page and eligible, active-member invitation counts for its currently owned private Quests.</summary>
-    /// <param name="kind">Joined, Following, Organizing, Discover, Invited or History view.</param>
+    /// <param name="kind">Board, Joined, Following, Organizing, Discover, Invited or History view.</param>
     /// <param name="eventId">Optional authorized parent filter.</param>
     /// <param name="page">One-based page, default size 25 and maximum 100, validated by the Quest service.</param>
     /// <param name="dates">Inclusive lower and exclusive upper UTC start bounds applied before paging.</param>
@@ -23,7 +23,7 @@ public sealed class DashboardService(IQuestService quests, ISidequestDbContextFa
     public async Task<DashboardPage> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
         QuestDateFilter dates, CancellationToken cancellationToken = default)
     {
-        if (kind is not (QuestListKind.Joined or QuestListKind.Following or QuestListKind.Organizing or
+        if (kind is not (QuestListKind.Board or QuestListKind.Joined or QuestListKind.Following or QuestListKind.Organizing or
             QuestListKind.Discover or QuestListKind.Invited or QuestListKind.History))
             throw new DomainException(ErrorCode.Validation, "Choose a dashboard view.", "Kind");
         var result = await quests.ListAsync(kind, eventId, page, dates, cancellationToken).ConfigureAwait(false);

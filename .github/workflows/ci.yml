@@ -43,6 +43,8 @@ jobs:
           fi
       - run: dotnet restore Sidequest.slnx
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
+      - name: Verify SCSS assets and local configuration boundaries
+        run: npm run styles:test
       - name: Check offline and authentication lifecycle JavaScript
         run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/moderation-diagnostics.test.mjs
       - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none

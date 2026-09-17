@@ -10,7 +10,7 @@
     </div>
 }
 <header class="site-header">
-    <a class="brand" href="/">Sidequest</a>
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">S</span>Sidequest</a>
     <nav aria-label="Main navigation">
         <NavLink href="/" Match="NavLinkMatch.All">Home</NavLink>
         <AuthorizeView>
@@ -21,12 +21,10 @@
                 <NavLink href="/quests?view=Invited">Invited Quests</NavLink>
                 <NavLink href="/notifications">Notifications</NavLink>
                 <NavLink href="/administration">Administration</NavLink>
-                <NavLink href="/foundation">Compatibility screen</NavLink>
-                <a href="/signin" data-enhance-nav="false" data-authentication-change>Switch account</a>
                 <form action="/auth/logout" method="post" data-enhance="false" data-authentication-change>
                     <AntiforgeryToken />
                     <input type="hidden" name="experienceClearFailed" value="true" />
-                    <button type="submit">Sign out</button>
+                    <button class="button-quiet" type="submit">Sign out</button>
                 </form>
             </Authorized>
             <NotAuthorized>

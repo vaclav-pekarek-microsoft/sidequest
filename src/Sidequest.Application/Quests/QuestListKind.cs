@@ -16,5 +16,7 @@ public enum QuestListKind
     /// <summary>Past activities still accessible to the current actor.</summary>
     History,
     /// <summary>Non-draft activities moderated by an Event owner, without participant or invitation roster disclosure.</summary>
-    Moderation
+    Moderation,
+    /// <summary>All ordinarily accessible Quests in current Event memberships, joined first, then Event-local start date/time.</summary>
+    Board
 }

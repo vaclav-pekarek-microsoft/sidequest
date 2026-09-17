@@ -1,0 +1,99 @@
+@use "tokens";
+
+:root {
+    --sq-ink: #{tokens.$ink};
+    --sq-muted: #{tokens.$muted};
+    --sq-accent: #{tokens.$accent};
+    --sq-accent-hover: #{tokens.$accent-hover};
+    --sq-canvas: #{tokens.$canvas};
+    --sq-surface: #{tokens.$surface};
+    --sq-line: #{tokens.$line};
+    --sq-danger: #{tokens.$danger};
+    --sq-radius: #{tokens.$radius};
+    --accent-fill-rest: var(--sq-accent);
+    --accent-fill-hover: var(--sq-accent-hover);
+    --accent-foreground-rest: var(--sq-accent);
+    --neutral-stroke-rest: var(--sq-line);
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    color: var(--sq-ink);
+    background: var(--sq-canvas);
+    color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; line-height: 1.6; }
+a {
+    color: var(--sq-accent);
+    text-underline-offset: .22em;
+    &:hover { color: var(--sq-accent-hover); }
+}
+:is(a, button, select, input, textarea, summary):focus-visible {
+    outline: 3px solid var(--sq-accent);
+    outline-offset: 4px;
+}
+h1, h2, h3 { color: var(--sq-ink); line-height: 1.2; overflow-wrap: anywhere; }
+h1 { font-size: clamp(2rem, 5vw, 3.15rem); letter-spacing: -.045em; margin-block: .3rem 1rem; }
+h2 { font-size: clamp(1.4rem, 3vw, 1.8rem); letter-spacing: -.025em; }
+h3 { font-size: 1.2rem; }
+p { line-height: 1.65; }
+small { color: var(--sq-muted); }
+form { display: grid; justify-items: start; gap: .9rem; }
+button, select, input, textarea { font: inherit; max-width: 100%; }
+button, select, input:not([type="checkbox"], [type="radio"]), .button-link { min-height: 44px; }
+select, input:not([type="checkbox"], [type="radio"]), textarea {
+    color: var(--sq-ink);
+    background: var(--sq-surface);
+    border: 1px solid #a2b5aa;
+    border-radius: .6rem;
+    padding: .55rem .75rem;
+}
+button, .button-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: .6rem 1rem;
+    color: white;
+    background: var(--sq-accent);
+    border: 1px solid var(--sq-accent);
+    border-radius: .65rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    &:hover:not(:disabled) { color: white; background: var(--sq-accent-hover); }
+    &:disabled { cursor: not-allowed; opacity: .55; }
+}
+.button-quiet {
+    color: var(--sq-accent);
+    background: transparent;
+    border-color: var(--sq-line);
+}
+fluent-text-field { width: 100%; max-width: 28rem; }
+fluent-button::part(control) { border-radius: .65rem; }
+fluent-dialog { --dialog-width: min(32rem, calc(100vw - 2rem)); }
+.foundation-card, .state-panel {
+    width: 100%;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    margin-block: 1rem;
+    border: 1px solid var(--sq-line);
+    border-radius: var(--sq-radius);
+    background: var(--sq-surface);
+}
+.eyebrow {
+    color: var(--sq-accent);
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+}
+.error-message, .validation-message { color: var(--sq-danger); }
+.error-message { border-left: 4px solid var(--sq-danger); padding: .75rem; }
+.landing {
+    max-width: 55rem;
+    margin: 2rem auto;
+    padding: clamp(1.25rem, 5vw, 3.5rem);
+    border-radius: 1.5rem;
+    background: linear-gradient(135deg, #e7f1e9, #fff8e8);
+    h1 { max-width: 15ch; }
+    > p { max-width: 48rem; }
+}
