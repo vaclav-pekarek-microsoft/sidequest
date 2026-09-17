@@ -47,7 +47,9 @@ Sign Azure CLI into the approved subscription and use real Entra app authenticat
 locally; put the app credential in user secrets, not this JSON file. Local access also
 requires explicit owner-IP SQL firewall entries. Keep `SIDEQUEST_TEST_SQL` isolated:
 tests must never use the shared staging database. Starting the local app against shared
-staging can mutate its data and process its queued work.
+staging can mutate its data. Set `Delivery:Work:Enabled=false` on a shared-database
+local web host, leaving queued work to the deployed worker with its managed-identity
+provider permissions. Polling stays enabled by default for existing deployments.
 
 ## Styles and Home board
 

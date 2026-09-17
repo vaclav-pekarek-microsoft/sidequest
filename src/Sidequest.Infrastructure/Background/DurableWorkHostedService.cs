@@ -17,6 +17,11 @@ public sealed class DurableWorkHostedService(IServiceScopeFactory scopes, Durabl
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         options.Validate();
+        if (!options.Enabled)
+        {
+            logger.LogInformation("Durable work polling is disabled for this host. An independently configured worker must process pending SQL work.");
+            return;
+        }
         await Task.WhenAll(Enumerable.Range(0, options.Concurrency).Select(_ => RunLoopAsync(stoppingToken))).ConfigureAwait(false);
     }
 

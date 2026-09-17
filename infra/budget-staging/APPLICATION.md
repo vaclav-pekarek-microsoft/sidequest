@@ -171,6 +171,10 @@ locally: Azure managed-identity hosting still rejects Development, and the
 platform proxy opt-in remains Staging-only. Local HTTPS terminates directly at Kestrel and does not
 need proxy-header trust. The local ignored configuration is excluded from publish;
 it must never override the deployed Staging settings or provide cloud evidence.
+Set `Delivery:Work:Enabled=false` locally so it does not claim shared queued work
+without the deployed host's managed identities. The deployed worker remains enabled
+and processes changes submitted through either web host. Local media uploads still
+require a separately configured authorized storage credential.
 
 ACS's documented managed-identity requirement is the custom role with
 `Microsoft.Communication/CommunicationServices/Read` and
@@ -255,7 +259,10 @@ Publish-SidequestApplication -SourceCommit $acceptedSha -ApplicationName $app `
 ```
 
 Publish checks the source/artifact hash and resolved Key Vault references,
-uses Entra-authenticated deployment without enabling basic SCM authentication,
+using the live GET `config/configreferences/appsettings` collection contract
+(`2022-03-01`); missing, duplicate, unresolved or paginated required-reference
+evidence blocks deployment before activation.
+It uses Entra-authenticated deployment without enabling basic SCM authentication,
 and activates the host explicitly. Failed SQL-backed readiness stops it.
 The manifest proves only the owner's asserted source-to-artifact association;
 use the clean accepted build command and retain its successful output.

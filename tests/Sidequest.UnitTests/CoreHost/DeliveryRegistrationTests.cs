@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sidequest.Application;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Notifications;
@@ -15,6 +16,28 @@ namespace Sidequest.UnitTests.CoreHost;
 /// <summary>Verifies host delivery composition, scope isolation and configuration without connecting to SQL or providers.</summary>
 public sealed class DeliveryRegistrationTests
 {
+    /// <summary>A shared-database development host explicitly leaves all polling to the deployed worker rather than claiming work without provider credentials.</summary>
+    /// <returns>Completion after the disabled worker exits without resolving a runner or contacting SQL.</returns>
+    [Fact]
+    public async Task DisabledWorkerCompletesWithoutResolvingSqlOrProviderServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSidequestDelivery(Configuration(new() { ["Delivery:Work:Enabled"] = "false" }));
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<DurableWorkOptions>();
+        Assert.False(options.Enabled);
+        using var emptyProvider = new ServiceCollection().BuildServiceProvider();
+        using var worker = new DurableWorkHostedService(
+            emptyProvider.GetRequiredService<IServiceScopeFactory>(), options,
+            TimeProvider.System, NullLogger<DurableWorkHostedService>.Instance);
+        await worker.StartAsync(CancellationToken.None);
+        var execution = worker.ExecuteTask;
+        Assert.NotNull(execution);
+        await execution.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(execution.IsCompletedSuccessfully);
+        await worker.StopAsync(CancellationToken.None);
+    }
+
     /// <summary>Resolves real implementations with validated dependency lifetimes and keeps incomplete background processing inactive.</summary>
     [Fact]
     public void ResolvesRealServicesInIndependentScopesWithoutStartingWorker()
@@ -92,6 +115,7 @@ public sealed class DeliveryRegistrationTests
     [InlineData("Delivery:Work:Concurrency", "0")]
     [InlineData("Delivery:Work:Concurrency", "17")]
     [InlineData("Delivery:Work:Concurrency", "invalid")]
+    [InlineData("Delivery:Work:Enabled", "invalid")]
     [InlineData("Delivery:Email:SubmissionTimeout", "00:00:00")]
     [InlineData("Delivery:Email:SubmissionTimeout", "00:01:30.0000001")]
     [InlineData("Delivery:Email:SubmissionTimeout", "invalid")]
@@ -121,6 +145,7 @@ public sealed class DeliveryRegistrationTests
         Assert.Null(email.Endpoint);
         Assert.Equal(TimeSpan.FromSeconds(60), email.SubmissionTimeout);
         var work = provider.GetRequiredService<DurableWorkOptions>();
+        Assert.True(work.Enabled);
         Assert.Equal(TimeSpan.FromSeconds(10), work.PollInterval);
         Assert.Equal(TimeSpan.FromSeconds(90), work.LeaseDuration);
         Assert.Equal(TimeSpan.FromMinutes(2), work.ReminderLateness);

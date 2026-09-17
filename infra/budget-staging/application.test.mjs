@@ -161,22 +161,55 @@ const publishHarness = `
     $script:stops = 0
     $script:attempts = 0
     $script:sleeps = 0
+    $script:deploys = 0
+    $script:referenceResponse = [pscustomobject]@{
+        nextLink = $null
+        value = @(
+            @{ name = 'AzureAd__ClientSecret'; properties = @{ status = 'Resolved' } }
+            @{ name = 'Directory__Credentials__ClientSecret'; properties = @{ status = 'Resolved' } }
+        )
+    }
     function Start-Sleep { $script:sleeps++ }
     function Invoke-SidequestStagingAzure {
         param([string[]] $Arguments)
         if ($Arguments -contains 'stop') { $script:stops++; return }
+        if ($Arguments -contains 'deploy') { $script:deploys++; return }
+        if (($Arguments -join ' ') -match '/config/configreferences/') {
+            if ($Arguments -notcontains 'get' -or $Arguments -notcontains
+                'https://management.azure.com/subscriptions/b75472bd-4174-4f66-b159-bae420212abc/resourceGroups/sidequest-rg/providers/Microsoft.Web/sites/sidequest-hackathon-b7ljjkoqcaedc/config/configreferences/appsettings?api-version=2022-03-01') {
+                throw 'Expected the live GET reference collection contract'
+            }
+            return $script:referenceResponse
+        }
         if ($Arguments -contains 'get') {
             return [pscustomobject]@{ properties = @{ defaultHostName = 'sidequest-hackathon-b7ljjkoqcaedc.azurewebsites.net' } }
-        }
-        if ($Arguments -contains 'post') {
-            return [pscustomobject]@{ properties = @{
-                AzureAd__ClientSecret = @{ status = 'Resolved' }
-                Directory__Credentials__ClientSecret = @{ status = 'Resolved' }
-            } }
         }
     }
 `;
 const publishInvocation = "Publish-SidequestApplication -SourceCommit accepted-source -ApplicationName sidequest-hackathon-b7ljjkoqcaedc -ZipPath unused -ManifestPath unused -IdentityAndProviderGatesVerified";
+
+for (const [name, mutation] of [
+    ["missing", "$script:referenceResponse.value = @($script:referenceResponse.value[0])"],
+    ["duplicate", "$script:referenceResponse.value += $script:referenceResponse.value[0]"],
+    ["unresolved", "$script:referenceResponse.value[1].properties.status = 'AccessToKeyVaultDenied'"],
+    ["incomplete", "$script:referenceResponse.nextLink = 'https://management.azure.com/next'"]
+]) {
+    test(`Publishing rejects ${name} credential reference collections before deployment`, () => {
+        const result = ps(`${publishHarness}
+            ${mutation}
+            $caught = $false
+            try { $null = ${publishInvocation} }
+            catch {
+                if ($_.Exception.Message -notmatch 'credential reference') { throw }
+                $caught = $true
+            }
+            if (-not $caught -or $script:deploys -ne 0 -or $script:attempts -ne 0) {
+                throw 'Invalid references reached deployment or activation'
+            }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+    });
+}
 
 for (const [name, failure, category] of requestFailures) {
     test(`Readiness retries expected ${name} with bounded diagnostics and no response body`, () => {
