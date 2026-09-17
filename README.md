@@ -17,6 +17,8 @@ Prerequisites: the SDK pinned in `global.json`, Node.js 20+ with npm, SQL Server
 and GitHub CLI authenticated as `vaclav-pekarek-microsoft` for publishing changes.
 All NuGet dependencies restore through `https://packagefeedproxy.microsoft.io/nuget/v3/index.json`;
 the package-source mapping uses that proxy exclusively.
+NodaTime 3.3.3 and bUnit 2.10.3 are pinned to versions available through this proxy;
+the newer previously selected versions were unavailable during clean hosted restore.
 
 ```powershell
 dotnet restore Sidequest.slnx
@@ -94,6 +96,10 @@ It is not proof that live Entra integration is configured. Production must use E
 an approved workforce admission policy, and an explicitly configured bootstrap
 administrator; there is no "first user becomes admin" behavior.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
+The approved hackathon deployment instead uses the explicitly assigned-participant
+policy, including the approved guest owner, without changing production workforce
+rules. Its resource, permission and owner-supervised execution contract is in
+[`infra\budget-staging\APPLICATION.md`](infra/budget-staging/APPLICATION.md).
 
 If native sign-in starts before browser initialization, successful authentication can
 reach a completion page without a device generation. That page deliberately shows

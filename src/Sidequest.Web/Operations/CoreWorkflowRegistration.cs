@@ -37,6 +37,13 @@ public static class CoreWorkflowRegistration
         if ((directory.TenantId != Guid.Empty && directory.TenantId != authentication.TenantId) ||
             (credentials.TenantId != Guid.Empty && credentials.TenantId != authentication.TenantId))
             throw new InvalidOperationException("Directory tenants must match the configured authentication tenant.");
+        if (authentication.IsHackathon)
+            directory = new GraphDirectoryOptions(authentication.TenantId, authentication.HackathonParticipants)
+            {
+                MaximumRecipients = directory.MaximumRecipients,
+                MaximumPages = directory.MaximumPages,
+                MaximumThrottlingRetries = directory.MaximumThrottlingRetries
+            };
 
         services.AddEventWorkflows(limits);
         services.AddEventUiRevalidation();

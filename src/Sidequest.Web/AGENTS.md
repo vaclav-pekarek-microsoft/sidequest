@@ -129,6 +129,15 @@ prove employment.** A guest mistakenly assigned this role is a tenant policy fai
 Entra owners must verify guest exclusion and role issuance with live accounts before release.
 No Graph call, email check or group membership grants application permissions.
 
+The explicitly approved D41 hackathon profile selects
+`Authentication:AdmissionPolicy=hackathon-assigned-users` only in Staging or real-Entra
+Development. It requires both the dedicated participant role and immutable configured
+object-ID allowlist. The same list governs enabled Member/Guest directory eligibility.
+Keep enterprise-app assignment and the list synchronized; removal must revoke local
+eligibility, not merely wait for role claims to expire. Production/default workforce
+rules above are unchanged. Follow `infra\budget-staging\APPLICATION.md` for the exact
+initial owner, permissions, credential and deployment gates.
+
 Optionally configure both `Authentication:BootstrapAdministrator:TenantId` and
 `:ObjectId`. Only that identity receives an administrator row when first provisioned.
 Bootstrap does not confer Event membership or ownership, and never restores a removed

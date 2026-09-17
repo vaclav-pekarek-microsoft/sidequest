@@ -4,6 +4,7 @@ using Azure.Monitor.OpenTelemetry.Exporter;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenTelemetry.Metrics;
 
@@ -48,6 +49,18 @@ public static class AzureHostingRegistration
             throw new InvalidOperationException("Azure hosting must be registered only once.");
 
         services.AddSingleton(settings);
+        if (settings.AppServiceProxyEnabled)
+        {
+            services.Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+                options.ForwardLimit = 1;
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
+            });
+            services.TryAddEnumerable(ServiceDescriptor.Transient<IStartupFilter, AzureAppServiceProxyStartupFilter>());
+        }
         var credential = new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned);
         services.TryAddKeyedSingleton<BlobClient>(DataProtectionClientKey, (_, _) => new(settings.BlobUri, credential));
         services.TryAddKeyedSingleton<IKeyEncryptionKeyResolver>(DataProtectionClientKey, (_, _) => new KeyResolver(credential));

@@ -22,6 +22,130 @@ public sealed class AuthenticationTests
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-14T12:00:00Z");
     private static FoundationAuthenticationSettings Entra => new(false, Tenant, "Workforce", ObjectId);
 
+    /// <summary>Rejects participant-policy overrides outside Staging or Development, even with real Entra configuration.</summary>
+    /// <param name="environment">The disallowed deployment environment.</param>
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Test")]
+    [InlineData("Hackathon")]
+    public void HackathonAdmissionIsRestrictedToApprovedNonProductionEnvironments(string environment)
+    {
+        Assert.Throws<InvalidOperationException>(() => Load(HackathonConfiguration(), environment));
+    }
+
+    /// <summary>Requires both exact dedicated-role assignment and explicit identity approval; neither tenant membership nor a workforce role suffices.</summary>
+    /// <param name="environment">The approved environment, including local real-Entra development.</param>
+    [Theory]
+    [InlineData("Staging")]
+    [InlineData("Development")]
+    public void HackathonAdmissionRequiresDedicatedRoleAndExplicitParticipant(string environment)
+    {
+        var configuration = HackathonConfiguration();
+        var settings = Load(configuration, environment);
+        Assert.True(settings.IsHackathon);
+        Assert.False(settings.IsDevelopment);
+        Assert.Null(settings.BootstrapAdministratorObjectId);
+        var principal = Principal();
+        Assert.Null(WorkforceIdentity.Read(principal, settings));
+        var claims = (ClaimsIdentity)principal.Identity!;
+        claims.AddClaim(new("roles", "Sidequest.Hackathon.Participant"));
+        Assert.Equal(ObjectId, WorkforceIdentity.Read(principal, settings)!.ObjectId);
+        claims.AddClaim(new(FoundationAuthenticationSettings.SyntheticClaim, "true"));
+        Assert.Null(WorkforceIdentity.Read(principal, settings));
+        claims.RemoveClaim(claims.FindFirst(FoundationAuthenticationSettings.SyntheticClaim)!);
+        claims.RemoveClaim(claims.FindFirst("oid")!);
+        claims.AddClaim(new("oid", Guid.NewGuid().ToString()));
+        Assert.Null(WorkforceIdentity.Read(principal, settings));
+        Assert.Equal(new[] { ObjectId }, settings.HackathonParticipants);
+        configuration["Authentication:HackathonParticipants:0"] = Guid.NewGuid().ToString();
+        Assert.Contains(ObjectId, settings.HackathonParticipants);
+    }
+
+    /// <summary>Fails startup for an absent, malformed, empty, or non-dedicated participant policy instead of admitting tenant users broadly.</summary>
+    /// <param name="key">The policy setting to invalidate.</param>
+    /// <param name="value">The invalid replacement.</param>
+    [Theory]
+    [InlineData("Authentication:HackathonParticipants:0", null)]
+    [InlineData("Authentication:HackathonParticipants:0", "not-a-guid")]
+    [InlineData("Authentication:HackathonParticipants:0", "00000000-0000-0000-0000-000000000000")]
+    [InlineData("Authentication:HackathonRole", "")]
+    [InlineData("Authentication:HackathonRole", "Workforce")]
+    [InlineData("Authentication:AdmissionPolicy", "allow-all")]
+    [InlineData("Authentication:Mode", "Development")]
+    public void HackathonAdmissionRejectsIncompleteOrUnsafePolicy(string key, string? value)
+    {
+        var configuration = HackathonConfiguration();
+        configuration[key] = value;
+        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
+    }
+
+    /// <summary>Never interprets the approved guest policy as permission to use synthetic authentication, including on a local development host.</summary>
+    /// <param name="environment">An environment otherwise approved for real-Entra participant admission.</param>
+    [Theory]
+    [InlineData("Staging")]
+    [InlineData("Development")]
+    public void HackathonPolicyNeverEnablesSyntheticAuthentication(string environment)
+    {
+        var configuration = HackathonConfiguration();
+        configuration["Authentication:Mode"] = "Development";
+        var error = Assert.Throws<InvalidOperationException>(() => Load(configuration, environment));
+        Assert.Contains("requires Entra authentication", error.Message);
+    }
+
+    /// <summary>Preserves exact administrator-pair validation and requires the bootstrap identity to be an approved participant.</summary>
+    [Fact]
+    public void HackathonBootstrapNeverSelectsFirstUser()
+    {
+        var configuration = HackathonConfiguration();
+        configuration["Authentication:BootstrapAdministrator:TenantId"] = Tenant.ToString();
+        configuration["Authentication:BootstrapAdministrator:ObjectId"] = Guid.NewGuid().ToString();
+        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
+        configuration["Authentication:BootstrapAdministrator:ObjectId"] = ObjectId.ToString();
+        Assert.Equal(ObjectId, Load(configuration, "Staging").BootstrapAdministratorObjectId);
+        configuration["Authentication:BootstrapAdministrator:TenantId"] = Guid.NewGuid().ToString();
+        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
+    }
+
+    /// <summary>Accepts a singleton and the exact participant cap, but rejects the immediately adjacent oversized policy.</summary>
+    /// <param name="count">Number of distinct approved object IDs configured.</param>
+    /// <param name="valid">Whether this count is within the bounded staging policy.</param>
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(100, true)]
+    [InlineData(101, false)]
+    public void HackathonParticipantCountIsBounded(int count, bool valid)
+    {
+        var configuration = HackathonConfiguration();
+        for (var index = 0; index < count; index++)
+            configuration[$"Authentication:HackathonParticipants:{index}"] = $"00000000-0000-4000-8000-{index + 1:D12}";
+        if (valid)
+            Assert.Equal(count, Load(configuration, "Staging").HackathonParticipants.Count);
+        else
+            Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
+    }
+
+    /// <summary>Ignores hackathon settings unless explicitly selected, so production retains workforce-role admission and no participant mode.</summary>
+    [Fact]
+    public void WorkforceDefaultDoesNotConsumeHackathonAllowlist()
+    {
+        var configuration = HackathonConfiguration();
+        configuration.Remove("Authentication:AdmissionPolicy");
+        var settings = Load(configuration);
+        Assert.False(settings.IsHackathon);
+        Assert.Empty(settings.HackathonParticipants);
+        Assert.Equal(ObjectId, WorkforceIdentity.Read(Principal(), settings)!.ObjectId);
+    }
+
+    private static Dictionary<string, string?> HackathonConfiguration()
+    {
+        var configuration = ValidConfiguration();
+        configuration["Authentication:Mode"] = "Entra";
+        configuration["Authentication:AdmissionPolicy"] = "hackathon-assigned-users";
+        configuration["Authentication:HackathonRole"] = "Sidequest.Hackathon.Participant";
+        configuration["Authentication:HackathonParticipants:0"] = ObjectId.ToString();
+        return configuration;
+    }
+
     /// <summary>Verifies that explicitly selecting synthetic authentication cannot override a non-development host.</summary>
     /// <param name="environment">The non-development environment to reject.</param>
     [Theory]

@@ -6,6 +6,9 @@ using Azure.Monitor.OpenTelemetry.Exporter;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -19,6 +22,54 @@ namespace Sidequest.UnitTests.ReleaseHosting;
 /// <summary>Verifies explicit Azure-hosting boundaries, encrypted durable key behavior and metrics-only authenticated configuration without cloud calls.</summary>
 public sealed class AzureHostingTests
 {
+    /// <summary>Restores HTTPS only from a private platform proxy and never trusts a public or unknown peer's scheme/host claims.</summary>
+    /// <param name="peer">Observed immediate proxy address, or null for an unknown transport.</param>
+    /// <param name="expectedScheme">Expected request scheme seen by authentication.</param>
+    /// <returns>A task completing after the actual forwarded-header pipeline executes.</returns>
+    [Theory]
+    [InlineData("10.1.2.3", "https")]
+    [InlineData("172.16.1.2", "https")]
+    [InlineData("192.168.1.2", "https")]
+    [InlineData("20.1.2.3", "http")]
+    [InlineData(null, "http")]
+    public async Task StagingProxyAcceptsOnlyPrivatePeerScheme(string? peer, string expectedScheme)
+    {
+        var values = Values();
+        values["Hosting:Azure:AppServiceProxyEnabled"] = "true";
+        var services = new ServiceCollection().AddLogging();
+        services.AddSidequestAzureHosting(Configuration(values),
+            new TestEnvironment { EnvironmentName = Environments.Staging }, _ => "true");
+        using var provider = services.BuildServiceProvider();
+        var builder = new ApplicationBuilder(provider);
+        var filter = Assert.Single(provider.GetServices<IStartupFilter>());
+        filter.Configure(app => app.Run(context =>
+        {
+            Assert.Equal(expectedScheme, context.Request.Scheme);
+            Assert.Equal("approved.azurewebsites.net", context.Request.Host.Value);
+            return Task.CompletedTask;
+        }))(builder);
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Request.Scheme = "http";
+        context.Request.Host = new HostString("approved.azurewebsites.net");
+        context.Connection.RemoteIpAddress = peer is null ? null : System.Net.IPAddress.Parse(peer);
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
+        context.Request.Headers["X-Forwarded-Host"] = "untrusted.invalid";
+        await builder.Build()(context);
+    }
+
+    /// <summary>Prevents the staging proxy opt-in from changing default production hosting behavior.</summary>
+    [Fact]
+    public void AppServiceProxyIsExplicitAndStagingOnly()
+    {
+        var values = Values();
+        Assert.False(AzureHostingSettings.Load(Configuration(values), new TestEnvironment())!.AppServiceProxyEnabled);
+        values["Hosting:Azure:AppServiceProxyEnabled"] = "true";
+        Assert.Throws<InvalidOperationException>(() => AzureHostingSettings.Load(Configuration(values), new TestEnvironment()));
+        values["Hosting:Azure:AppServiceProxyEnabled"] = "not-a-boolean";
+        Assert.Throws<InvalidOperationException>(() => AzureHostingSettings.Load(Configuration(values),
+            new TestEnvironment { EnvironmentName = Environments.Staging }));
+    }
+
     /// <summary>Ordinary hosts do not register Azure resources or telemetry unless deliberately enabled.</summary>
     /// <param name="flag">An absent or explicitly disabled deployment flag.</param>
     [Theory]

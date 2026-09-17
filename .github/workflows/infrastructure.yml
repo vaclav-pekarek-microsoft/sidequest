@@ -37,6 +37,7 @@ jobs:
           set -euo pipefail
           "$RUNNER_TEMP/bicep" build infra/main.bicep --outfile "$RUNNER_TEMP/sidequest-infrastructure.json"
           "$RUNNER_TEMP/bicep" build infra/budget-staging/sql.bicep --outfile "$RUNNER_TEMP/sidequest-budget-sql.json"
+          "$RUNNER_TEMP/bicep" build infra/budget-staging/application.bicep --outfile "$RUNNER_TEMP/sidequest-hackathon-app.json"
       - name: Verify compiled deployment safeguards
         env:
           SIDEQUEST_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-infrastructure.json
@@ -46,4 +47,5 @@ jobs:
       - name: Verify isolated budget staging safeguards
         env:
           SIDEQUEST_BUDGET_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-budget-sql.json
+          SIDEQUEST_APPLICATION_ARM_TEMPLATE: ${{ runner.temp }}/sidequest-hackathon-app.json
         run: node --test infra/budget-staging/*.test.mjs
