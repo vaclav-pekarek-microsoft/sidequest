@@ -262,8 +262,12 @@ Publish checks the source/artifact hash and resolved Key Vault references,
 using the live GET `config/configreferences/appsettings` collection contract
 (`2022-03-01`); missing, duplicate, unresolved or paginated required-reference
 evidence blocks deployment before activation.
-It uses Entra-authenticated deployment without enabling basic SCM authentication,
-and activates the host explicitly. Failed SQL-backed readiness stops it.
+It uses Entra-authenticated deployment without enabling basic SCM authentication.
+After all preflight checks and explicit activation acknowledgement, it enables/starts
+the site before upload: a disabled site also rejects SCM with HTTP 403. It uploads
+with restart enabled and CLI runtime tracking disabled, then owns the bounded
+SQL-backed readiness probe itself. Upload, activation or readiness failure stops
+the host; the initial infrastructure deployment still leaves it disabled.
 The manifest proves only the owner's asserted source-to-artifact association;
 use the clean accepted build command and retain its successful output.
 Do not call the acknowledgement “CI attestation”.
