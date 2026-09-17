@@ -30,6 +30,10 @@ public sealed class AzureHostingTests
     [InlineData("10.1.2.3", "https")]
     [InlineData("172.16.1.2", "https")]
     [InlineData("192.168.1.2", "https")]
+    [InlineData("169.254.129.1", "https")]
+    [InlineData("::ffff:169.254.129.1", "https")]
+    [InlineData("169.253.255.255", "http")]
+    [InlineData("169.255.0.0", "http")]
     [InlineData("20.1.2.3", "http")]
     [InlineData(null, "http")]
     public async Task StagingProxyAcceptsOnlyPrivatePeerScheme(string? peer, string expectedScheme)
