@@ -304,6 +304,9 @@ test("runtime SQL rejects identity and grant drift and verifies DDL and history 
     assert.match(proof, /N'DATABASE', N'CREATE TABLE'/);
     assert.match(proof, /N'SCHEMA', N'ALTER'/);
     assert.match(proof, /N'SCHEMA', N'CONTROL'/);
+    assert.match(proof, /HAS_PERMS_BY_NAME\(DB_NAME\(\), N'DATABASE', N'CONTROL'\), 1\) <> 0/);
+    assert.match(proof, /HAS_PERMS_BY_NAME\(N'dbo', N'USER', N'IMPERSONATE'\), 1\) <> 0/);
+    assert.doesNotMatch(proof, /IMPERSONATE ANY USER/);
     for (const permission of ["INSERT", "UPDATE", "DELETE", "ALTER", "CONTROL"]) {
         assert.ok(proof.includes(`N'dbo.__EFMigrationsHistory', N'OBJECT', N'${permission}'), 1) <> 0`));
     }
