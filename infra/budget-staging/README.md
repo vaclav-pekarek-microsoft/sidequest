@@ -140,7 +140,11 @@ SELECT on migration history. It rejects identity/grant drift and checks effectiv
 table, DDL and principal-management permissions under database impersonation.
 These are database-local checks, not an actual managed-identity login. Keep the
 SQL access token only in process memory; never enable tracing or print/store a
-token, connection string or raw SQL exception. Failures report a phase and SQL
+token, connection string or raw SQL exception. The operator bootstrap requests
+the explicit delegated SQL `user_impersonation` scope. Recently changed Entra
+group membership is not retroactively added to cached tokens; ensure the operator
+has a fresh token before bootstrap rather than weakening SQL administration.
+Failures report a phase and SQL
 error number. Inspect partial state before an explicitly authorized rerun.
 Independently compare live migration-history IDs with the reviewed artifact,
 retain the result and verify removal of the temporary firewall rule.

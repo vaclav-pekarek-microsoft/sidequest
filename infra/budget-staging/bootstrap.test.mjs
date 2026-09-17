@@ -129,7 +129,7 @@ function preflight(overrides = {}) {
             }
             if ($arguments -contains 'get-access-token') {
                 if ($arguments -contains '--tenant' -or
-                    $arguments[[Array]::IndexOf($arguments, '--resource') + 1] -ne 'https://database.windows.net/') {
+                    $arguments[[Array]::IndexOf($arguments, '--scope') + 1] -ne 'https://database.windows.net/user_impersonation') {
                     throw 'Unexpected token scope'
                 }
                 [Console]::Out.WriteLine('MOCK:token-boundary')

@@ -173,7 +173,7 @@ try {
     }
 
     $phase = 'sql-token'
-    $tokenResponse = Invoke-PinnedAz -Arguments @('account', 'get-access-token', '--resource', 'https://database.windows.net/')
+    $tokenResponse = Invoke-PinnedAz -Arguments @('account', 'get-access-token', '--scope', 'https://database.windows.net/user_impersonation')
     if ($tokenResponse.tenant -ine $tenant -or $tokenResponse.subscription -ine $subscription -or
         [string]::IsNullOrWhiteSpace($tokenResponse.accessToken)) {
         throw 'Unexpected token metadata.'
