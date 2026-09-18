@@ -154,7 +154,8 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         Assert.Equal(2, second.TotalCount);
         var rows = first.Items.Concat(second.Items).ToArray();
         Assert.Equal(2, rows.Select(x => x.User.Id).Distinct().Count());
-        Assert.Contains(rows, x => x.User.Id == seed.Other.Id && x.Status == BulkRecipientStatus.Failed && x.Detail == "No longer eligible.");
+        Assert.Contains(rows, x => x.User.Id == seed.Other.Id && x.User.Email == seed.Other.Email &&
+            x.User.DisplayName == seed.Other.DisplayName && x.Status == BulkRecipientStatus.Failed && x.Detail == "No longer eligible.");
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
             context.Service(seed.Other).ListBulkRecipientsAsync(operation, new()))).Code);
         await using var read = database.CreateContext();
@@ -265,6 +266,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
     [InlineData("summary-long")]
     [InlineData("description-long")]
     [InlineData("reverse-dates")]
+    [InlineData("same-day")]
     [InlineData("invalid-zone")]
     public async Task CreateValidatesServerInputBeforePersistence(string partition)
     {
@@ -278,6 +280,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
             "summary-long" => EventTestContext.Input() with { DiscoverySummary = new string('s', 301) },
             "description-long" => EventTestContext.Input() with { Description = new string('d', 10001) },
             "reverse-dates" => EventTestContext.Input() with { EndDate = new(2026, 7, 14) },
+            "same-day" => EventTestContext.Input() with { EndDate = new(2026, 7, 15) },
             _ => EventTestContext.Input() with { TimeZoneId = "Unknown/Zone" }
         };
         var expectedField = partition switch
@@ -285,7 +288,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
             "name-short" or "name-long" => "Name",
             "summary-long" => "DiscoverySummary",
             "description-long" => "Description",
-            "reverse-dates" => "EndDate",
+            "reverse-dates" or "same-day" => "EndDate",
             _ => "TimeZoneId"
         };
         var error = await Assert.ThrowsAsync<DomainException>(() => context.Service(user).CreateAsync(input));

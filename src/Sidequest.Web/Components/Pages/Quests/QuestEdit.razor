@@ -3,7 +3,7 @@
 @using Sidequest.Web.Components.Media
 <PageTitle>Quest editor · Sidequest</PageTitle>
 <h1>@(Id is null ? "Create a Quest" : "Edit Quest")</h1>
-<p><a href="/quests">Back to Quests</a></p>
+<nav class="page-actions" aria-label="Quest editor actions"><a href="/quests">Back to Quests</a></nav>
 @if (busy && initial is null)
 {
     <p role="status">Loading editor…</p>
@@ -15,19 +15,22 @@
 }
 @if (Id is null)
 {
-    <label>Active Event
-        <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
-            <option value="">Choose an Event</option>
-            @foreach (var item in events)
-            {
-                <option @key="item.Id" value="@item.Id">@item.Name</option>
-            }
-        </select>
-    </label>
-    @if (!busy && events.Count == 0)
-    {
-        <p>You need individual membership in an active Event before creating a Quest.</p>
-    }
+    <section class="section-box">
+        <h2 class="section-heading">Parent Event</h2>
+        <label>Active Event
+            <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+                <option value="">Choose an Event</option>
+                @foreach (var item in events)
+                {
+                    <option @key="item.Id" value="@item.Id">@item.Name</option>
+                }
+            </select>
+        </label>
+        @if (!busy && events.Count == 0)
+        {
+            <p>You need individual membership in an active Event before creating a Quest.</p>
+        }
+    </section>
 }
 @if (initial is not null)
 {

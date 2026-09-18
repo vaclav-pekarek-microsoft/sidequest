@@ -9,11 +9,39 @@ public partial class QuestManagement
 {
     private string selected = "";
     private string reason = "";
+    private string action = "";
     private bool confirmed;
     private QuestManagementDraft? previousDraft;
     private bool Disabled => Busy || !confirmed;
     private bool TargetDisabled => Disabled || !Guid.TryParse(selected, out _);
-    private IEnumerable<PersonSummary> Candidates => Members.Concat(Detail.Owners.Select(o => new PersonSummary(o.Id, o.DisplayName)))
+    private string CurrentAction => Moderation ? Detail.Summary.Status switch
+    {
+        Sidequest.Domain.Model.QuestStatus.Active => "suspend",
+        Sidequest.Domain.Model.QuestStatus.Suspended => "reinstate",
+        _ => ""
+    } : action;
+    private bool NeedsPerson => CurrentAction is "add-owner" or "remove-owner" or "invite" or "revoke" or "remove-attendee";
+    private bool NeedsReason => CurrentAction is "cancel" or "suspend" or "reinstate" or "revoke" or "remove-attendee";
+    private string ActionLabel => CurrentAction switch
+    {
+        "publish" => "Publish draft", "delete" => "Delete draft", "cancel" => "Cancel Quest",
+        "archive" => "Archive", "add-owner" => "Add equal owner", "remove-owner" => "Remove owner access",
+        "invite" => "Invite (immediate access)", "revoke" => "Revoke invitation",
+        "remove-attendee" => "Remove attendee", "suspend" => "Suspend",
+        "reinstate" => "Reinstate with latest details", _ => ""
+    };
+    private string ConfirmationDescription => CurrentAction switch
+    {
+        "cancel" or "suspend" => "Attendee calendars will be withdrawn.",
+        "reinstate" => "The latest details will be used to restore eligible attendee calendars.",
+        "revoke" or "remove-attendee" => "This can end access or attendance and withdraw the person's calendar entry.",
+        "add-owner" or "remove-owner" => "This changes equal management rights, not attendance.",
+        "invite" => "This grants immediate access without joining the person.",
+        "publish" => "The Quest will become available to its audience.",
+        "delete" => "The draft will be permanently deleted.",
+        _ => "The Quest will become read-only."
+    };
+    private IEnumerable<PersonSummary> Candidates => Members.Concat(Detail.Owners.Select(o => new PersonSummary(o.Id, o.DisplayName, o.Email)))
         .DistinctBy(x => x.Id).OrderBy(x => x.DisplayName).ThenBy(x => x.Id);
 
     /// <summary>Authorized detail; moderation mode must have null protected rosters.</summary>
@@ -46,13 +74,36 @@ public partial class QuestManagement
         previousDraft = Draft;
         selected = Draft.SelectedPerson;
         reason = Draft.Reason;
+        action = Draft.Action;
+        confirmed = false;
     }
 
-    private Task PublishDraftAsync() => DraftChanged.InvokeAsync(new(selected, reason));
+    private Task PublishDraftAsync() => DraftChanged.InvokeAsync(new(selected, reason, action));
+
+    private async Task SelectActionAsync(string next)
+    {
+        if (Busy)
+            return;
+        if (action != next)
+        {
+            selected = "";
+            reason = "";
+        }
+        action = next;
+        confirmed = false;
+        await PublishDraftAsync();
+    }
+
+    private async Task SelectPersonAsync(string person)
+    {
+        selected = person;
+        confirmed = false;
+        await PublishDraftAsync();
+    }
 
     private async Task SendAsync(string action)
     {
-        if (Disabled)
+        if (Disabled || action != CurrentAction || (NeedsPerson && TargetDisabled))
             return;
         confirmed = false;
         await Execute.InvokeAsync(new(action, Guid.TryParse(selected, out var id) ? id : null, reason));

@@ -32,6 +32,7 @@ public sealed class CoverComponentTests : BunitContext
         Assert.Equal(!interactive || !persisted || busy, component.Find("button").HasAttribute("disabled"));
         Assert.Equal(interactive && persisted ? 1 : 0, component.FindComponents<InputFile>().Count);
         Assert.Equal("Cover for Kayak outing", component.Find("img").GetAttribute("alt"));
+        Assert.Equal("Quest cover", component.Find(".cover-editor.section-box > .section-heading").TextContent);
     }
 
     /// <summary>A successful upload forwards exactly 2 MiB as the stream cap and returns a version without mutating parent parameters.</summary>

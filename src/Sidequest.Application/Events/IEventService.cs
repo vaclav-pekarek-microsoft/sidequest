@@ -25,7 +25,7 @@ public interface IEventService
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<EventDetail> GetAsync(Guid id, CancellationToken cancellationToken = default);
     /// <summary>Creates an unpublished Event and atomically assigns the eligible creator as its first equal owner and individual member.</summary>
-    /// <param name="input">Proposed Event configuration.</param>
+    /// <param name="input">Proposed Event configuration with an inclusive end date strictly after its start date.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation; the operation must not commit partial state.</param>
     /// <returns>The new internal Event identifier.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Input is invalid or the current account is forbidden.</exception>
@@ -34,7 +34,7 @@ public interface IEventService
     /// <summary>Updates owner-managed Draft/Active configuration before Event end, preserving published zone and child-interval constraints.</summary>
     /// <param name="id">Internal Event identifier.</param>
     /// <param name="version">Expected Base64 rowversion used to reject stale edits.</param>
-    /// <param name="input">Validated replacement configuration.</param>
+    /// <param name="input">Replacement configuration requiring an inclusive end date strictly after its start date, including edits to legacy single-day Events.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of the atomic edit.</param>
     /// <returns>A task completing after the edit and related audit/scheduling changes are persisted.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Validation, unavailable access, lifecycle, or concurrency checks fail.</exception>

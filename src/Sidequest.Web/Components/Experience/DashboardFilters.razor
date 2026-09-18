@@ -1,7 +1,7 @@
 @using Sidequest.Application.Events
 @using Sidequest.Application.Quests
 @using Sidequest.Web.Experience
-<fieldset class="dashboard-filters" disabled="@Disabled" data-online-actions>
+<fieldset class="dashboard-filters compact-filters" disabled="@Disabled" data-online-actions>
     <legend>Find your Quests</legend>
     <label>View
         <select @bind="kind" @bind:after="NotifyAsync">
@@ -29,7 +29,6 @@
             }
         </select>
     </label>
-    <p>Start dates use @(SelectedZone). From and through dates are inclusive civil dates; filtering happens before paging.</p>
     <label>From date <input type="date" @bind="from" @bind:after="NotifyAsync" /></label>
     <label>Through date <input type="date" @bind="through" @bind:after="NotifyAsync" /></label>
     <label>Quests per page
@@ -37,6 +36,7 @@
             <option value="25">25</option><option value="50">50</option><option value="100">100</option>
         </select>
     </label>
+    <p>Quest start dates: inclusive civil dates in @(SelectedZone), filtered before paging.</p>
 </fieldset>
 
 @code {

@@ -5,19 +5,24 @@
 
 <PageTitle>Events · Sidequest</PageTitle>
 <h1>Events</h1>
-<nav aria-label="Event views">
-    <a href="/events/create">Create Event</a> ·
-    <a href="/events/requests">My requests</a> ·
+<nav class="page-actions" aria-label="Event actions">
+    <a href="/events/create">Create Event</a>
+    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
+    <a href="/events/requests">My requests</a>
     <a href="/events/invitations">My invitations</a>
 </nav>
-<p>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Mine))">My Events</FluentButton>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Available))">Available Events</FluentButton>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
-</p>
-<h2>@kind</h2>
+<section class="section-box compact-filters" aria-label="Event filters">
+    <label>Show
+        <InputSelect @bind-Value="kind" @bind-Value:after="FilterAsync" disabled="@Busy">
+            <option value="@EventListKind.Mine">My Events</option>
+            <option value="@EventListKind.Available">Available Events</option>
+            <option value="@EventListKind.History">Event history</option>
+        </InputSelect>
+    </label>
+    <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
+</section>
+<h2>@(kind == EventListKind.Mine ? "My Events" : kind == EventListKind.Available ? "Available Events" : "Event history")</h2>
 <EventFeedback Busy="Busy" Error="@Error" />
-<FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
 @if (result is not null)
 {
     @if (result.Items.Count == 0)
@@ -50,6 +55,11 @@
     private Task SelectAsync(EventListKind selected)
     {
         kind = selected;
+        page = 1;
+        return LoadAsync();
+    }
+    private Task FilterAsync()
+    {
         page = 1;
         return LoadAsync();
     }

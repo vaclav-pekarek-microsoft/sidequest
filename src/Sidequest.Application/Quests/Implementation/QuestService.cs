@@ -131,7 +131,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                    where invitation.QuestId == id && invitation.Status == QuestInvitationStatus.Active &&
                        user.IsEligible && user.DepartureVerifiedUtc == null
                    orderby user.DisplayName, user.Id
-                   select new PersonSummary(user.Id, user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
+                   select new QuestRosterPersonSummary(user.Id, user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (moderation && quest.Visibility == QuestVisibility.Private)
             AuditModerationRead(db, quest, actor.Id, "ModerationDetailRead");
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -386,7 +386,20 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                              from user in actors.DefaultIfEmpty()
                              orderby entry.OccurredUtc descending, entry.Id
                              select new QuestHistoryItem(entry.Action, entry.Reason, entry.OccurredUtc,
-                                 user == null ? null : user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
+                                 user == null ? null : user.Email + " (" + user.DisplayName + ")")).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var personIds = history.SelectMany(item => item.Action.Split(':'))
+                .Select(part => Guid.TryParse(part, out var personId) ? personId : (Guid?)null)
+                .OfType<Guid>().Distinct().ToArray();
+            var labels = await db.Users.Where(user => personIds.Contains(user.Id))
+                .Select(user => new { user.Id, Label = user.Email + " (" + user.DisplayName + ")" })
+                .ToDictionaryAsync(user => user.Id, user => user.Label, cancellationToken).ConfigureAwait(false);
+            history = history.Select(item => item with
+            {
+                Action = string.Join(":", item.Action.Split(':').Select(part =>
+                    Guid.TryParse(part, out var personId)
+                        ? labels.GetValueOrDefault(personId, "Unavailable person")
+                        : part))
+            }).ToArray();
         }
         else
         {
@@ -559,14 +572,14 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             db.EventOwners.Any(o => o.EventId == parent.Id && o.UserId == actor),
             Convert.ToBase64String(quest.Version), quest.CoverAssetId);
 
-    private static async Task<List<PersonSummary>> RosterAsync(ISidequestDbContext db, Guid id,
+    private static async Task<List<QuestRosterPersonSummary>> RosterAsync(ISidequestDbContext db, Guid id,
         ParticipationStatus status, CancellationToken token) =>
         await (from participation in db.Participations
                join user in db.Users on participation.UserId equals user.Id
                where participation.QuestId == id && participation.Status == status &&
                    user.IsEligible && user.DepartureVerifiedUtc == null
                orderby user.DisplayName, user.Id
-               select new PersonSummary(user.Id, user.DisplayName)).ToListAsync(token).ConfigureAwait(false);
+               select new QuestRosterPersonSummary(user.Id, user.DisplayName)).ToListAsync(token).ConfigureAwait(false);
 
     private static async Task RequireTargetAsync(ISidequestDbContext db, Guid eventId, Guid userId, CancellationToken token)
     {

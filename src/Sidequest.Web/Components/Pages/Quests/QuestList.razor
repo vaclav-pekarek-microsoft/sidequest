@@ -2,30 +2,35 @@
 @using Sidequest.Application.Quests
 @using Sidequest.Web.Components.Quests
 <PageTitle>Quests · Sidequest</PageTitle>
-<h1>My Quests</h1>
-<p><a href="/quests/create">Create a Quest</a> · <a href="/quests?view=History">History</a> · <a href="/quests?view=Invited">Private invitations</a></p>
-<label>View
-    <select @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
-        @foreach (var value in Enum.GetValues<QuestListKind>())
-        {
-            <option value="@value">@value</option>
-        }
-    </select>
-</label>
-<label>Event
-    <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
-        <option value="">All my Events</option>
-        @foreach (var item in events)
-        {
-            <option @key="item.Id" value="@item.Id">@item.Name</option>
-        }
-    </select>
-</label>
-<fieldset disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
-    <legend>Quest start dates in @dateZone</legend>
+<h1>Quests</h1>
+<nav class="page-actions" aria-label="Quest actions" data-online-actions>
+    <a class="button-link" href="/quests/create">Create a Quest</a>
+    <a href="/quests?view=Discover">Discover Quests</a>
+    <a href="/quests?view=History">History</a>
+    <a href="/quests?view=Invited">Private invitations</a>
+</nav>
+<fieldset class="compact-filters" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+    <legend>Filter Quests</legend>
+    <label>View
+        <select @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+            @foreach (var value in Enum.GetValues<QuestListKind>())
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+    </label>
+    <label>Event
+        <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+            <option value="">All my Events</option>
+            @foreach (var item in events)
+            {
+                <option @key="item.Id" value="@item.Id">@item.Name</option>
+            }
+        </select>
+    </label>
     <label>From date (inclusive) <input type="date" @bind="fromDate" @bind:after="ResetAsync" /></label>
     <label>Through date (inclusive) <input type="date" @bind="throughDate" @bind:after="ResetAsync" /></label>
-    <small>Select an Event to use its time zone. Across all Events, these dates use UTC.</small>
+    <small class="filter-help text-muted">Inclusive start dates in @dateZone. Select an Event to use its time zone.</small>
 </fieldset>
 @if (loading)
 {
@@ -47,7 +52,7 @@ else
         <QuestCard @key="item.Id" Item="item" Moderation="@(kind == QuestListKind.Moderation)" />
     }
 }
-<div>
+<div class="page-actions">
     <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || page == 1)" OnClick="PreviousAsync">Previous</FluentButton>
     <span>Page @(page)</span>
     <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || result is null || page * 25 >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>

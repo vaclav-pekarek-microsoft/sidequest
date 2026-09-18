@@ -1,16 +1,29 @@
 <EditForm Model="model" OnValidSubmit="SubmitAsync" FormName="event-editor">
     <DataAnnotationsValidator />
     <ValidationSummary />
-    <fieldset disabled="@Busy" class="editor">
-        <legend>Event configuration</legend>
+    <fieldset disabled="@Busy" class="editor section-box">
+        <legend class="section-heading">Event configuration</legend>
         <FluentTextField Label="Name (3–120 characters)" @bind-Value="model.Name" Disabled="@Busy" Required="true" Maxlength="120" />
         <FluentTextArea Label="Discovery summary (visible to eligible users)" @bind-Value="model.DiscoverySummary" Disabled="@Busy" Maxlength="300" />
         <FluentTextArea Label="Description (members only; plain text)" @bind-Value="model.Description" Disabled="@Busy" Maxlength="10000" />
-        <label>Start date, inclusive <InputDate @bind-Value="model.StartDate" /></label>
-        <label>End date, inclusive <InputDate @bind-Value="model.EndDate" /></label>
-        <FluentTextField Label="IANA time zone (for example Europe/Prague)" @bind-Value="model.TimeZoneId" Disabled="@Busy" ReadOnly="@ZoneLocked" Required="true" />
-        <p>Dates are interpreted in this zone. The zone is fixed when published; every child Quest must fit within these dates.</p>
-        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save Draft or changes</FluentButton>
+        <div class="field-grid">
+            <label>Start date, inclusive <InputDate @bind-Value="model.StartDate" /></label>
+            <label>End date, inclusive <InputDate @bind-Value="model.EndDate" /></label>
+        </div>
+        <ValidationMessage For="() => model.EndDate" />
+        <label>IANA time zone
+            <InputSelect @bind-Value="model.TimeZoneId" disabled="@(Busy || ZoneLocked)">
+                @foreach (var zone in NodaTime.DateTimeZoneProviders.Tzdb.Ids)
+                {
+                    <option @key="zone" value="@zone">@zone</option>
+                }
+            </InputSelect>
+        </label>
+        <ValidationMessage For="() => model.TimeZoneId" />
+        <p class="text-muted">End date must be after start date. Both dates are inclusive in the selected zone, which is fixed when published. Every child Quest must fit within these dates.</p>
+        <div class="page-actions">
+            <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">@SubmitLabel</FluentButton>
+        </div>
     </fieldset>
 </EditForm>
 
@@ -24,6 +37,8 @@
     [Parameter] public bool ZoneLocked { get; set; }
     /// <summary>Disables repeated submission while the page saves.</summary>
     [Parameter] public bool Busy { get; set; }
+    /// <summary>Names the save action for a new Draft or an existing Event without changing command semantics.</summary>
+    [Parameter] public string SubmitLabel { get; set; } = "Save changes";
     /// <summary>Submits validated form values to the owning page without changing lifecycle directly.</summary>
     [Parameter] public EventCallback<EventInput> Submitted { get; set; }
 

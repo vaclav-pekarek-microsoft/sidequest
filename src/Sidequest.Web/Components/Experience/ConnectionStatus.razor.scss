@@ -1,3 +1,20 @@
-aside { border: 1px solid #748c84; border-radius: .5rem; padding: 1rem; margin-block: 1rem; background: #f3f8f5; color: #172b26; overflow-wrap: anywhere; }
-button { margin: .25rem; padding: .65rem; max-width: 100%; white-space: normal; }
-:focus-visible { outline: 3px solid #875900; outline-offset: 3px; }
+.device-controls { max-width: 45rem; margin: .5rem auto 0; overflow-wrap: anywhere; }
+summary { width: fit-content; margin: auto; padding: .6rem; cursor: pointer; }
+.device-options { padding: 1rem; text-align: left; background: var(--sq-surface); border: 1px solid var(--sq-line); border-radius: var(--sq-radius); }
+.device-buttons { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+.connection-notice {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(40rem, calc(100% - 2rem));
+    margin: 0;
+    padding: .85rem 1rem;
+    color: #382c00;
+    background: #fff1b8;
+    border: 1px solid #d4b347;
+    border-radius: .75rem;
+    box-shadow: 0 .4rem 1.5rem #2038321a;
+    z-index: 50;
+}
+button { max-width: 100%; white-space: normal; }

@@ -20,24 +20,27 @@
 }
 else if (CanDisplayProtectedState && failures is not null)
 {
-    @if (failures.Count == 0)
-    {
-        <p>No failed work is currently listed.</p>
-    }
-    <ul>
-        @foreach (var failure in failures)
+    <section class="section-box" aria-labelledby="failed-work-heading">
+        <h2 class="section-heading" id="failed-work-heading">Failed work</h2>
+        @if (failures.Count == 0)
         {
-            <li @key="failure.Id">
-                <p>@failure.Kind · @failure.Attempts attempts · @failure.Error</p>
-                <FluentButton OnClick="@(() => Review(failure))" Disabled="@ControlsDisabled">Review replay</FluentButton>
-            </li>
+            <p>No failed work is currently listed.</p>
         }
-    </ul>
+        <ul>
+            @foreach (var failure in failures)
+            {
+                <li @key="failure.Id">
+                    <p>@failure.Kind · @failure.Attempts attempts · @failure.Error</p>
+                    <FluentButton OnClick="@(() => Review(failure))" Disabled="@ControlsDisabled">Review replay</FluentButton>
+                </li>
+            }
+        </ul>
+    </section>
 }
 @if (CanDisplayProtectedState && pending is not null)
 {
-    <section aria-labelledby="replay-heading">
-        <h2 id="replay-heading">Confirm replay</h2>
+    <section class="section-box danger-zone" aria-labelledby="replay-heading">
+        <h2 class="section-heading" id="replay-heading">Confirm replay</h2>
         <p>Have you corrected the dependency? Replay may submit an uncertain message again. Obsolete content remains suppressed.</p>
         <FluentButton OnClick="ReplayAsync" Disabled="@ControlsDisabled">Confirm replay</FluentButton>
         <FluentButton OnClick="CancelReview" Disabled="@ControlsDisabled">Cancel</FluentButton>

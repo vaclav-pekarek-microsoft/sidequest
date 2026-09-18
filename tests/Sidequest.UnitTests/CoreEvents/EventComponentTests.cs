@@ -2,8 +2,11 @@ using Bunit;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Sidequest.Application.Events;
+using Sidequest.Application.Events.Implementation;
 using Sidequest.Domain.Model;
+using Sidequest.UnitTests.SecondaryExperience;
 using Sidequest.Web.Components.Events;
+using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreEvents;
 
@@ -35,7 +38,7 @@ public sealed class EventComponentTests : BunitContext
         Assert.All(cut.FindComponents<FluentTextField>(), x => Assert.False(x.Instance.Disabled));
         Assert.All(cut.FindComponents<FluentTextArea>(), x => Assert.False(x.Instance.Disabled));
         Assert.Equal("Unsaved Event", cut.FindComponents<FluentTextField>().First().Instance.Value);
-        Assert.True(cut.FindComponents<FluentTextField>().Last().Instance.ReadOnly);
+        Assert.True(cut.Find("select").HasAttribute("disabled"));
         Assert.Equal("Initial Event", input.Name);
     }
 
@@ -44,19 +47,31 @@ public sealed class EventComponentTests : BunitContext
     public void NonmemberCardRendersDiscoveryAndNoProtectedContent()
     {
         var id = Guid.Parse("50000000-0000-0000-0000-000000000005");
+        var ownerId = Guid.NewGuid();
         var item = new EventSummary(id, "<script>sentinel</script>", "Safe public discovery",
             new(2026, 7, 15), new(2026, 7, 16), "Europe/Prague", EventStatus.Active,
-            [new(Guid.NewGuid(), "Equal owner", "owner@example.invalid")], false, false, "opaque-version");
+            [new(ownerId, "Equal owner", "owner@example.invalid")], false, false, "opaque-version");
         var cut = Render<EventCard>(p => p.Add(x => x.Item, item));
         Assert.Equal($"/events/{id}", cut.Find("h2 a").GetAttribute("href"));
         Assert.Equal("<script>sentinel</script>", cut.Find("h2").TextContent);
         Assert.Contains("Safe public discovery", cut.Markup);
         Assert.Contains("owner@example.invalid", cut.Markup);
+        Assert.Contains("owner@example.invalid (Equal owner)", cut.Markup);
+        Assert.DoesNotContain(ownerId.ToString(), cut.Markup);
         Assert.Contains("Membership is required for full content.", cut.Markup);
         Assert.Empty(cut.FindAll("script"));
         Assert.DoesNotContain("opaque-version", cut.Markup);
         Assert.DoesNotContain("You are a member", cut.Markup);
         Assert.Empty(cut.FindAll("button, textarea, table"));
+    }
+
+    /// <summary>Formats authorized contact data without exposing the internal identifier in membership, request, invitation, or bulk labels.</summary>
+    [Fact]
+    public void PersonLabelUsesEmailAndDisplayNameNotAccountId()
+    {
+        var person = new PersonSummary(Guid.NewGuid(), "Named member", "member@example.invalid");
+        Assert.Equal("member@example.invalid (Named member)", person.Label);
+        Assert.DoesNotContain(person.Id.ToString(), person.Label);
     }
 
     /// <summary>Rejects immediately adjacent invalid name lengths without invoking the owning page callback.</summary>
@@ -134,9 +149,116 @@ public sealed class EventComponentTests : BunitContext
         var cut = Render<EventEditor>(p => p.Add(x => x.Input, Input()).Add(x => x.Busy, true).Add(x => x.ZoneLocked, true));
         Assert.True(cut.Find("fieldset").HasAttribute("disabled"));
         Assert.True(cut.FindComponent<FluentButton>().Instance.Disabled);
-        var zone = cut.FindComponents<FluentTextField>().Single(x => x.Instance.Label!.StartsWith("IANA", StringComparison.Ordinal));
-        Assert.True(zone.Instance.ReadOnly);
-        Assert.Equal("Europe/Prague", zone.Instance.Value);
+        var zone = cut.Find("select");
+        Assert.True(zone.HasAttribute("disabled"));
+        Assert.Equal("Europe/Prague", zone.GetAttribute("value"));
+    }
+
+    /// <summary>Blocks equal and reversed date ranges while submitting the immediately later inclusive end date.</summary>
+    /// <param name="endOffsetDays">End date's whole-day offset from the start date.</param>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void EditorRequiresEndStrictlyAfterStart(int endOffsetDays)
+    {
+        var input = Input();
+        input = input with { EndDate = input.StartDate.AddDays(endOffsetDays) };
+        var sent = new List<EventInput>();
+        var cut = Render<EventEditor>(p => p.Add(x => x.Input, input).Add(x => x.Submitted, value => sent.Add(value)));
+        cut.Find("form").Submit();
+        if (endOffsetDays <= 0)
+        {
+            Assert.Empty(sent);
+            Assert.Contains("End date must be after start date.", cut.Find(".validation-errors").TextContent);
+        }
+        else
+        {
+            Assert.Equal(input, Assert.Single(sent));
+            Assert.Empty(cut.FindAll(".validation-errors"));
+        }
+    }
+
+    /// <summary>Offers exactly the bundled TZDB identifiers and submits the selected zone, never a free-text identifier.</summary>
+    [Fact]
+    public void EditorOffersBundledTimeZonesAndSubmitsSelection()
+    {
+        var sent = new List<EventInput>();
+        var cut = Render<EventEditor>(p => p.Add(x => x.Input, Input()).Add(x => x.Submitted, value => sent.Add(value)));
+        Assert.Equal(NodaTime.DateTimeZoneProviders.Tzdb.Ids, cut.FindAll("select option").Select(x => x.GetAttribute("value")));
+        Assert.False(cut.Find("select").HasAttribute("disabled"));
+        cut.Find("select").Change("America/New_York");
+        cut.Find("form").Submit();
+        Assert.Equal("America/New_York", Assert.Single(sent).TimeZoneId);
+    }
+
+    /// <summary>Rejects a tampered unknown zone before invoking the parent command callback.</summary>
+    [Fact]
+    public void EditorRejectsUnknownTimeZone()
+    {
+        var calls = 0;
+        var cut = Render<EventEditor>(p => p.Add(x => x.Input, Input() with { TimeZoneId = "Unknown/Zone" })
+            .Add(x => x.Submitted, _ => calls++));
+        cut.Find("form").Submit();
+        Assert.Equal(0, calls);
+        Assert.Contains("Choose an available IANA time zone.", cut.Find(".validation-errors").TextContent);
+    }
+
+    /// <summary>Reveals cancellation only on request, retains its reason when hidden, and still requires impact review and explicit confirmation.</summary>
+    /// <returns>Completion after checking the untouched lifecycle command's Event, version, target, and preserved reason.</returns>
+    [Fact]
+    public async Task CancellationIsCollapsedAndRetainsReviewedReason()
+    {
+        Services.AddLogging();
+        var experience = new ExperienceCoordinator();
+        Services.AddSingleton(experience);
+        Services.AddSingleton(new EventCircuitRevalidation());
+        var impactReads = 0;
+        var commands = new List<(Guid Id, string Version, EventStatus Status, string Reason)>();
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
+        {
+            Assert.Equal(nameof(IEventManagementQueries.GetCancellationImpactAsync), method.Name);
+            impactReads++;
+            return Task.FromResult(3);
+        }));
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
+        {
+            Assert.Equal(nameof(IEventService.ChangeStatusAsync), method.Name);
+            commands.Add(((Guid)arguments![0]!, (string)arguments[1]!, (EventStatus)arguments[2]!, (string)arguments[3]!));
+            return Task.CompletedTask;
+        }));
+        await experience.ReportConnectionAsync(true, null);
+        SetRendererInfo(new("Server", true));
+        var item = new EventSummary(Guid.NewGuid(), "Event", "", new(2026, 7, 15), new(2026, 7, 16),
+            "Europe/Prague", EventStatus.Active, [], true, true, "original-version");
+        var cut = Render<EventLifecycle>(p => p.Add(x => x.Item, item));
+        Task ClickAsync(string label) => cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Find("fluent-button").TextContent.Trim() == label).Instance.OnClick.InvokeAsync());
+
+        Assert.Empty(cut.FindComponents<FluentTextArea>());
+        Assert.Empty(cut.FindComponents<FluentCheckbox>());
+        Assert.Equal(0, impactReads);
+        await ClickAsync("Cancel Event…");
+        Assert.False(cut.Find("fieldset").HasAttribute("disabled"));
+        var cancel = cut.FindComponents<FluentButton>().Single(x =>
+            x.Find("fluent-button").TextContent.Trim() == "Cancel Event and affected Quests");
+        Assert.True(cancel.Instance.Disabled);
+        const string reason = "Retain this cancellation explanation.";
+        await cut.InvokeAsync(() => cut.FindComponent<FluentTextArea>().Instance.ValueChanged.InvokeAsync(reason));
+        await ClickAsync("Hide cancellation");
+        Assert.Empty(cut.FindComponents<FluentTextArea>());
+        await ClickAsync("Cancel Event…");
+        Assert.Equal(reason, cut.FindComponent<FluentTextArea>().Instance.Value);
+        Assert.Empty(commands);
+        await ClickAsync("Review cancellation impact");
+        Assert.Equal(1, impactReads);
+        Assert.Contains("3 Draft, Active, or Suspended child Quests", cut.Markup);
+        Assert.True(cut.FindComponents<FluentButton>().Single(x =>
+            x.Find("fluent-button").TextContent.Trim() == "Cancel Event and affected Quests").Instance.Disabled);
+        await cut.InvokeAsync(() => cut.FindComponent<FluentCheckbox>().Instance.ValueChanged.InvokeAsync(true));
+        await ClickAsync("Cancel Event and affected Quests");
+        Assert.Equal((item.Id, item.Version, EventStatus.Cancelled, reason), Assert.Single(commands));
+        Assert.Empty(cut.FindComponents<FluentTextArea>());
     }
 
     /// <summary>Shows explicit pending and safe failure feedback and clears both when the next operation succeeds.</summary>

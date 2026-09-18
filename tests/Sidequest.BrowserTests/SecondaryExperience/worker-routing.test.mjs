@@ -63,7 +63,7 @@ test("Unencoded ordinary navigations still receive the dedicated fallback on net
     assert.equal(await response, worker.fallback);
     assert.deepEqual(worker.calls, [
         ["fetch", `${origin}/quests/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`],
-        ["open", "sidequest-public-experience-v2"],
+        ["open", "sidequest-public-experience-v3"],
         ["match", "/experience/offline.html"]
     ]);
 });
@@ -84,9 +84,21 @@ test("The offline document and worker agree on the new renderer version without 
     assert.equal(worker.dispatch("/experience/offline.js?v=1", "cors"), undefined);
     assert.deepEqual(worker.calls, []);
     assert.equal(await worker.dispatch("/experience/offline.js?v=2", "cors"), worker.fallback);
-    assert.deepEqual(worker.calls[0], ["open", "sidequest-public-experience-v2"]);
+    assert.deepEqual(worker.calls[0], ["open", "sidequest-public-experience-v3"]);
     assert.equal(worker.calls[1][1].url, `${origin}/experience/offline.js?v=2`);
     assert.equal(worker.calls.length, 2);
+});
+
+test("The updated white-S installation icons and manifest cannot reuse the old cached branding", async () => {
+    const manifest = JSON.parse(await readFile(new URL("../../../src/Sidequest.Web/wwwroot/experience/manifest.webmanifest", import.meta.url), "utf8"));
+    assert.equal(manifest.theme_color, "#146858");
+    for (const path of ["/experience/manifest.webmanifest", ...manifest.icons.map(icon => icon.src.split("?")[0])]) {
+        const worker = harness();
+        assert.equal(worker.dispatch(`${path}?v=1`, "cors"), undefined);
+        assert.deepEqual(worker.calls, []);
+        assert.equal(await worker.dispatch(`${path}?v=2`, "cors"), worker.fallback);
+        assert.deepEqual(worker.calls[0], ["open", "sidequest-public-experience-v3"]);
+    }
 });
 
 test("A similarly named non-protected route is not confused with the protected download namespaces", async () => {

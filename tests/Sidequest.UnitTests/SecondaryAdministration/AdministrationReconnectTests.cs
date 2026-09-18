@@ -22,7 +22,10 @@ namespace Sidequest.UnitTests.SecondaryAdministration;
 public sealed class AdministrationReconnectTests : BunitContext
 {
     private readonly ExperienceCoordinator coordinator = new();
-    private readonly UserAccount actor = new() { TenantId = Guid.NewGuid(), DisplayName = "Original administrator" };
+    private readonly UserAccount actor = new()
+    {
+        TenantId = Guid.NewGuid(), DisplayName = "Original administrator", Email = "administrator@example.invalid"
+    };
     private readonly List<UserAccount> users = [];
     private readonly List<Administrator> administrators = [];
     private readonly List<ApplicationSetting> settings =
@@ -39,7 +42,10 @@ public sealed class AdministrationReconnectTests : BunitContext
     public AdministrationReconnectTests()
     {
         users.Add(actor);
-        users.Add(new() { TenantId = actor.TenantId, DisplayName = "Candidate account", Version = [7] });
+        users.Add(new()
+        {
+            TenantId = actor.TenantId, DisplayName = "Candidate account", Email = "candidate@example.invalid", Version = [7]
+        });
         administrators.Add(new() { UserId = actor.Id, Version = [1] });
         var db = SnapshotServiceProxy.Create<ISidequestDbContext>((method, _) => method.Name switch
         {
@@ -163,6 +169,7 @@ public sealed class AdministrationReconnectTests : BunitContext
         Assert.Equal(0, State(cut, "revision"));
         Assert.Equal(0, State(cut, "latestRevision"));
         Assert.Empty(cut.FindAll("#template-subject,#template-html,#template-text"));
+        Assert.True(cut.Find("#template-key").ParentElement!.HasAttribute("disabled"));
     }
 
     /// <summary>Administrator reconnect rereads assignments and invalidates stale selections without replaying offline add/remove or paging callbacks.</summary>
@@ -200,6 +207,48 @@ public sealed class AdministrationReconnectTests : BunitContext
         AssertCleared(cut, ["assignments", "choices", "pendingAddition", "pendingRemoval"], ["query"]);
         Assert.DoesNotContain("Current administrator", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Candidate account", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>Administrator lists, email searches and both confirmations show trusted contacts rather than user keys.</summary>
+    /// <returns>Completion after authorized contact rendering, bounded search and role-revocation assertions.</returns>
+    [Fact]
+    public async Task AdministratorContactsUseEmailAndNameWithoutVisibleUserIds()
+    {
+        await coordinator.ReportConnectionAsync(true, null);
+        var cut = Render<Administrators>();
+        Assert.Contains("administrator@example.invalid (Original administrator)", cut.Find("[aria-labelledby=assigned-administrators]").TextContent);
+        cut.Find("#admin-search").Change("candidate@");
+        await ClickAsync(cut, "Search eligible accounts");
+        Assert.Equal(2, contextCalls);
+        await ClickAsync(cut, "Review addition");
+        await ClickAsync(cut, "Review removal");
+        Assert.Contains("candidate@example.invalid (Candidate account)", cut.Find("[aria-labelledby=add-heading]").TextContent);
+        Assert.Contains("administrator@example.invalid (Original administrator)", cut.Find("[aria-labelledby=remove-heading]").TextContent);
+        Assert.All(cut.FindAll("fieldset"), fieldset => Assert.Contains("section-box", fieldset.ClassList));
+        Assert.DoesNotContain(actor.Id.ToString(), cut.Find(".admin-panel").TextContent);
+        Assert.DoesNotContain(users[1].Id.ToString(), cut.Find(".admin-panel").TextContent);
+        await RevokeAsync(cut);
+        Assert.DoesNotContain("administrator@example.invalid", cut.Markup);
+        Assert.DoesNotContain("candidate@example.invalid", cut.Markup);
+    }
+
+    /// <summary>Recovery choices retain hidden command IDs but present contact labels inside separate disabled-safe steps.</summary>
+    /// <returns>Completion after email search, option labeling and revocation cleanup.</returns>
+    [Fact]
+    public async Task RecoveryPickerShowsContactsAndKeepsUserIdsOnlyInOptionValues()
+    {
+        await coordinator.ReportConnectionAsync(true, null);
+        var cut = Render<OwnershipRecovery>();
+        cut.Find("#replacement-search").Change("candidate@");
+        await ClickAsync(cut, "Search eligible replacement");
+        var option = cut.Find("#replacement-account option:not([value=''])");
+        Assert.Equal(users[1].Id.ToString(), option.GetAttribute("value"));
+        Assert.Equal("candidate@example.invalid (Candidate account)", option.TextContent);
+        Assert.Equal(3, cut.FindAll("fieldset.section-box").Count);
+        Assert.DoesNotContain(users[1].Id.ToString(), cut.Find(".admin-panel").TextContent);
+        await RevokeAsync(cut);
+        Assert.Empty(cut.FindAll("#replacement-account"));
+        Assert.DoesNotContain("candidate@example.invalid", cut.Markup);
     }
 
     /// <summary>Recovery reconnect checks administrator access, discards prior opaque evidence and selections, preserves valid input and clears it on revocation.</summary>
@@ -251,6 +300,10 @@ public sealed class AdministrationReconnectTests : BunitContext
         Assert.Single(recoveryPage.FindAll("#recovery-id"));
         Assert.Equal("Original brand", businessPage.Find("#email-brand").GetAttribute("value"));
         Assert.Equal("Saved revision 3 {{Brand}}", templatePage.Find("#template-subject").GetAttribute("value"));
+        Assert.Equal(new[] { "Message branding", "Reply-to contact" },
+            businessPage.FindAll("fieldset.section-box > legend.section-heading").Select(x => x.TextContent));
+        Assert.Equal(new[] { "Choose a template", "Subject line", "Message body" },
+            templatePage.FindAll("fieldset.section-box > legend.section-heading").Select(x => x.TextContent));
         AssertDisabled(administratorPage);
         AssertDisabled(recoveryPage);
         AssertDisabled(businessPage);

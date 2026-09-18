@@ -67,3 +67,13 @@ test("Missing confirmation DOM remains explicitly absent rather than being repor
         alerts: [], main: null, management: null, fileInputs: []
     });
 });
+
+test("Required reasons are determined by the action, not a transiently absent Fluent shadow textbox", async () => {
+    const core = await readFile(new URL("../CoreBrowser/CoreWorkflowBrowserTests.cs", import.meta.url), "utf8");
+    for (const helper of [source, core]) {
+        assert.doesNotMatch(helper, /await reason\.CountAsync\(\)/);
+        assert.match(helper, /action is "Cancel Quest" or "Revoke invitation" or "Remove attendee"/);
+        assert.match(helper, /await reason\.FillWhenActionableAsync\(/);
+    }
+    assert.match(core, /var needsReason = moderation \|\|/);
+});

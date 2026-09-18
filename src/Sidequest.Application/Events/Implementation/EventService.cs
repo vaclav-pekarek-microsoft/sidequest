@@ -99,7 +99,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
     /// <inheritdoc />
     public async Task<Guid> CreateAsync(EventInput input, CancellationToken cancellationToken = default)
     {
-        var normalized = Validate(input);
+        var normalized = Validate(input, requireLaterEnd: true);
         var eventId = Guid.NewGuid();
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -124,7 +124,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
     /// <inheritdoc />
     public async Task EditAsync(Guid id, string version, EventInput input, CancellationToken cancellationToken = default)
     {
-        var normalized = Validate(input);
+        var normalized = Validate(input, requireLaterEnd: true);
         await MutateAsync(id, true, async (db, item, actor, now) =>
         {
             InputRules.Version(item, version);
@@ -154,7 +154,9 @@ public sealed class EventService : IEventService, IEventManagementQueries
             switch (item.Status, target)
             {
                 case (EventStatus.Draft, EventStatus.Active):
-                    Validate(new(item.Name, item.Description, item.DiscoverySummary, item.StartDate, item.EndDate, item.TimeZoneId));
+                    // Existing single-day Drafts retain their publication lifecycle; only configuration mutations require distinct dates.
+                    Validate(new(item.Name, item.Description, item.DiscoverySummary, item.StartDate, item.EndDate, item.TimeZoneId),
+                        requireLaterEnd: false);
                     EventTransactions.RequireEditable(item, now);
                     if (!await EligibleOwnerExistsAsync(db, id, null, cancellationToken).ConfigureAwait(false))
                         throw EventTransactions.Conflict("An eligible owner with individual membership is required.");
@@ -353,7 +355,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
                     ? MembershipRequestStatus.Rejected : row.Request.Status;
             result.Add(new(row.Request.Id, row.Event.Id,
                 member || EventTransactions.Effective(row.Event, now) == EventStatus.Active ? row.Event.Name : "Unavailable Event",
-                new(row.User.Id, row.User.DisplayName), status,
+                new(row.User.Id, row.User.DisplayName, row.User.Email), status,
                 status != row.Request.Status ? "The Event is no longer accepting requests." : row.Request.Reason, row.Request.CreatedUtc));
         }
         return new(result, total, page.Page, page.Limit);
@@ -378,7 +380,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
                     join user in db.Users on member.UserId equals user.Id
                     where member.EventId == eventId && (owner || member.Status == MembershipStatus.Active)
                     orderby user.DisplayName, user.Id
-                    select new MembershipSummary(new(user.Id, user.DisplayName), member.Status,
+                    select new MembershipSummary(new(user.Id, user.DisplayName, user.Email), member.Status,
                         db.EventOwners.Any(x => x.EventId == eventId && x.UserId == user.Id));
         return new(await query.Skip(offset).Take(page.Limit).ToListAsync(cancellationToken).ConfigureAwait(false),
             await query.CountAsync(cancellationToken).ConfigureAwait(false), page.Page, page.Limit);
@@ -508,7 +510,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
                 x.Status == MembershipStatus.Active, cancellationToken).ConfigureAwait(false);
             var active = EventTransactions.Effective(row.Event, now) == EventStatus.Active;
             result.Add(new(row.Invitation.Id, row.Event.Id, member || active ? row.Event.Name : "Unavailable Event",
-                new(row.User.Id, row.User.DisplayName), row.Invitation.Status == EventInvitationStatus.Pending &&
+                new(row.User.Id, row.User.DisplayName, row.User.Email), row.Invitation.Status == EventInvitationStatus.Pending &&
                 (!active || row.Invitation.ExpiresUtc <= now) ? EventInvitationStatus.Expired : row.Invitation.Status, row.Invitation.ExpiresUtc));
         }
         return new(result, total, page.Page, page.Limit);
@@ -814,7 +816,7 @@ public sealed class EventService : IEventService, IEventManagementQueries
                     join user in db.Users on recipient.UserId equals user.Id
                     where recipient.OperationId == operationId
                     orderby user.DisplayName, user.Id
-                    select new BulkRecipientSummary(new(user.Id, user.DisplayName), recipient.Status, recipient.Detail);
+                    select new BulkRecipientSummary(new(user.Id, user.DisplayName, user.Email), recipient.Status, recipient.Detail);
         return new(await query.Skip(offset).Take(page.Limit).ToListAsync(cancellationToken).ConfigureAwait(false),
             await query.CountAsync(cancellationToken).ConfigureAwait(false), page.Page, page.Limit);
     }
@@ -852,9 +854,11 @@ public sealed class EventService : IEventService, IEventManagementQueries
         return actor;
     }
 
-    private static EventInput Validate(EventInput input)
+    private static EventInput Validate(EventInput input, bool requireLaterEnd)
     {
         ArgumentNullException.ThrowIfNull(input);
+        if (requireLaterEnd && input.EndDate <= input.StartDate)
+            throw new DomainException(ErrorCode.Validation, "End date must be after start date.", "EndDate");
         var result = new EventInput(InputRules.Text(input.Name, "Name", 3, 120),
             InputRules.Text(input.Description, "Description", 0, 10000),
             InputRules.Text(input.DiscoverySummary, "DiscoverySummary", 0, 300),

@@ -72,12 +72,12 @@ internal static class ExperienceBrowserSupport
         var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
         await Expect(name).ToBeEditableAsync();
         await name.FillWhenActionableAsync($"Offline Event {Guid.NewGuid():N}");
-        var date = (day ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7))).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
-        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(date);
+        var start = day ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7));
+        await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         if (timeZoneId is not null)
-            await page.GetByRole(AriaRole.Textbox, new() { Name = "IANA time zone (for example Europe/Prague)", Exact = true }).FillWhenActionableAsync(timeZoneId);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft or changes", Exact = true }).ClickAsync();
+            await page.GetByRole(AriaRole.Combobox, new() { Name = "IANA time zone", Exact = true }).SelectOptionAsync(timeZoneId);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
         await page.GetByRole(AriaRole.Button, new() { Name = "Publish Event", Exact = true }).ClickAsync();
@@ -106,17 +106,30 @@ internal static class ExperienceBrowserSupport
     {
         try
         {
+            await SelectQuestActionAsync(page, action);
             var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-            await reason.FillWhenActionableAsync("Synthetic offline acceptance.");
+            if (action is "Cancel Quest" or "Revoke invitation" or "Remove attendee")
+                await reason.FillWhenActionableAsync("Synthetic offline acceptance.");
             await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
-            await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
-            await Expect(reason).ToHaveValueAsync("");
+            await page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true }).ClickAsync();
+            await Expect(page.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
+            await Expect(page.Locator(".management-confirmation")).ToHaveCountAsync(0);
         }
         catch (Exception error) when (error is PlaywrightException or TimeoutException)
         {
             await ReportConfirmationFailureAsync(page, action);
             throw;
         }
+    }
+
+    internal static async Task SelectQuestActionAsync(IPage page, string action)
+    {
+        if (await page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true }).CountAsync() > 0)
+            return;
+        if (action is "Cancel Quest" or "Delete draft")
+            await page.Locator("details.danger-zone > summary").ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = action, Exact = true }).ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true })).ToBeVisibleAsync();
     }
 
     private static async Task ReportConfirmationFailureAsync(IPage page, string action)
@@ -137,6 +150,9 @@ internal static class ExperienceBrowserSupport
     {
         // Use the bridge's serialized refresh path, rather than racing its automatic
         // refresh with a separate ticket issued directly through the storage module.
+        var options = page.Locator("[data-device-tools]");
+        if (await options.GetAttributeAsync("open") is null)
+            await options.Locator("summary").ClickAsync();
         var button = page.Locator("[data-refresh]");
         await Expect(button).ToBeEnabledAsync();
         var endpoint = new Uri(new Uri(page.Url), "/experience/joined-snapshot").AbsoluteUri;
