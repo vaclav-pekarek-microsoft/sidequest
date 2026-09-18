@@ -4,10 +4,10 @@
     <ValidationSummary />
     <fieldset class="section-box" disabled="@Busy">
         <legend class="section-heading">Quest details</legend>
-        <FluentTextField Label="Title" @bind-Value="model.Title" Disabled="@Busy" Required="true" />
-        <FluentTextArea Label="Description (plain text)" @bind-Value="model.Description" Disabled="@Busy" />
-        <FluentTextField Label="Location (required to publish)" @bind-Value="model.Location" Disabled="@Busy" />
-        <label>Suggested capacity <InputNumber @bind-Value="model.Capacity" /></label>
+        <FluentTextField Name="quest-title" Label="Title" @bind-Value="model.Title" Disabled="@Busy" Required="true" />
+        <FluentTextArea Name="quest-description" Label="Description (plain text)" @bind-Value="model.Description" Disabled="@Busy" />
+        <FluentTextField Name="quest-location" Label="Location (required to publish)" @bind-Value="model.Location" Disabled="@Busy" />
+        <label>Suggested capacity <InputNumber name="quest-capacity" @bind-Value="model.Capacity" /></label>
     </fieldset>
     <fieldset class="section-box" disabled="@Busy">
         <legend class="section-heading">When</legend>
@@ -22,7 +22,7 @@
     <fieldset class="section-box" disabled="@Busy">
         <legend class="section-heading">Who can see this Quest</legend>
         <label>Visibility
-            <InputSelect @bind-Value="model.Visibility" disabled="@Published">
+            <InputSelect name="quest-visibility" @bind-Value="model.Visibility" disabled="@Published">
                 <option value="@QuestVisibility.Public">Public within this Event</option>
                 <option value="@QuestVisibility.Private">Private, named Event members only</option>
             </InputSelect>

@@ -13,13 +13,16 @@
 </nav>
 <section class="section-box compact-filters" aria-label="Event filters">
     <label>Show
-        <InputSelect @bind-Value="kind" @bind-Value:after="FilterAsync" disabled="@Busy">
+        <InputSelect name="event-list-view" @bind-Value="kind" @bind-Value:after="FilterAsync" disabled="@Busy">
             <option value="@EventListKind.Mine">My Events</option>
             <option value="@EventListKind.Available">Available Events</option>
             <option value="@EventListKind.History">Event history</option>
         </InputSelect>
     </label>
-    <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
+    }
 </section>
 <h2>@(kind == EventListKind.Mine ? "My Events" : kind == EventListKind.Available ? "Available Events" : "Event history")</h2>
 <EventFeedback Busy="Busy" Error="@Error" />

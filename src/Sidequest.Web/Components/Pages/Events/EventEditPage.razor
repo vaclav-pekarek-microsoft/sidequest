@@ -10,7 +10,7 @@
 <h1>@(Id is null ? "Create Event" : "Edit Event")</h1>
 <nav class="page-actions" aria-label="Event editor actions">
     <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
-    @if (Id is not null)
+    @if (Id is not null && Error is not null)
     {
         <FluentButton Disabled="@Busy" OnClick="LoadAsync">Discard local form and reload</FluentButton>
     }

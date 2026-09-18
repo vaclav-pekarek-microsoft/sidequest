@@ -18,7 +18,7 @@
     <section class="section-box">
         <h2 class="section-heading">Parent Event</h2>
         <label>Active Event
-            <select @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+            <select name="quest-parent-event" @bind="selectedEvent" @bind:after="SelectEventAsync" disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
                 <option value="">Choose an Event</option>
                 @foreach (var item in events)
                 {

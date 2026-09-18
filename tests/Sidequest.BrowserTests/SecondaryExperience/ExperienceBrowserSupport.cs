@@ -43,6 +43,17 @@ internal static class ExperienceBrowserSupport
     internal static Task<IBrowserContext> WorkerContextAsync(FoundationBrowserFixture fixture) =>
         fixture.CreateContextAsync(width: 360, allowServiceWorkers: true);
 
+    internal static async Task AssertFieldIdentifiersAsync(IPage page)
+    {
+        var unidentified = await page.Locator("input, select, textarea").EvaluateAllAsync<string[]>("""
+            elements => elements
+                .filter(element => !['button', 'submit', 'reset', 'image'].includes(element.type))
+                .filter(element => !element.id.trim() && !(element.getAttribute('name') ?? '').trim())
+                .map(element => `${element.tagName}:${element.getAttribute('type') ?? ''}:${element.getRootNode().host?.tagName ?? 'document'}`)
+            """);
+        Assert.Empty(unidentified);
+    }
+
     internal static async Task<IPage> SignInAsync(IBrowserContext context, string persona = "Alice")
     {
         var page = await context.NewPageAsync();
@@ -71,12 +82,13 @@ internal static class ExperienceBrowserSupport
         await page.GotoAsync("/events/create");
         var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
         await Expect(name).ToBeEditableAsync();
+        await AssertFieldIdentifiersAsync(page);
         await name.FillWhenActionableAsync($"Offline Event {Guid.NewGuid():N}");
         var start = day ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7));
         await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         if (timeZoneId is not null)
-            await page.GetByRole(AriaRole.Combobox, new() { Name = "IANA time zone", Exact = true }).SelectOptionAsync(timeZoneId);
+            await page.GetByRole(AriaRole.Combobox, new() { Name = "Time zone", Exact = true }).SelectOptionAsync(timeZoneId);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);

@@ -82,10 +82,10 @@
             }
             @if (NeedsReason)
             {
-                <FluentTextArea Label="Reason (10–2000 characters)" @bind-Value="reason" @bind-Value:after="PublishDraftAsync" Immediate="true" Disabled="@Busy" />
+                <FluentTextArea Name="quest-management-reason" Label="Reason (10–2000 characters)" @bind-Value="reason" @bind-Value:after="PublishDraftAsync" Immediate="true" Disabled="@Busy" />
             }
             <label>
-                <input type="checkbox" @bind="confirmed" disabled="@Busy" />
+                <input name="quest-management-confirmation" type="checkbox" @bind="confirmed" disabled="@Busy" />
                 I confirm this action. @ConfirmationDescription
             </label>
             <FluentButton Disabled="@(NeedsPerson ? TargetDisabled : Disabled)" OnClick="@(() => SendAsync(CurrentAction))">

@@ -16,7 +16,10 @@
     <p role="alert">@Error</p>
 }
 <div class="actions page-actions">
-    <FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Refresh</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Refresh</FluentButton>
+    }
     <FluentButton OnClick="@(() => MarkAsync(null))" Disabled="@(ControlsDisabled || unread == 0)">Mark all read</FluentButton>
 </div>
 @if (Busy)

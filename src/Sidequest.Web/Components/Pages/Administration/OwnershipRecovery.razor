@@ -9,7 +9,10 @@
     <p>Recovery is limited to one supplied Event or Quest where every owner has verified departure evidence from the externally approved process. A Graph outage, absence, disabled flag or unanswered message is not proof.</p>
     <p>This screen cannot verify departure or disable accounts. Deployment operators must first enable an approved procedure. No title, description or private roster is disclosed.</p>
     <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
-    <FluentButton OnClick="CheckAccessAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="CheckAccessAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    }
     @if (authorized && !Forbidden)
     {
         <fieldset class="section-box" disabled="@Disabled">

@@ -16,13 +16,13 @@
     {
         <label>
             Upload cover
-            <InputFile OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp"
+            <InputFile name="quest-cover" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp"
                        disabled="@Disabled" aria-describedby="@helpId" />
         </label>
     }
     else
     {
-        <label>Upload cover <input type="file" disabled aria-describedby="@helpId" /></label>
+        <label>Upload cover <input name="quest-cover" type="file" disabled aria-describedby="@helpId" /></label>
         @if (!RendererInfo.IsInteractive)
         {
             <p>Connecting to enable cover changes…</p>

@@ -25,8 +25,8 @@
                 {
                     <p role="status">Cancellation currently affects @count Draft, Active, or Suspended child Quests. Counts may change while you review.</p>
                 }
-                <FluentTextArea Label="Cancellation reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
-                <FluentCheckbox @bind-Value="confirmed" Disabled="@Busy">Cancel all Draft, Active, and Suspended child Quests, close pending membership work, and withdraw affected calendars. This cannot be undone.</FluentCheckbox>
+                <FluentTextArea Name="event-cancellation-reason" Label="Cancellation reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
+                <FluentCheckbox Name="event-cancellation-confirmation" @bind-Value="confirmed" Disabled="@Busy">Cancel all Draft, Active, and Suspended child Quests, close pending membership work, and withdraw affected calendars. This cannot be undone.</FluentCheckbox>
                 <FluentButton Disabled="@(Busy || affectedQuests is null || !confirmed || reason.Trim().Length < 10)" OnClick="@(() => TransitionAsync(EventStatus.Cancelled))">Cancel Event and affected Quests</FluentButton>
             </fieldset>
         }
@@ -46,7 +46,7 @@
         {
             <fieldset id="event-deletion" class="section-box danger-zone" disabled="@Busy">
                 <legend>Delete unpublished Draft</legend>
-                <FluentCheckbox @bind-Value="deleteConfirmed" Disabled="@Busy">Permanently delete this unpublished Draft. Deletion is allowed only without requests, invitations, or Quests.</FluentCheckbox>
+                <FluentCheckbox Name="event-deletion-confirmation" @bind-Value="deleteConfirmed" Disabled="@Busy">Permanently delete this unpublished Draft. Deletion is allowed only without requests, invitations, or Quests.</FluentCheckbox>
                 <FluentButton Disabled="@(Busy || !deleteConfirmed)" OnClick="DeleteAsync">Delete Draft</FluentButton>
             </fieldset>
         }

@@ -13,6 +13,35 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
 {
     private const string EventZone = "America/New_York";
 
+    /// <summary>Browser-native and Fluent shadow inputs expose identifiers, while healthy lists and editors omit routine reload actions.</summary>
+    /// <returns>Completion after real Home, Event, Quest and notification preference controls are inspected in hosted Chromium.</returns>
+    [Fact]
+    public async Task HealthyPagesHideReloadAndAllFormFieldsHaveIdentifiers()
+    {
+        await using var context = await fixture.CreateContextAsync();
+        var page = await ExperienceBrowserSupport.SignInAsync(context);
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+        await page.GotoAsync("/events");
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "History", Exact = true })).ToBeEnabledAsync();
+        await Expect(page.GetByRole(AriaRole.Button, new() { NameRegex = new("Reload", RegexOptions.IgnoreCase) })).ToHaveCountAsync(0);
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+        var eventId = await ExperienceBrowserSupport.CreateEventAsync(page);
+        await Expect(page.GetByRole(AriaRole.Button, new() { NameRegex = new("Reload", RegexOptions.IgnoreCase) })).ToHaveCountAsync(0);
+        await page.GotoAsync($"/events/{eventId}/edit");
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true })).ToBeEnabledAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+        await Expect(page.GetByRole(AriaRole.Button, new() { NameRegex = new("reload", RegexOptions.IgnoreCase) })).ToHaveCountAsync(0);
+        await page.GotoAsync($"/quests/create?eventId={eventId}");
+        await Expect(page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true })).ToBeEditableAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+        await page.GotoAsync($"/notifications/preferences/{eventId}");
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Save preferences", Exact = true })).ToBeEnabledAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+        await page.GotoAsync("/quests");
+        await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToBeEnabledAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
+    }
+
     /// <summary>A same-Event-day Quest retains its inherited zone while its UTC instants and device-local display cross into the next date.</summary>
     /// <param name="month">January or July in the next calendar year, covering standard and daylight offsets without ambiguous local inputs.</param>
     /// <param name="utcStartHour">The exact next-day UTC hour corresponding to 20:30 in the Event zone.</param>
@@ -38,6 +67,7 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
         await page.GotoAsync($"/quests/create?eventId={eventId}");
         var title = page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true });
         await Expect(title).ToBeEditableAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
         await AssertInheritedZoneAsync(page);
         await QuestCreationDiagnostics.ObserveAsync(page, title, async () =>
         {
@@ -63,6 +93,7 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
 
         await page.GotoAsync($"/quests/{questId}/edit");
         await Expect(page.GetByRole(AriaRole.Textbox, new() { Name = "Title", Exact = true })).ToBeEditableAsync();
+        await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
         await AssertInheritedZoneAsync(page);
         await Expect(page.GetByLabel("Starts in Event zone", new() { Exact = true })).ToHaveValueAsync($"{date}T20:30");
         await Expect(page.GetByLabel("Ends in Event zone", new() { Exact = true })).ToHaveValueAsync($"{date}T21:30");
