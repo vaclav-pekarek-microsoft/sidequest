@@ -1,0 +1,38 @@
+.event-filters {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: .75rem 1rem;
+    margin-block: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: .85rem;
+    background: var(--neutral-layer-1, #fff);
+}
+
+.event-filters legend {
+    padding-inline: .35rem;
+    font-weight: 700;
+}
+
+.event-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .55rem;
+}
+
+.event-filter-actions button {
+    padding: .55rem .85rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: 999px;
+    background: var(--neutral-layer-1, #fff);
+    color: inherit;
+    font-weight: 650;
+}
+
+.event-filter-actions button.selected {
+    border-color: var(--accent-fill-rest, #0f6cbd);
+    background: var(--accent-fill-rest, #0f6cbd);
+    color: var(--foreground-on-accent-rest, #fff);
+}
