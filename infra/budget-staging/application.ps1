@@ -221,6 +221,15 @@ function Publish-SidequestApplication {
         $manifest.sha256 -cne (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash) {
         throw 'The publish artifact does not match its accepted source/hash manifest.'
     }
+    $configuration = Invoke-SidequestStagingAzure @('webapp', 'config', 'show',
+        '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
+    $settings = @(Invoke-SidequestStagingAzure @('webapp', 'config', 'appsettings', 'list',
+        '--resource-group', $script:ResourceGroup, '--name', $ApplicationName))
+    $package = @($settings | Where-Object { $_.name -ceq 'WEBSITE_RUN_FROM_PACKAGE' })
+    if ($configuration.appCommandLine -cne 'dotnet /home/site/wwwroot/Sidequest.Web.dll' -or
+        $package.Count -ne 1 -or $package[0].value -cne '1') {
+        throw 'Immutable local-package hosting and the read-only-compatible startup command are required.'
+    }
     $references = Invoke-SidequestStagingAzure @('rest', '--method', 'get', '--url',
         "$path/config/configreferences/appsettings?api-version=2022-03-01")
     if ($references.nextLink) { throw 'Credential reference status is incomplete.' }
