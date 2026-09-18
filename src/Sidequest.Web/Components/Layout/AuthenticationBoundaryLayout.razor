@@ -1,3 +1,10 @@
 @inherits LayoutComponentBase
+@inject FoundationAuthenticationSettings Authentication
+@using Sidequest.Web.Components.Experience
 
+@if (Authentication.IsDevelopment)
+{
+    <ConnectionStatus @rendermode="InteractiveServer" />
+    <p data-authentication-warning role="alert" hidden></p>
+}
 <main class="authentication-boundary">@Body</main>
