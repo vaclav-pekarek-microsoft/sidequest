@@ -139,6 +139,49 @@ test("Registration includes only the accepted localhost HTTPS sign-in and sign-o
     ]);
 });
 
+test("Registration enables the existing ID-token form-post flow without implicit access tokens", () => {
+    const result = ps(`
+        function Assert-SidequestApplicationSource { }
+        function az { throw 'Azure must not be contacted' }
+        function gh { throw 'GitHub must not be contacted' }
+        $script:created = $null
+        function Invoke-SidequestPrivateRequest {
+            param($Method, [uri] $Uri, $Audience, $Body)
+            if ($Method -ceq 'GET' -and $Uri.AbsolutePath -ceq '/v1.0/me') {
+                return @{ id = '1250fe10-b814-4735-801f-ea5a0a4c1219' }
+            }
+            if ($Method -ceq 'GET' -and $Uri.AbsolutePath -ceq '/v1.0/applications') {
+                return @{ value = @() }
+            }
+            if ($Method -ceq 'GET' -and $Uri.AbsolutePath -ceq '/v1.0/servicePrincipals') {
+                return @{ value = @(@{ id = 'graph'; appRoles = @(
+                    @{ id = 'user-read'; value = 'User.Read.All'; isEnabled = $true; allowedMemberTypes = @('Application') },
+                    @{ id = 'group-read'; value = 'GroupMember.Read.All'; isEnabled = $true; allowedMemberTypes = @('Application') }
+                ) }) }
+            }
+            if ($Method -ceq 'POST' -and $Uri.AbsolutePath -ceq '/v1.0/applications') {
+                $script:created = $Body
+                return @{ appId = 'client'; id = 'application' }
+            }
+            if ($Method -ceq 'POST' -and $Uri.AbsolutePath -ceq '/v1.0/servicePrincipals') {
+                if ($Body.appRoleAssignmentRequired -ne $true) { throw 'Assignment is required' }
+                return @{ id = 'service' }
+            }
+            if ($Method -ceq 'POST' -and $Uri.AbsolutePath -match '^/v1.0/servicePrincipals/service/appRoleAssign') {
+                return @{}
+            }
+            throw 'Unexpected identity operation'
+        }
+        $null = New-SidequestHackathonRegistration -SourceCommit accepted-source -ApplicationUrl https://sidequest-hackathon-b7ljjkoqcaedc.azurewebsites.net/ -ReadOnlyGraphConsentApproved
+        if ($script:created.signInAudience -cne 'AzureADMyOrg' -or
+            $script:created.web.implicitGrantSettings.enableIdTokenIssuance -ne $true -or
+            $script:created.web.implicitGrantSettings.enableAccessTokenIssuance -ne $false) {
+            throw 'Registration does not match the ID-token-only sign-in contract'
+        }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+});
+
 const requestFailures = [
     ["HTTP 503", `
         $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::ServiceUnavailable)
@@ -164,6 +207,7 @@ const publishHarness = `
     $script:deploys = 0
     $script:lifecycle = [Collections.Generic.List[string]]::new()
     $script:deploymentFails = $false
+    $script:restartFails = $false
     $script:referenceResponse = [pscustomobject]@{
         nextLink = $null
         value = @(
@@ -177,11 +221,16 @@ const publishHarness = `
         if ($Arguments -contains 'stop') { $script:lifecycle.Add('stop'); $script:stops++; return }
         if ($Arguments -contains 'properties.enabled=true') { $script:lifecycle.Add('enable'); return }
         if ($Arguments -contains 'start') { $script:lifecycle.Add('start'); return }
+        if ($Arguments -contains 'restart') {
+            $script:lifecycle.Add('restart')
+            if ($script:restartFails) { throw [InvalidOperationException]::new('restart-failed-sentinel') }
+            return
+        }
         if ($Arguments -contains 'deploy') {
             $script:lifecycle.Add('deploy')
             $script:deploys++
-            if (($Arguments -join ' ') -notmatch '--restart true --track-status false') {
-                throw 'Deployment must restart the artifact and leave readiness tracking to the bounded application probe'
+            if (($Arguments -join ' ') -notmatch '--restart false --track-status false') {
+                throw 'Deployment must leave explicit restart and bounded readiness to the application helper'
             }
             if ($script:deploymentFails) { throw [InvalidOperationException]::new('deployment-failed-sentinel') }
             return
@@ -204,7 +253,7 @@ test("Publishing enables SCM before upload and restarts only the validated artif
     const result = ps(`${publishHarness}
         function Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
         $result = ${publishInvocation}
-        if (($script:lifecycle -join ',') -cne 'enable,start,deploy' -or $result.readiness -cne 'Healthy') {
+        if (($script:lifecycle -join ',') -cne 'enable,start,deploy,restart' -or $result.readiness -cne 'Healthy') {
             throw 'Incorrect stopped-site deployment sequence'
         }
     `);
@@ -223,6 +272,23 @@ test("Deployment failure after enabling SCM stops the host before readiness prob
         if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,start,deploy,stop' -or
             $script:stops -ne 1 -or $script:attempts -ne 0) {
             throw 'Failed deployment did not close the activated hosting boundary'
+        }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+});
+
+test("Explicit restart failure stops the host before old-process readiness can be accepted", () => {
+    const result = ps(`${publishHarness}
+        $script:restartFails = $true
+        $caught = $false
+        try { $null = ${publishInvocation} }
+        catch {
+            if ($_.Exception.Message -cne 'restart-failed-sentinel') { throw }
+            $caught = $true
+        }
+        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,start,deploy,restart,stop' -or
+            $script:stops -ne 1 -or $script:attempts -ne 0) {
+            throw 'Failed restart reached readiness or left hosting enabled'
         }
     `);
     assert.equal(result.status, 0, result.stderr);
