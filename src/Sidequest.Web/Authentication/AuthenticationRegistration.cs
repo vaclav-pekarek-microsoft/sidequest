@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Identity.Web;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Sidequest.Domain.Rules;
 
 namespace Sidequest.Web.Authentication;
@@ -15,7 +16,8 @@ public static class AuthenticationRegistration
     /// <param name="settings">Authentication settings already validated for the host environment.</param>
     /// <param name="configuration">Configuration containing the Entra registration when Entra mode is selected.</param>
     /// <returns>The same service collection for further registration.</returns>
-    /// <remarks>Tokens are not saved in cookies. Cookies have a one-hour non-sliding lifetime.</remarks>
+    /// <remarks>Tokens are not saved in cookies. Cookies have a one-hour non-sliding lifetime.
+    /// Entra option resolution rejects token handlers that cannot preserve the raw admission claim names.</remarks>
     /// <example>
     /// <code>
     /// var settings = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
@@ -39,6 +41,10 @@ public static class AuthenticationRegistration
             services.PostConfigure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, options =>
             {
                 options.MapInboundClaims = false;
+                // Microsoft.Identity.Web replaces the default handler; the option flag does not update its replacement.
+                if (options.TokenHandler is not JsonWebTokenHandler tokenHandler)
+                    throw new InvalidOperationException("Entra sign-in requires a JSON token handler with unmapped admission claims.");
+                tokenHandler.MapInboundClaims = false;
                 options.TokenValidationParameters.NameClaimType = "name";
                 options.TokenValidationParameters.RoleClaimType = "roles";
                 options.SaveTokens = false;
