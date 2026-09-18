@@ -278,15 +278,35 @@ using the live GET `config/configreferences/appsettings` collection contract
 (`2022-03-01`); missing, duplicate, unresolved or paginated required-reference
 evidence blocks deployment before activation.
 It uses Entra-authenticated deployment without enabling basic SCM authentication.
-After all preflight checks and explicit activation acknowledgement, it enables/starts
-the site before upload: a disabled site also rejects SCM with HTTP 403. It uploads
-with CLI restart/runtime tracking disabled, explicitly calls the App Service
-restart API, then owns the bounded SQL-backed readiness probe itself. A completed
-upload alone can leave the prior process serving healthy responses; the explicit
-restart is required before checking the new application. Upload, activation or readiness failure stops
+After all preflight checks and explicit activation acknowledgement, it enables
+the site, then stops the application process before upload: a disabled site rejects
+SCM with HTTP 403, whereas a stopped, enabled site permits deployment. This
+single-instance deployment has a maintenance interruption.
+
+The helper sends the ZIP to **`POST /api/zipdeploy?isAsync=true`**, using an
+in-memory Entra management token scoped to the approved tenant/subscription.
+SCM redirects are refused. It requires HTTP 202 and a same-origin deployment
+status URL, then polls at most 24 times (15-second request timeout, five seconds
+between incomplete results). Upload has a 180-second timeout. Only terminal
+successful completion permits the next step.
+
+Do **not** substitute `az webapp deploy --type zip`: on this Linux Kudu host,
+OneDeploy selects its rsync builder before checking local-package mode. The live
+attempt never created `SitePackages` and returned HTTP 502. ZipDeploy selects
+the package-aware path instead. After completion, a bounded SCM command uses
+the host's `python3` to read `/home/data/SitePackages/packagename.txt` and stream-hash
+that exact ZIP; the hash must match the accepted local manifest. Missing package
+state, unavailable hashing or a hash mismatch blocks activation. The returned
+evidence includes deployment ID, package filename and SHA256.
+
+Only then does the helper explicitly start the stopped application and check
+SQL-backed readiness. This stop/start boundary prevents an old healthy process
+from satisfying the new release's readiness gate. Upload, activation or readiness failure stops
 the host; the initial infrastructure deployment still leaves it disabled.
 See [App Service run from package](https://learn.microsoft.com/azure/app-service/deploy-run-package)
-for the atomic content-mount contract.
+for the atomic content-mount contract and
+[KuduLite's builder selection](https://github.com/Azure-App-Service/KuduLite/blob/master/Kudu.Core/Deployment/Generator/SiteBuilderFactory.cs)
+for the OneDeploy/package-mode distinction.
 The manifest proves only the owner's asserted source-to-artifact association;
 use the clean accepted build command and retain its successful output.
 Do not call the acknowledgement “CI attestation”.

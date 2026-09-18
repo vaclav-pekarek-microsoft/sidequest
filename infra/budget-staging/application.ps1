@@ -189,13 +189,101 @@ function Set-SidequestApplicationFirewall {
     }
 }
 
+function Publish-SidequestImmutablePackage {
+    <#
+    .SYNOPSIS
+    Uses package-aware Kudu ZipDeploy and verifies the selected remote ZIP before host activation.
+    .DESCRIPTION
+    Entra credentials stay in memory and are sent only to the application's native SCM endpoint.
+    Upload and polling are bounded. Neither deployment response bodies nor tokens enter failure diagnostics.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $ApplicationName,
+        [Parameter(Mandatory)] [string] $ZipPath,
+        [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{64}$')] [string] $Sha256
+    )
+    $ErrorActionPreference = 'Stop'
+    $null = Get-SidequestApplicationPath $ApplicationName
+    $scm = "https://$ApplicationName.scm.azurewebsites.net"
+    $token = $null
+    $authentication = $null
+    $stage = 'token-acquisition'
+    try {
+        $token = Invoke-SidequestStagingAzure @('account', 'get-access-token', '--resource', 'https://management.azure.com/')
+        $stage = 'token-scope'
+        if ($token.tenant -cne $script:Tenant -or $token.subscription -cne $script:Subscription) {
+            throw 'The SCM token must match the approved tenant and subscription.'
+        }
+        $authentication = @{
+            Authentication = 'Bearer'
+            Token = ConvertTo-SecureString $token.accessToken -AsPlainText -Force
+            MaximumRedirection = 0
+            ErrorAction = 'Stop'
+        }
+        $stage = 'zip-upload'
+        $upload = Invoke-WebRequest @authentication -Method Post -Uri "$scm/api/zipdeploy?isAsync=true" `
+            -InFile $ZipPath -ContentType 'application/octet-stream' -TimeoutSec 180
+        $stage = 'deployment-location'
+        $locations = @($upload.Headers.Location)
+        $location = $null
+        if ($upload.StatusCode -ne 202 -or $locations.Count -ne 1 -or
+            -not [uri]::TryCreate($locations[0], [UriKind]::Absolute, [ref] $location) -or
+            $location.GetLeftPart([UriPartial]::Authority) -cne $scm -or
+            $location.UserInfo -or $location.Fragment -or
+            $location.AbsolutePath -cnotmatch '^/api/deployments/(latest|[0-9a-f-]+)$') {
+            throw 'ZipDeploy must return one same-origin deployment status endpoint.'
+        }
+        $stage = 'deployment-completion'
+        $complete = $false
+        for ($attempt = 0; $attempt -lt 24; $attempt++) {
+            $deployment = Invoke-RestMethod @authentication -Method Get -Uri $location -TimeoutSec 15
+            if ($deployment.status -eq 3) { throw 'ZipDeploy reported failure.' }
+            if ($deployment.complete -eq $true) {
+                if ($deployment.status -ne 4) { throw 'ZipDeploy did not report successful completion.' }
+                $complete = $true
+                break
+            }
+            if ($attempt -lt 23) { Start-Sleep -Seconds 5 }
+        }
+        if (-not $complete) { throw 'ZipDeploy did not complete within the bounded polling window.' }
+
+        $stage = 'package-verification'
+        $command = 'python3 -c "' + (@(
+            'import pathlib,hashlib,json'
+            "p=pathlib.Path('/home/data/SitePackages')"
+            "n=(p/'packagename.txt').read_text().strip()"
+            'q=p/n'
+            'assert q.resolve().parent==p.resolve()'
+            'h=hashlib.sha256()'
+            "f=q.open('rb')"
+            "[h.update(b) for b in iter(lambda:f.read(1048576),b'')]"
+            'f.close()'
+            "print(json.dumps({'package':n,'sha256':h.hexdigest()}))"
+        ) -join '; ') + '"'
+        $verification = Invoke-RestMethod @authentication -Method Post -Uri "$scm/api/command" `
+            -ContentType 'application/json' -Body (@{ command = $command; dir = '/home' } | ConvertTo-Json) -TimeoutSec 60
+        if ($verification.ExitCode -ne 0) { throw 'The selected immutable package could not be read.' }
+        $actual = $verification.Output | ConvertFrom-Json
+        if ($actual.package -cnotmatch '^[a-zA-Z0-9_-]+\.zip$' -or $actual.sha256 -ine $Sha256) {
+            throw 'The selected remote package does not match the accepted artifact.'
+        }
+        return @{ deploymentId = $deployment.id; package = $actual.package; sha256 = $Sha256 }
+    } catch {
+        $failure = Get-SidequestSafeRequestFailure $_.Exception
+        throw [InvalidOperationException]::new("Immutable package deployment failed ($stage; $failure).")
+    } finally {
+        if ($null -ne $authentication) { $authentication.Token.Dispose() }
+        $token = $null
+    }
+}
+
 function Publish-SidequestApplication {
     <#
     .SYNOPSIS
     Publishes a source-attested self-contained ZIP only after explicit operator identity/provider checks.
     .DESCRIPTION
     Requires a JSON manifest containing sourceCommit and sha256; it must accompany the accepted build.
-    Checks both Key Vault references are resolved, then deploys with Entra CLI authentication (SCM basic auth remains off).
+    Checks both Key Vault references are resolved, then deploys with Entra-authenticated ZipDeploy (SCM basic auth remains off).
     Activation requires an explicit gate acknowledgement. A failed readiness check stops the app; no migration runs.
     The acknowledgement is owner evidence, not automated proof of Graph consent or recipient delivery.
     #>
@@ -242,11 +330,9 @@ function Publish-SidequestApplication {
     try {
         $null = Invoke-SidequestStagingAzure @('resource', 'update', '--ids',
             $path.Replace('https://management.azure.com', ''), '--set', 'properties.enabled=true', '--api-version', '2024-04-01')
+        $null = Invoke-SidequestStagingAzure @('webapp', 'stop', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
+        $published = Publish-SidequestImmutablePackage -ApplicationName $ApplicationName -ZipPath $ZipPath -Sha256 $manifest.sha256
         $null = Invoke-SidequestStagingAzure @('webapp', 'start', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
-        $null = Invoke-SidequestStagingAzure @('webapp', 'deploy', '--resource-group', $script:ResourceGroup,
-            '--name', $ApplicationName, '--src-path', $ZipPath, '--type', 'zip',
-            '--restart', 'false', '--track-status', 'false')
-        $null = Invoke-SidequestStagingAzure @('webapp', 'restart', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
         $ready = $false
         for ($attempt = 0; $attempt -lt 18; $attempt++) {
             try {
@@ -261,7 +347,10 @@ function Publish-SidequestApplication {
             Start-Sleep -Seconds 10
         }
         if (-not $ready) { throw 'SQL-backed readiness did not become healthy; the host will be stopped.' }
-        return @{ application = $ApplicationName; readiness = 'Healthy'; sourceCommit = $SourceCommit }
+        return @{
+            application = $ApplicationName; readiness = 'Healthy'; sourceCommit = $SourceCommit
+            deploymentId = $published.deploymentId; package = $published.package; sha256 = $published.sha256
+        }
     } catch {
         $null = Invoke-SidequestStagingAzure @('webapp', 'stop', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
         throw
