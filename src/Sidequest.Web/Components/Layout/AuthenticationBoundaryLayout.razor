@@ -1,10 +1,17 @@
 @inherits LayoutComponentBase
 @inject FoundationAuthenticationSettings Authentication
+@inject NavigationManager Navigation
 @using Sidequest.Web.Components.Experience
 
-@if (Authentication.IsDevelopment)
+@if (IsDevelopmentSignIn)
 {
     <ConnectionStatus @rendermode="InteractiveServer" />
     <p data-authentication-warning role="alert" hidden></p>
 }
 <main class="authentication-boundary">@Body</main>
+
+@code {
+    private bool IsDevelopmentSignIn =>
+        Authentication.IsDevelopment &&
+        string.Equals(new Uri(Navigation.Uri).AbsolutePath, "/signin", StringComparison.OrdinalIgnoreCase);
+}
