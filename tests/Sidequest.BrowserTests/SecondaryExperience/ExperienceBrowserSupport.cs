@@ -108,7 +108,7 @@ internal static class ExperienceBrowserSupport
         {
             await SelectQuestActionAsync(page, action);
             var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-            if (await reason.CountAsync() > 0)
+            if (action is "Cancel Quest" or "Revoke invitation" or "Remove attendee")
                 await reason.FillWhenActionableAsync("Synthetic offline acceptance.");
             await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true }).ClickAsync();

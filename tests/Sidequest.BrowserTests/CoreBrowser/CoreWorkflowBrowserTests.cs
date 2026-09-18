@@ -637,17 +637,18 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     private static async Task ConfirmQuestActionAsync(IPage page, string action)
     {
         var moderation = action is "Suspend" or "Reinstate with latest details";
+        var needsReason = moderation || action is "Cancel Quest" or "Revoke invitation" or "Remove attendee";
         if (!moderation)
             await SelectQuestActionAsync(page, action);
         var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
-        if (await reason.CountAsync() > 0)
+        if (needsReason)
             await QuestConfirmationDiagnostics.ObserveAsync(page, reason, action, ConfirmAsync);
         else
             await ConfirmAsync();
 
         async Task ConfirmAsync()
         {
-            if (await reason.CountAsync() > 0)
+            if (needsReason)
                 await reason.FillWhenActionableAsync("Browser acceptance action.");
             await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = moderation ? action : $"Confirm: {action}", Exact = true }).ClickAsync();
