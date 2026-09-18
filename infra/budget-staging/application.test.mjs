@@ -199,6 +199,178 @@ const requestFailures = [
     ["web timeout", "throw [Net.WebException]::new('private-message-sentinel', [Net.WebExceptionStatus]::Timeout)", "category=timeout"]
 ];
 
+const packageInvocation = "Publish-SidequestImmutablePackage -ApplicationName sidequest-hackathon-b7ljjkoqcaedc -ZipPath accepted.zip -Sha256 ('A' * 64)";
+const packageHarness = `
+    function az { throw 'Live Azure must not be contacted' }
+    $script:scm = 'https://sidequest-hackathon-b7ljjkoqcaedc.scm.azurewebsites.net'
+    $script:token = @{
+        tenant = '99e674a6-6773-4f53-90a3-e3ab8c37c856'
+        subscription = 'b75472bd-4174-4f66-b159-bae420212abc'
+        accessToken = 'private-token-sentinel'
+    }
+    $script:upload = @{ StatusCode = 202; Headers = @{ Location = @("$script:scm/api/deployments/latest?deployer=Push-Deployer&time=accepted") } }
+    $script:status = 4
+    $script:complete = $true
+    $script:pending = 0
+    $script:polls = 0
+    $script:sleeps = 0
+    $script:calls = [Collections.Generic.List[string]]::new()
+    $script:verification = @{
+        ExitCode = 0
+        Output = (@{ package = '20260918083317.zip'; sha256 = ('a' * 64) } | ConvertTo-Json)
+    }
+    function Start-Sleep {
+        param($Seconds)
+        if ($Seconds -ne 5) { throw 'Incorrect deployment polling delay' }
+        $script:sleeps++
+    }
+    function Invoke-SidequestStagingAzure {
+        param([string[]] $Arguments)
+        if (($Arguments -join ' ') -cne 'account get-access-token --resource https://management.azure.com/') {
+            throw 'Unexpected Azure operation or token audience'
+        }
+        return $script:token
+    }
+    function Assert-ScmRequest {
+        param($Authentication, $Token, $MaximumRedirection)
+        if ($Authentication -cne 'Bearer' -or $Token -isnot [Security.SecureString] -or
+            (ConvertFrom-SecureString $Token -AsPlainText) -cne 'private-token-sentinel' -or $MaximumRedirection -ne 0) {
+            throw 'SCM requests must use secure in-memory Entra authentication without redirects'
+        }
+    }
+    function Invoke-WebRequest {
+        param($Authentication, $Token, $MaximumRedirection, $Method, $Uri, $InFile, $ContentType, $TimeoutSec, $ErrorAction)
+        Assert-ScmRequest $Authentication $Token $MaximumRedirection
+        if ($Method -cne 'Post' -or $Uri -cne "$script:scm/api/zipdeploy?isAsync=true" -or
+            $InFile -cne 'accepted.zip' -or $ContentType -cne 'application/octet-stream' -or $TimeoutSec -ne 180) {
+            throw 'Upload must use the accepted ZIP and asynchronous package-aware endpoint'
+        }
+        $script:calls.Add('upload')
+        return $script:upload
+    }
+    function Invoke-RestMethod {
+        param($Authentication, $Token, $MaximumRedirection, $Method, $Uri, $Body, $ContentType, $TimeoutSec, $ErrorAction)
+        Assert-ScmRequest $Authentication $Token $MaximumRedirection
+        if ($Method -ceq 'Get' -and $Uri -eq $script:upload.Headers.Location[0] -and $TimeoutSec -eq 15) {
+            $script:calls.Add('poll')
+            $script:polls++
+            if ($script:polls -le $script:pending) { return @{ id = 'deployment'; status = 1; complete = $false } }
+            return @{ id = 'deployment'; status = $script:status; complete = $script:complete }
+        }
+        if ($Method -ceq 'Post' -and $Uri -ceq "$script:scm/api/command" -and $TimeoutSec -eq 60 -and $ContentType -ceq 'application/json') {
+            $payload = $Body | ConvertFrom-Json
+            if ($payload.dir -cne '/home' -or $payload.command -notmatch 'packagename.txt' -or
+                $payload.command -notmatch 'hashlib.sha256' -or $payload.command -notmatch 'q.resolve\\(\\).parent==p.resolve\\(\\)') {
+                throw 'Remote evidence must hash the safely resolved active package marker'
+            }
+            $script:calls.Add('verify')
+            return $script:verification
+        }
+        throw 'Unexpected SCM request'
+    }
+`;
+
+test("ZipDeploy waits for terminal success and returns the verified active package hash", () => {
+    const result = ps(`${packageHarness}
+        $script:pending = 1
+        $result = ${packageInvocation}
+        if (($script:calls -join ',') -cne 'upload,poll,poll,verify' -or $script:sleeps -ne 1 -or
+            $result.deploymentId -cne 'deployment' -or $result.package -cne '20260918083317.zip' -or $result.sha256 -cne ('A' * 64)) {
+            throw 'Premature or incorrect immutable deployment evidence'
+        }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+});
+
+for (const field of ["tenant", "subscription"]) {
+    test(`ZipDeploy rejects a different ${field} before sending credentials`, () => {
+        const result = ps(`${packageHarness}
+            $script:token.${field} = 'unapproved'
+            $caught = $false
+            try { $null = ${packageInvocation} }
+            catch { if ($_.Exception.Message -notmatch 'token-scope') { throw }; $caught = $true }
+            if (-not $caught -or $script:calls.Count -ne 0) { throw 'Unapproved credentials reached SCM' }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stdout + result.stderr, /private-token-sentinel/);
+    });
+}
+
+for (const [name, mutation] of [
+    ["non-accepted upload", "$script:upload.StatusCode = 200"],
+    ["multiple status URLs", "$script:upload.Headers.Location += $script:upload.Headers.Location[0]"],
+    ["insecure status URL", "$script:upload.Headers.Location = @('http://sidequest-hackathon-b7ljjkoqcaedc.scm.azurewebsites.net/api/deployments/latest')"],
+    ["cross-host status URL", "$script:upload.Headers.Location = @('https://other.invalid/api/deployments/latest')"],
+    ["wrong port", "$script:upload.Headers.Location = @('https://sidequest-hackathon-b7ljjkoqcaedc.scm.azurewebsites.net:444/api/deployments/latest')"],
+    ["userinfo", "$script:upload.Headers.Location = @('https://user@sidequest-hackathon-b7ljjkoqcaedc.scm.azurewebsites.net/api/deployments/latest')"],
+    ["fragment", '$script:upload.Headers.Location = @("$script:scm/api/deployments/latest#fragment")'],
+    ["non-deployment path", '$script:upload.Headers.Location = @("$script:scm/api/command")']
+]) {
+    test(`ZipDeploy rejects ${name} before credential-bearing polling`, () => {
+        const result = ps(`${packageHarness}
+            ${mutation}
+            $caught = $false
+            try { $null = ${packageInvocation} }
+            catch { if ($_.Exception.Message -notmatch 'deployment-location') { throw }; $caught = $true }
+            if (-not $caught -or ($script:calls -join ',') -cne 'upload') { throw 'Untrusted deployment response reached polling' }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+    });
+}
+
+for (const [name, mutation, polls, sleeps] of [
+    ["failed deployment", "$script:status = 3; $script:complete = $false", 1, 0],
+    ["invalid terminal state", "$script:status = 1", 1, 0],
+    ["incomplete deployment", "$script:complete = $false", 24, 23]
+]) {
+    test(`ZipDeploy rejects ${name} without accepting package evidence`, () => {
+        const result = ps(`${packageHarness}
+            ${mutation}
+            $caught = $false
+            try { $null = ${packageInvocation} }
+            catch { if ($_.Exception.Message -notmatch 'deployment-completion') { throw }; $caught = $true }
+            if (-not $caught -or $script:polls -ne ${polls} -or $script:sleeps -ne ${sleeps} -or $script:calls.Contains('verify')) {
+                throw 'Incomplete or failed deployment passed its bounded completion gate'
+            }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+    });
+}
+
+for (const [name, mutation] of [
+    ["missing package marker", "$script:verification.ExitCode = 1"],
+    ["different active ZIP", "$script:verification.Output = (@{package='20260918083317.zip';sha256=('B'*64)} | ConvertTo-Json)"],
+    ["invalid package filename", "$script:verification.Output = (@{package='../outside.zip';sha256=('A'*64)} | ConvertTo-Json)"],
+    ["malformed remote evidence", "$script:verification.Output = 'private-body-sentinel'"]
+]) {
+    test(`ZipDeploy rejects ${name} instead of reporting upload success`, () => {
+        const result = ps(`${packageHarness}
+            ${mutation}
+            $caught = $false
+            try { $null = ${packageInvocation} }
+            catch { if ($_.Exception.Message -notmatch 'package-verification') { throw }; $caught = $true }
+            if (-not $caught -or ($script:calls -join ',') -cne 'upload,poll,verify') { throw 'Invalid remote evidence was accepted' }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stdout + result.stderr, /private-body-sentinel/);
+    });
+}
+
+for (const [name, failure, category] of requestFailures) {
+    test(`ZipDeploy ${name} failures retain safe diagnostics without tokens or bodies`, () => {
+        const result = ps(`${packageHarness}
+            function Invoke-WebRequest { ${failure} }
+            $caught = $false
+            try { $null = ${packageInvocation} }
+            catch { Write-Output $_.Exception.Message; $caught = $true }
+            if (-not $caught -or $script:polls -ne 0) { throw 'Failed upload proceeded to deployment polling' }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+        assert.ok(result.stdout.includes(`zip-upload; ${category}`), result.stdout);
+        assert.doesNotMatch(result.stdout + result.stderr, /private-(body|message|token)-sentinel/);
+    });
+}
+
 const publishHarness = `
     function az { throw 'Live Azure must not be contacted' }
     function Assert-SidequestApplicationSource { }
@@ -210,7 +382,7 @@ const publishHarness = `
     $script:deploys = 0
     $script:lifecycle = [Collections.Generic.List[string]]::new()
     $script:deploymentFails = $false
-    $script:restartFails = $false
+    $script:startFails = $false
     $script:packageMode = '1'
     $script:startupCommand = 'dotnet /home/site/wwwroot/Sidequest.Web.dll'
     $script:referenceResponse = [pscustomobject]@{
@@ -231,19 +403,9 @@ const publishHarness = `
         }
         if ($Arguments -contains 'stop') { $script:lifecycle.Add('stop'); $script:stops++; return }
         if ($Arguments -contains 'properties.enabled=true') { $script:lifecycle.Add('enable'); return }
-        if ($Arguments -contains 'start') { $script:lifecycle.Add('start'); return }
-        if ($Arguments -contains 'restart') {
-            $script:lifecycle.Add('restart')
-            if ($script:restartFails) { throw [InvalidOperationException]::new('restart-failed-sentinel') }
-            return
-        }
-        if ($Arguments -contains 'deploy') {
-            $script:lifecycle.Add('deploy')
-            $script:deploys++
-            if (($Arguments -join ' ') -notmatch '--restart false --track-status false') {
-                throw 'Deployment must leave explicit restart and bounded readiness to the application helper'
-            }
-            if ($script:deploymentFails) { throw [InvalidOperationException]::new('deployment-failed-sentinel') }
+        if ($Arguments -contains 'start') {
+            $script:lifecycle.Add('start')
+            if ($script:startFails) { throw [InvalidOperationException]::new('start-failed-sentinel') }
             return
         }
         if (($Arguments -join ' ') -match '/config/configreferences/') {
@@ -256,6 +418,18 @@ const publishHarness = `
         if ($Arguments -contains 'get') {
             return [pscustomobject]@{ properties = @{ defaultHostName = 'sidequest-hackathon-b7ljjkoqcaedc.azurewebsites.net' } }
         }
+        throw 'Unexpected Azure operation'
+    }
+    function Publish-SidequestImmutablePackage {
+        param($ApplicationName, $ZipPath, $Sha256)
+        $script:lifecycle.Add('deploy')
+        $script:deploys++
+        if ($ApplicationName -cne 'sidequest-hackathon-b7ljjkoqcaedc' -or $ZipPath -cne 'unused' -or $Sha256 -cne 'verified-hash') {
+            throw 'Package verification did not receive the validated artifact'
+        }
+        if ($script:deploymentFails) { throw [InvalidOperationException]::new('deployment-failed-sentinel') }
+        $script:lifecycle.Add('verify')
+        return @{ deploymentId = 'verified-deployment'; package = 'verified.zip'; sha256 = $Sha256 }
     }
 `;
 const publishInvocation = "Publish-SidequestApplication -SourceCommit accepted-source -ApplicationName sidequest-hackathon-b7ljjkoqcaedc -ZipPath unused -ManifestPath unused -IdentityAndProviderGatesVerified";
@@ -282,11 +456,12 @@ for (const [name, mutation] of [
     });
 }
 
-test("Publishing enables SCM before upload and restarts only the validated artifact", () => {
+test("Publishing stops old content and starts only the remotely verified immutable artifact", () => {
     const result = ps(`${publishHarness}
         function Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
         $result = ${publishInvocation}
-        if (($script:lifecycle -join ',') -cne 'enable,start,deploy,restart' -or $result.readiness -cne 'Healthy') {
+        if (($script:lifecycle -join ',') -cne 'enable,stop,deploy,verify,start' -or $result.readiness -cne 'Healthy' -or
+            $result.deploymentId -cne 'verified-deployment' -or $result.package -cne 'verified.zip' -or $result.sha256 -cne 'verified-hash') {
             throw 'Incorrect stopped-site deployment sequence'
         }
     `);
@@ -302,26 +477,26 @@ test("Deployment failure after enabling SCM stops the host before readiness prob
             if ($_.Exception.Message -cne 'deployment-failed-sentinel') { throw }
             $caught = $true
         }
-        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,start,deploy,stop' -or
-            $script:stops -ne 1 -or $script:attempts -ne 0) {
+        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,stop,deploy,stop' -or
+            $script:stops -ne 2 -or $script:attempts -ne 0) {
             throw 'Failed deployment did not close the activated hosting boundary'
         }
     `);
     assert.equal(result.status, 0, result.stderr);
 });
 
-test("Explicit restart failure stops the host before old-process readiness can be accepted", () => {
+test("Explicit start failure stops the host before readiness can be accepted", () => {
     const result = ps(`${publishHarness}
-        $script:restartFails = $true
+        $script:startFails = $true
         $caught = $false
         try { $null = ${publishInvocation} }
         catch {
-            if ($_.Exception.Message -cne 'restart-failed-sentinel') { throw }
+            if ($_.Exception.Message -cne 'start-failed-sentinel') { throw }
             $caught = $true
         }
-        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,start,deploy,restart,stop' -or
-            $script:stops -ne 1 -or $script:attempts -ne 0) {
-            throw 'Failed restart reached readiness or left hosting enabled'
+        if (-not $caught -or ($script:lifecycle -join ',') -cne 'enable,stop,deploy,verify,start,stop' -or
+            $script:stops -ne 2 -or $script:attempts -ne 0) {
+            throw 'Failed start reached readiness or left hosting enabled'
         }
     `);
     assert.equal(result.status, 0, result.stderr);
@@ -359,7 +534,7 @@ for (const [name, failure, category] of requestFailures) {
                 return [pscustomobject]@{ StatusCode = 200 }
             }
             $result = ${publishInvocation}
-            if ($result.readiness -cne 'Healthy' -or $script:attempts -ne 2 -or $script:sleeps -ne 1 -or $script:stops -ne 0) {
+            if ($result.readiness -cne 'Healthy' -or $script:attempts -ne 2 -or $script:sleeps -ne 1 -or $script:stops -ne 1) {
                 throw 'Wrong readiness retry or host lifecycle'
             }
         `);
@@ -378,7 +553,7 @@ test("Unexpected readiness failures are not retried and reach the stop-host hand
             if ($_.Exception.Message -cne 'unexpected-sentinel') { throw 'Unexpected failure was replaced' }
             $caught = $true
         }
-        if (-not $caught -or $script:attempts -ne 1 -or $script:stops -ne 1 -or $script:sleeps -ne 0) {
+        if (-not $caught -or $script:attempts -ne 1 -or $script:stops -ne 2 -or $script:sleeps -ne 0) {
             throw 'Unexpected failure did not immediately stop the host'
         }
     `);
@@ -395,7 +570,7 @@ test("Readiness exhaustion reports bounded attempts and stops the host without s
             if ($_.Exception.Message -notmatch 'readiness did not become healthy') { throw 'Wrong exhaustion failure' }
             $caught = $true
         }
-        if (-not $caught -or $script:attempts -ne 18 -or $script:stops -ne 1 -or $script:sleeps -ne 18) {
+        if (-not $caught -or $script:attempts -ne 18 -or $script:stops -ne 2 -or $script:sleeps -ne 18) {
             throw 'Readiness exhaustion was not bounded or did not stop the host'
         }
     `);
