@@ -36,8 +36,18 @@ public sealed class NotificationComponentTests : BunitContext
         service.Inbox = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var component = Render<NotificationInbox>();
         Assert.Contains("Loading notifications", component.Markup);
-        await component.InvokeAsync(() => service.Inbox.SetResult(new PageResult<NotificationSummary>([], 0, 1, 25)));
-        component.WaitForAssertion(() => Assert.Contains("No notifications on this page", component.Markup));
+        await component.InvokeAsync(async () =>
+        {
+            service.Inbox.SetResult(new PageResult<NotificationSummary>([], 0, 1, 25));
+            // Register the check on the renderer, then yield it to the pending query and lifecycle render.
+            await component.WaitForAssertionAsync(() =>
+            {
+                Assert.Contains("No notifications on this page", component.Markup);
+                Assert.DoesNotContain("Loading notifications", component.Markup);
+                Assert.Equal(1, service.ListCalls);
+                Assert.Equal(1, service.CountCalls);
+            });
+        });
         service.Denied = true;
         var refresh = component.FindComponents<FluentButton>().Single(x => x.Markup.Contains("Refresh"));
         await component.InvokeAsync(() => refresh.Instance.OnClick.InvokeAsync());
