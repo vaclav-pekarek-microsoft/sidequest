@@ -236,7 +236,8 @@ function Publish-SidequestApplication {
         $null = Invoke-SidequestStagingAzure @('webapp', 'start', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
         $null = Invoke-SidequestStagingAzure @('webapp', 'deploy', '--resource-group', $script:ResourceGroup,
             '--name', $ApplicationName, '--src-path', $ZipPath, '--type', 'zip',
-            '--restart', 'true', '--track-status', 'false')
+            '--restart', 'false', '--track-status', 'false')
+        $null = Invoke-SidequestStagingAzure @('webapp', 'restart', '--resource-group', $script:ResourceGroup, '--name', $ApplicationName)
         $ready = $false
         for ($attempt = 0; $attempt -lt 18; $attempt++) {
             try {

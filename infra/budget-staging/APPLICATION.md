@@ -137,6 +137,11 @@ subscription checks apply to every entry point.
    profile and registers `https://localhost:7193/signin-oidc` and
    `https://localhost:7193/signout-callback-oidc`. No HTTP callback or arbitrary
    development hostname is added.
+   The existing Microsoft.Identity.Web sign-in flow uses `response_type=id_token`
+   and `response_mode=form_post`. Enable web ID-token issuance explicitly;
+   leave implicit access-token issuance disabled. Issuer, audience, nonce,
+   role and participant checks remain mandatory. Missing ID-token issuance
+   produces Entra `AADSTS700054` before local account provisioning.
 3. After infrastructure exists, an operator with explicitly approved **secret-set
    access on the dedicated staging vault** calls `Set-SidequestHackathonCredential`.
    It creates one 90-day credential, immediately sends it to the vault using
@@ -269,8 +274,10 @@ evidence blocks deployment before activation.
 It uses Entra-authenticated deployment without enabling basic SCM authentication.
 After all preflight checks and explicit activation acknowledgement, it enables/starts
 the site before upload: a disabled site also rejects SCM with HTTP 403. It uploads
-with restart enabled and CLI runtime tracking disabled, then owns the bounded
-SQL-backed readiness probe itself. Upload, activation or readiness failure stops
+with CLI restart/runtime tracking disabled, explicitly calls the App Service
+restart API, then owns the bounded SQL-backed readiness probe itself. A completed
+upload alone can leave the prior process serving healthy responses; the explicit
+restart is required before checking the new application. Upload, activation or readiness failure stops
 the host; the initial infrastructure deployment still leaves it disabled.
 The manifest proves only the owner's asserted source-to-artifact association;
 use the clean accepted build command and retain its successful output.

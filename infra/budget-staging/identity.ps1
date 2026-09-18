@@ -19,7 +19,7 @@ function Get-SidequestLocalRedirectUris {
 
 function Invoke-SidequestPrivateRequest {
     param(
-        [Parameter(Mandatory)] [ValidateSet('GET', 'POST', 'PUT')] [string] $Method,
+        [Parameter(Mandatory)] [ValidateSet('GET', 'POST', 'PUT', 'PATCH')] [string] $Method,
         [Parameter(Mandatory)] [uri] $Uri,
         [Parameter(Mandatory)] [ValidateSet('https://graph.microsoft.com/', 'https://vault.azure.net')] [string] $Audience,
         [object] $Body
@@ -107,6 +107,7 @@ function New-SidequestHackathonRegistration {
         web = @{
             redirectUris = @("$root/signin-oidc", "$root/signout-callback-oidc") + @(Get-SidequestLocalRedirectUris)
             logoutUrl = "$root/signout-oidc"
+            implicitGrantSettings = @{ enableIdTokenIssuance = $true; enableAccessTokenIssuance = $false }
         }
         appRoles = @(@{
             id = $roleId; allowedMemberTypes = @('User'); displayName = 'Hackathon participant'
