@@ -1,13 +1,37 @@
 @rendermode InteractiveServer
-<h1>My Quests</h1>
-<p>Join to attend; follow without attending. Organizing does not imply either.</p>
-<div data-online-actions>
-    <p><a href="/events">Browse Events</a> · <a href="/quests/create">Create a Quest</a> · <a href="/quests?view=History">Quest history</a> · <a href="/quests?view=Invited">Private invitations</a></p>
+<section class="dashboard-intro">
+    <div>
+        <h1>My Quests</h1>
+        <p>Join to attend; follow without attending. Organizing does not imply either.</p>
+    </div>
+    <a class="button-link" href="/quests/create">Create a Quest</a>
+</section>
+<div class="dashboard-shortcuts" data-online-actions>
+    <a href="/events">Browse Events</a>
+    <a href="/quests?view=History">Quest history</a>
+    <a href="/quests?view=Invited">Private invitations</a>
 </div>
-<DashboardFilters Events="events" EventPage="eventPage" EventTotal="eventTotal" EventPageChanged="EventPageAsync"
+<nav class="quest-view-navigation" aria-label="Quest views">
+    @foreach (var option in ViewOptions)
+    {
+        <button type="button" class="@(filter.Kind == option.Kind ? "selected" : null)"
+                aria-pressed="@(filter.Kind == option.Kind ? "true" : "false")"
+                disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)"
+                @onclick="() => SelectKindAsync(option.Kind)">@option.Label</button>
+    }
+</nav>
+<DashboardFilters Kind="filter.Kind" Events="events" EventPage="eventPage" EventTotal="eventTotal" EventPageChanged="EventPageAsync"
                   Disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)" Changed="FilterAsync" />
-<section data-protected-experience data-online-actions aria-label="Authorized Quest results" aria-busy="@loading">
-    <h2>@Heading</h2>
+<section class="dashboard-results" data-protected-experience data-online-actions aria-label="Authorized Quest results" aria-busy="@loading">
+    <header class="results-header">
+        <h2>@Heading</h2>
+        <div class="layout-switcher" role="group" aria-label="Quest layout">
+            <button type="button" class="@(layout == QuestLayout.Board ? "selected" : null)"
+                    aria-pressed="@(layout == QuestLayout.Board ? "true" : "false")" @onclick="() => layout = QuestLayout.Board">Board</button>
+            <button type="button" class="@(layout == QuestLayout.List ? "selected" : null)"
+                    aria-pressed="@(layout == QuestLayout.List ? "true" : "false")" @onclick="() => layout = QuestLayout.List">List</button>
+        </div>
+    </header>
     @if (loading)
     {
         <p role="status">Loading authorized Quests…</p>
@@ -23,13 +47,15 @@
     }
     else
     {
-        <p>@result.Quests.TotalCount matching Quests. Ordered by start time, then identifier.</p>
-        @foreach (var item in result.Quests.Items)
-        {
-            <DashboardQuestCard @key="item.Id" Item="item" InvitedCount="@(result.InvitedCounts.TryGetValue(item.Id, out var count) ? count : null)" />
-        }
+        <p class="result-caption">@result.Quests.TotalCount matching Quests. Ordered by start time, then identifier.</p>
+        <div class="@(layout == QuestLayout.Board ? "quest-board" : "quest-list")">
+            @foreach (var item in result.Quests.Items)
+            {
+                <DashboardQuestCard @key="item.Id" Item="item" InvitedCount="@(result.InvitedCounts.TryGetValue(item.Id, out var count) ? count : null)" />
+            }
+        </div>
     }
-    <div>
+    <div class="dashboard-pagination">
         <button type="button" disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions || page == 1)" @onclick="PreviousAsync">Previous Quests</button>
         <span>Page @(page)</span>
         <button type="button" disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions || result is null || (long)page * filter.PageSize >= result.Quests.TotalCount)" @onclick="NextAsync">Next Quests</button>

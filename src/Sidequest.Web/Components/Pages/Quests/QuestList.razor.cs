@@ -11,6 +11,16 @@ namespace Sidequest.Web.Components.Pages.Quests;
 /// <summary>Owns authorized, paginated Quest views and clears protected results after failed reauthorization.</summary>
 public partial class QuestList : IAsyncDisposable
 {
+    private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
+    [
+        (QuestListKind.Joined, "Upcoming Joined"),
+        (QuestListKind.Following, "Following"),
+        (QuestListKind.Organizing, "Organizing"),
+        (QuestListKind.Discover, "Discover"),
+        (QuestListKind.Invited, "Invited"),
+        (QuestListKind.History, "History"),
+        (QuestListKind.Moderation, "Moderation")
+    ];
     private readonly CancellationTokenSource lifetime = new();
     private IReadOnlyList<EventSummary> events = [];
     private PageResult<QuestSummary>? result;
@@ -23,7 +33,10 @@ public partial class QuestList : IAsyncDisposable
     private DateOnly? fromDate;
     private DateOnly? throughDate;
     private string dateZone = "Etc/UTC";
+    private QuestLayout layout = QuestLayout.Board;
     private ExperienceViewSubscription? experience;
+    private string DateSemantics => $"Inclusive Quest start dates in {dateZone}; filtering occurs before paging.";
+    private string ViewHeading => ViewOptions.Single(option => option.Kind == kind).Label;
 
     [Inject] private IQuestService Quests { get; set; } = default!;
     [Inject] private IEventService Events { get; set; } = default!;
@@ -114,6 +127,12 @@ public partial class QuestList : IAsyncDisposable
     }
 
     private async Task ResetAsync() { page = 1; await LoadAsync(); }
+    private async Task SelectKindAsync(QuestListKind selected)
+    {
+        kind = selected;
+        page = 1;
+        await LoadAsync();
+    }
     private async Task PreviousAsync() { page--; await LoadAsync(); }
     private async Task NextAsync() { page++; await LoadAsync(); }
 
@@ -124,5 +143,11 @@ public partial class QuestList : IAsyncDisposable
             await experience.DisposeAsync();
         await lifetime.CancelAsync();
         lifetime.Dispose();
+    }
+
+    private enum QuestLayout
+    {
+        Board,
+        List
     }
 }

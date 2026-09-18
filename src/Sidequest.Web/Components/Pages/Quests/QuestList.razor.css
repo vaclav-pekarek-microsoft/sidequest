@@ -1,3 +1,100 @@
-fieldset { display: grid; gap: .75rem; min-width: 0; margin: 1rem 0; }
-label { display: block; overflow-wrap: anywhere; }
-input, select { box-sizing: border-box; max-width: 100%; }
+.quest-view-navigation,
+.results-header,
+.layout-switcher,
+.quest-pagination {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .55rem;
+}
+
+.quest-view-navigation {
+    margin-block: 1rem;
+}
+
+.quest-view-navigation button,
+.layout-switcher button {
+    padding: .55rem .85rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: 999px;
+    background: var(--neutral-layer-1, #fff);
+    color: inherit;
+    font-weight: 650;
+}
+
+.quest-view-navigation button.selected,
+.layout-switcher button.selected {
+    border-color: var(--accent-fill-rest, #0f6cbd);
+    background: var(--accent-fill-rest, #0f6cbd);
+    color: var(--foreground-on-accent-rest, #fff);
+}
+
+.quest-filters {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: .75rem 1rem;
+    margin-block: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: .85rem;
+}
+
+.quest-filters legend {
+    padding-inline: .35rem;
+    font-weight: 700;
+}
+
+.quest-filters label {
+    display: grid;
+    flex: 1 1 10rem;
+    gap: .3rem;
+    overflow-wrap: anywhere;
+}
+
+.quest-filters label:first-of-type {
+    flex-basis: 16rem;
+}
+
+.quest-filters label span {
+    color: var(--sq-muted, #4b5b55);
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+.quest-filters input,
+.quest-filters select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.5rem;
+    padding: .45rem .6rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: .45rem;
+    background: var(--neutral-layer-1, #fff);
+    color: inherit;
+    font: inherit;
+}
+
+.results-header {
+    justify-content: space-between;
+}
+
+.quest-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    align-items: stretch;
+    gap: 1.2rem;
+}
+
+.quest-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.quest-pagination {
+    justify-content: space-between;
+    margin-block: 1.5rem 1rem;
+}

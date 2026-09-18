@@ -44,20 +44,19 @@ public sealed class ExperienceComponentTests : BunitContext
         Assert.Equal(owner, component.Markup.Contains("7 invited", StringComparison.Ordinal));
         Assert.Contains("3 joined", component.Markup);
         Assert.Contains("2 following", component.Markup);
-        Assert.DoesNotContain("img", component.Markup);
+        Assert.Equal("https://placehold.co/600x400?text=Quest%20title", component.Find("img").GetAttribute("src"));
     }
 
-    /// <summary>Filters expose all five required views and remain unavailable while prerendered or disconnected.</summary>
+    /// <summary>Filters exclude Quest category navigation, retain explicit date semantics, and remain unavailable while disconnected.</summary>
     [Fact]
-    public void FiltersHaveInvitedViewAndExplicitUtcDateSemantics()
+    public void FiltersExcludeQuestViewAndHaveExplicitUtcDateSemantics()
     {
         var component = Render<DashboardFilters>(p => p.Add(c => c.Disabled, true));
         Assert.True(component.Find("fieldset").HasAttribute("disabled"));
-        Assert.Equal(new[] { "Joined", "Following", "Organizing", "Discover", "Invited" },
-            component.FindAll("select")[0].QuerySelectorAll("option").Select(o => o.GetAttribute("value")));
-        Assert.Contains("UTC (across Events)", component.Markup);
-        Assert.Contains("inclusive civil dates", component.Markup);
+        Assert.Equal("Filter Quests", component.Find("legend").TextContent);
+        Assert.DoesNotContain("View", component.Markup, StringComparison.Ordinal);
+        Assert.Contains("Inclusive start dates in UTC (across Events)", component.Markup);
         Assert.Equal(new[] { "25", "50", "100" },
-            component.FindAll("select")[2].QuerySelectorAll("option").Select(o => o.GetAttribute("value")));
+            component.FindAll("select")[1].QuerySelectorAll("option").Select(o => o.GetAttribute("value")));
     }
 }

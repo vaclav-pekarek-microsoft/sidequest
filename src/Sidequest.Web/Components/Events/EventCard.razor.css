@@ -5,3 +5,8 @@
     margin-block: .75rem;
     overflow-wrap: anywhere;
 }
+
+.event-card ::deep .placeholder-cover {
+    max-height: 18rem;
+    aspect-ratio: 5 / 2;
+}

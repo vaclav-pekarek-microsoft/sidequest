@@ -1,3 +1,26 @@
-article { border: 1px solid #748c84; border-radius: .5rem; padding: 1rem; margin-block: 1rem; overflow-wrap: anywhere; }
-h3 { font-size: 1.2rem; margin-top: 0; }
-a:focus-visible { outline: 3px solid #875900; outline-offset: 3px; }
+.dashboard-quest-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: .85rem;
+    padding: 1rem;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    background: var(--neutral-layer-1, #fff);
+    box-shadow: 0 .25rem 1rem rgb(0 0 0 / 7%);
+}
+
+.dashboard-quest-card h3 {
+    margin-block: .9rem .35rem;
+    font-size: 1.2rem;
+}
+
+.dashboard-quest-card p {
+    margin-block: .35rem;
+}
+
+.dashboard-quest-card a:focus-visible {
+    outline: 3px solid #875900;
+    outline-offset: 3px;
+}
