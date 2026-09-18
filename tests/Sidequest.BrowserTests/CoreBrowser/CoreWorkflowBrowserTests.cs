@@ -145,7 +145,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         {
             releaseStartup?.Invoke();
         }
-        await Expect(eventOwner.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToBeEnabledAsync();
+        await Expect(eventOwner.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToBeEnabledAsync();
         await OpenModerationQuestAsync(eventOwner, eventId, title);
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Attendees", Exact = true })).ToHaveCountAsync(0);
@@ -677,7 +677,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     {
         try
         {
-            await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToHaveValueAsync("Moderation");
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
             await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "Event", Exact = true })).ToHaveValueAsync(eventId.ToString());
             await page.GetByRole(AriaRole.Link, new() { Name = title, Exact = true }).ClickAsync();
         }

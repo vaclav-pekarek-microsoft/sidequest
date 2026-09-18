@@ -38,7 +38,7 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Save preferences", Exact = true })).ToBeEnabledAsync();
         await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
         await page.GotoAsync("/quests");
-        await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToBeEnabledAsync();
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "All Quests", Exact = true })).ToBeEnabledAsync();
         await ExperienceBrowserSupport.AssertFieldIdentifiersAsync(page);
     }
 
