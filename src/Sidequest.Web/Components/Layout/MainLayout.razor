@@ -15,10 +15,8 @@
         <NavLink href="/" Match="NavLinkMatch.All">Home</NavLink>
         <AuthorizeView>
             <Authorized>
+                <NavLink href="/quests">Quests</NavLink>
                 <NavLink href="/events">Events</NavLink>
-                <NavLink href="/quests">My Quests</NavLink>
-                <NavLink href="/quests?view=Discover">Discover Quests</NavLink>
-                <NavLink href="/quests?view=Invited">Invited Quests</NavLink>
                 <NavLink href="/notifications">Notifications</NavLink>
                 <NavLink href="/administration">Administration</NavLink>
                 <form action="/auth/logout" method="post" data-enhance="false" data-authentication-change>
@@ -28,7 +26,7 @@
                 </form>
             </Authorized>
             <NotAuthorized>
-                <a href="/signin" data-enhance-nav="false">Sign in</a>
+                <SignInLink />
             </NotAuthorized>
         </AuthorizeView>
     </nav>
@@ -39,7 +37,6 @@
 <p data-authentication-warning role="alert" hidden="@(!DeviceClearFailed)">
     Device basics could not be cleared. Sign-out is still available. Close other Sidequest tabs and clear this site's data in browser settings before sharing this device.
 </p>
-<ConnectionStatus @rendermode="InteractiveServer" />
 <div id="components-reconnect-modal" class="components-reconnect-hide" role="status" aria-live="polite">
     <p data-reconnect-message>Connection interrupted. Online actions are unavailable; unsaved input is kept.</p>
     <button type="button" data-reconnect-retry>Retry connection</button>
@@ -55,7 +52,13 @@
         </ErrorContent>
     </ErrorBoundary>
 </main>
-<footer>Sidequest · Company Events and shared activities.</footer>
+<footer>
+    <div class="footer-links">
+        <span>Sidequest · Make time for a Quest.</span>
+        <a href="/install">Install and device privacy</a>
+    </div>
+    <ConnectionStatus @rendermode="InteractiveServer" />
+</footer>
 <div id="blazor-error-ui" role="alert">
     The connection or screen encountered an error.
     <a href="" class="reload">Reload</a>

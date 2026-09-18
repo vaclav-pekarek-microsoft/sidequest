@@ -147,6 +147,59 @@ public sealed class QuestComponentTests : BunitContext
         Assert.Contains("audited moderation view", component.Markup);
     }
 
+    /// <summary>An existing second occurrence survives editing, and changing a repeated local time requires a new explicit occurrence choice.</summary>
+    [Fact]
+    public void Editor_RepeatedTimePreservesExistingInstantAndRequiresChoiceAfterChange()
+    {
+        var initial = new QuestInput("Repeated time", "", "", null, new(2026, 10, 25, 2, 30, 0),
+            new(2026, 10, 25, 4, 0, 0), TimeSpan.FromHours(1), TimeSpan.FromHours(1), QuestVisibility.Public);
+        var submissions = new List<QuestEditorModel>();
+        var cut = Render<QuestEditor>(p => p.Add(x => x.Initial, initial).Add(x => x.ZoneId, "Europe/Prague")
+            .Add(x => x.Save, value => submissions.Add(value)));
+        var start = cut.FindComponents<QuestLocalTimeInput>()[0];
+        Assert.Equal("second", start.Find("select").GetAttribute("value"));
+        Assert.DoesNotContain("UTC offset", cut.Markup);
+        cut.Find("form").Submit();
+        Assert.Equal(TimeSpan.FromHours(1), Assert.Single(submissions).ToInput("Europe/Prague").StartOffset);
+        start.Find("input").Change("2026-10-25T02:45");
+        Assert.Equal("", start.Find("select").GetAttribute("value"));
+        start.Find("select").Change("first");
+        cut.Find("form").Submit();
+        Assert.Equal(TimeSpan.FromHours(2), submissions[^1].ToInput("Europe/Prague").StartOffset);
+        Assert.Contains("First occurrence (earlier)", cut.Markup);
+        Assert.Contains("Second occurrence (later)", cut.Markup);
+    }
+
+    /// <summary>Owner actions expose only relevant inputs, use contact labels rather than visible IDs, and require an explicit confirmation.</summary>
+    /// <returns>Completion after publication and reasoned invitation-removal intents pass through real callbacks.</returns>
+    [Fact]
+    public async Task Management_ActionSectionsShowOnlyRequiredInputsAndContactLabels()
+    {
+        var person = new PersonSummary(Guid.NewGuid(), "Example Person", "example@sample.invalid");
+        var detail = new QuestDetail(Summary() with { Status = QuestStatus.Draft, IsOwner = true, Visibility = QuestVisibility.Private },
+            "", "", [], [], [], [new(person.Id, person.DisplayName)]);
+        var requests = new List<QuestActionRequest>();
+        var cut = Render<QuestManagement>(p => p.Add(x => x.Detail, detail).Add(x => x.Members, new[] { person })
+            .Add(x => x.Execute, request => requests.Add(request)));
+        Assert.Empty(cut.FindComponents<FluentTextArea>());
+        Assert.False(cut.Find("details.danger-zone").HasAttribute("open"));
+        cut.FindAll("button").Single(button => button.TextContent == "Publish draft").Click();
+        Assert.Empty(cut.FindComponents<FluentTextArea>());
+        Assert.Empty(cut.FindAll("select"));
+        cut.Find("input[type=checkbox]").Change(true);
+        await cut.InvokeAsync(() => cut.FindComponent<FluentButton>().Instance.OnClick.InvokeAsync());
+        Assert.Equal("publish", Assert.Single(requests).Action);
+        cut.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();
+        Assert.Contains("example@sample.invalid (Example Person)", cut.Find("select").TextContent);
+        Assert.DoesNotContain(person.Id.ToString(), cut.Find("select").TextContent);
+        cut.Find("select").Change(person.Id.ToString());
+        cut.Find("fluent-text-area").Input("Reviewed invitation removal.");
+        cut.Find("input[type=checkbox]").Change(true);
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(button => button.Markup.Contains("Confirm: Revoke invitation", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+        Assert.Equal(new QuestActionRequest("revoke", person.Id, "Reviewed invitation removal."), requests[1]);
+    }
+
     private static QuestSummary Summary() => new(Guid.NewGuid(), Guid.NewGuid(), "Synthetic Event", "Synthetic Quest", "Room",
         new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero),
         "Europe/Prague", QuestStatus.Active, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, false, false, "", null);

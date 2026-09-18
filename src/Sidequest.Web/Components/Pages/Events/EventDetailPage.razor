@@ -6,50 +6,70 @@
 
 <PageTitle>Event · Sidequest</PageTitle>
 <h1>Event</h1>
-<a href="/events">Events</a>
+<nav class="page-actions" aria-label="Event navigation">
+    <a href="/events">Back to Events</a>
+    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+</nav>
 <EventFeedback Busy="Busy" Error="@Error" />
-<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
 @if (detail is not null)
 {
     <EventCard Item="detail.Summary" />
     @if (detail.Description is not null)
     {
-        <section>
-            <h2>Description</h2>
+        <section class="section-box">
+            <h2 class="section-heading">About this Event</h2>
             <p class="description">@detail.Description</p>
-            <p><a href="@($"/quests?view=Discover&eventId={Id}")">Discover Quests in this Event</a></p>
-            <p><a href="@($"/notifications/preferences/{Id}")">Event notification preferences</a></p>
+        </section>
+        <nav class="page-actions" aria-label="Event participation">
+            <a href="@($"/quests?view=Discover&eventId={Id}")">Discover Quests in this Event</a>
             @if (detail.Summary.Status == EventStatus.Active)
             {
                 <a href="@($"/quests/create?eventId={Id}")">Create Quest</a>
             }
-            <p><a href="@($"/events/{Id}/members")">Members</a></p>
-            @if (detail.Summary.IsOwner)
-            {
-                <p><a href="@($"/events/{Id}/edit")">Settings</a> ·
-                    <a href="@($"/events/{Id}/requests")">Membership requests</a> ·
-                    <a href="@($"/events/{Id}/invitations")">Event invitations</a> ·
-                    <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a> ·
+            <a href="@($"/events/{Id}/members")">Members</a>
+            <a href="@($"/notifications/preferences/{Id}")">Notification preferences</a>
+        </nav>
+        @if (detail.Summary.IsOwner)
+        {
+            <section class="section-box" aria-label="Manage Event">
+                <h2 class="section-heading">Manage Event</h2>
+                <nav class="page-actions" aria-label="Event management">
+                    @if (detail.Summary.Status is EventStatus.Draft or EventStatus.Active)
+                    {
+                        <a href="@($"/events/{Id}/edit")">Edit Event</a>
+                    }
+                    <a href="@($"/events/{Id}/requests")">Membership requests</a>
+                    <a href="@($"/events/{Id}/invitations")">Event invitations</a>
+                    @if (detail.Summary.Status == EventStatus.Active)
+                    {
+                        <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a>
+                    }
                     <a href="@($"/quests?view=Moderation&eventId={Id}")">Quest moderation</a>
-                </p>
-                <EventLifecycle Item="detail.Summary" Changed="LoadAsync" />
-            }
-            else
-            {
+                </nav>
+            </section>
+            <EventLifecycle Item="detail.Summary" Changed="LoadAsync" />
+        }
+        else
+        {
+            <section class="section-box danger-zone" aria-label="Leave Event">
+                <h2 class="section-heading">Leave Event</h2>
                 <FluentCheckbox @bind-Value="leaveConfirmed">I understand leaving removes Quest invitations, attendance, follows, and applicable calendar entries.</FluentCheckbox>
                 <FluentButton Disabled="@(Busy || !leaveConfirmed)" OnClick="LeaveAsync">Leave Event</FluentButton>
                 <p>Owners must remove all Event and child Quest ownership assignments before leaving.</p>
-            }
-        </section>
+            </section>
+        }
     }
     else
     {
-        <p>Only the discovery summary and owner contacts are available. Request membership to see full content.</p>
-        <FluentButton Disabled="@Busy" OnClick="RequestAsync">Request membership</FluentButton>
-        @if (requested)
-        {
-            <p role="status">Your request is pending. <a href="/events/requests">View my requests</a></p>
-        }
+        <section class="section-box" aria-label="Request access">
+            <h2 class="section-heading">Join this Event</h2>
+            <p>Only the discovery summary and owner contacts are available. Request membership to see full content.</p>
+            <FluentButton Disabled="@Busy" OnClick="RequestAsync">Request membership</FluentButton>
+            @if (requested)
+            {
+                <p role="status">Your request is pending. <a href="/events/requests">View my requests</a></p>
+            }
+        </section>
     }
 }
 

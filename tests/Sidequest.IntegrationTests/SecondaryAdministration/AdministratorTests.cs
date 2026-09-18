@@ -20,10 +20,12 @@ public sealed class AdministratorTests
         var choices = await s.Service.SearchAccountsAsync("Replacement");
         var target = Assert.Single(choices);
         Assert.Equal(s.Replacement.Id, target.Id);
+        Assert.Equal(s.Replacement.Email, target.Email);
         await s.Service.AddAsync(target.Id, target.Version);
         Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() => s.Service.AddAsync(target.Id, target.Version))).Code);
         var assignments = await s.Service.ListAsync();
         Assert.Equal(2, assignments.Count);
+        Assert.Equal(s.Replacement.Email, assignments.Single(x => x.UserId == target.Id).Email);
         await s.Service.RemoveAsync(target.Id, assignments.Single(x => x.UserId == target.Id).Version);
         Assert.Single(await s.Service.ListAsync());
         await using var db = s.Database.CreateContext();
@@ -57,6 +59,8 @@ public sealed class AdministratorTests
         }
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => s.Service.ListAsync())).Code);
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() =>
+            s.Service.SearchAccountsAsync("Replacement"))).Code);
+        Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() =>
             s.Service.AddAsync(s.Replacement.Id, s.Replacement.Version))).Code);
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => s.Email.GetSettingsAsync())).Code);
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() =>
@@ -85,6 +89,35 @@ public sealed class AdministratorTests
         await using var db = s.Database.CreateContext();
         Assert.Single(await db.Administrators.ToArrayAsync());
         Assert.Empty(await db.AuditEntries.ToArrayAsync());
+    }
+
+    /// <summary>Email-only searches project eligible same-tenant contacts without disclosing foreign, departed or disabled accounts.</summary>
+    /// <returns>Completion after the real SQL projection and each account-eligibility filter is verified.</returns>
+    [Fact]
+    public async Task EmailSearchProjectsOnlyAuthorizedEligibleContacts()
+    {
+        await using var s = await AdministrationScenario.CreateAsync();
+        await using (var db = s.Database.CreateContext())
+        {
+            (await db.Users.SingleAsync(x => x.Id == s.Replacement.Id)).Email = "contact-search@example.invalid";
+            var foreign = FoundationSeed.NewUser();
+            foreign.Email = "contact-search-foreign@example.invalid";
+            var disabled = FoundationSeed.NewUser();
+            disabled.TenantId = s.Seed.User.TenantId;
+            disabled.IsEligible = false;
+            disabled.Email = "contact-search-disabled@example.invalid";
+            var departed = FoundationSeed.NewUser();
+            departed.TenantId = s.Seed.User.TenantId;
+            departed.DepartureVerifiedUtc = s.Clock.Now.AddDays(-1);
+            departed.Email = "contact-search-departed@example.invalid";
+            db.Users.AddRange(foreign, disabled, departed);
+            await db.SaveChangesAsync();
+        }
+        var contact = Assert.Single(await s.Service.SearchAccountsAsync("contact-search"));
+        Assert.Equal(s.Replacement.Id, contact.Id);
+        Assert.Equal("contact-search@example.invalid", contact.Email);
+        Assert.Equal("Replacement Person", contact.DisplayName);
+        Assert.NotEmpty(contact.Version);
     }
 
     /// <summary>A stale selected account version cannot grant administration after a directory/local-account change.</summary>

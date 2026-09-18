@@ -8,15 +8,22 @@
 
 <PageTitle>Event editor · Sidequest</PageTitle>
 <h1>@(Id is null ? "Create Event" : "Edit Event")</h1>
-<a href="/events">Events</a>
+<nav class="page-actions" aria-label="Event editor actions">
+    <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
+    @if (Id is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Discard local form and reload</FluentButton>
+    }
+</nav>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (input is not null)
 {
-    <EventEditor Input="input" Busy="Busy" ZoneLocked="@(detail?.Summary.Status != EventStatus.Draft && Id is not null)" Submitted="SaveAsync" />
+    <EventEditor Input="input" Busy="Busy" ZoneLocked="@(detail?.Summary.Status != EventStatus.Draft && Id is not null)"
+                 SubmitLabel="@(Id is null ? "Save Draft" : "Save changes")" Submitted="SaveAsync" />
 }
 @if (duplicates.Count > 0)
 {
-    <section aria-label="Potential duplicate Events">
+    <section class="section-box" aria-label="Potential duplicate Events">
         <h2>Similar Events overlap these dates</h2>
         <p>Review the existing Events and owner contacts. This is a warning, not a restriction.</p>
         @foreach (var duplicate in duplicates)
@@ -25,10 +32,6 @@
         }
         <FluentButton Disabled="@Busy" OnClick="CreateAnywayAsync">Create anyway</FluentButton>
     </section>
-}
-@if (Id is not null)
-{
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Discard local form and reload</FluentButton>
 }
 
 @code {
@@ -77,7 +80,7 @@
         else
         {
             var today = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
-            input = new("", "", "", today, today, "Etc/UTC");
+            input = new("", "", "", today, today.AddDays(1), "Etc/UTC");
         }
     });
 

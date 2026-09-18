@@ -5,4 +5,5 @@ namespace Sidequest.Application.Administration;
 /// <param name="DisplayName">Trusted directory-maintained account label.</param>
 /// <param name="Eligible">Whether the assigned account currently retains workforce eligibility.</param>
 /// <param name="Version">Assignment rowversion; stale removals fail rather than overwrite changes.</param>
-public sealed record AdministratorSummary(Guid UserId, string DisplayName, bool Eligible, byte[] Version);
+/// <param name="Email">Trusted same-tenant contact address disclosed only to current administrators.</param>
+public sealed record AdministratorSummary(Guid UserId, string DisplayName, bool Eligible, byte[] Version, string Email);

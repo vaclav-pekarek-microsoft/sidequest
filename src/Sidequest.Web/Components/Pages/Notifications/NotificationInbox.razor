@@ -15,7 +15,7 @@
 {
     <p role="alert">@Error</p>
 }
-<div class="actions">
+<div class="actions page-actions">
     <FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Refresh</FluentButton>
     <FluentButton OnClick="@(() => MarkAsync(null))" Disabled="@(ControlsDisabled || unread == 0)">Mark all read</FluentButton>
 </div>
@@ -53,7 +53,7 @@ else if (CanDisplayProtectedState && items is not null)
                 </li>
             }
         </ul>
-        <div class="actions">
+        <div class="actions page-actions">
             <FluentButton OnClick="@(() => MoveAsync(-1))" Disabled="@(ControlsDisabled || page == 1)">Previous</FluentButton>
             <span>Page @(page)</span>
             <FluentButton OnClick="@(() => MoveAsync(1))" Disabled="@(ControlsDisabled || page * 25 >= items.TotalCount)">Next</FluentButton>

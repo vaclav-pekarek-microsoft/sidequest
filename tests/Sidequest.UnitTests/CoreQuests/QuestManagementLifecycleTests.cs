@@ -20,7 +20,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     private readonly List<(Guid Id, string Version, QuestStatus Status, string Reason)> commands = [];
     private readonly List<(Guid Id, Guid Person, string Reason)> revocations = [];
     private readonly List<(Guid Id, ParticipationCommand Command)> participations = [];
-    private readonly PersonSummary member = new(Guid.NewGuid(), "Selected member");
+    private readonly PersonSummary member = new(Guid.NewGuid(), "Selected member", "selected@sample.invalid");
     private bool moderation = true;
     private QuestDetail detail = new(new(Guid.NewGuid(), Guid.NewGuid(), "Parent Event", "Quest title", "Room",
         new(2026, 7, 15, 10, 0, 0, TimeSpan.Zero), new(2026, 7, 15, 12, 0, 0, TimeSpan.Zero),
@@ -273,9 +273,10 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task OwnerRevalidationPreservesSelectedPersonAndExactRevocationReason()
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true }, Invitees = [member] };
+        detail = detail with { Summary = detail.Summary with { IsOwner = true }, Invitees = [new(member.Id, member.DisplayName)] };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
+        page.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();
         page.Find("select").Change(member.Id.ToString());
         page.Find("fluent-text-area").Input("Remove this invitation with reviewed intent.");
         await experience.ReportConnectionAsync(false, null);
@@ -288,8 +289,8 @@ public sealed class QuestManagementLifecycleTests : BunitContext
             .Single(button => button.Markup.Contains("Revoke invitation", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
         Assert.Equal((detail.Summary.Id, member.Id, "Remove this invitation with reviewed intent."), Assert.Single(revocations));
         Assert.Empty(page.FindComponent<QuestManagement>().Instance.Detail.Invitees!);
-        Assert.Equal("", page.FindComponent<FluentTextArea>().Instance.Value);
-        Assert.Equal("", page.Find("select").GetAttribute("value"));
+        Assert.Empty(page.FindComponents<FluentTextArea>());
+        Assert.Empty(page.FindAll("select"));
         await experience.ReportConnectionAsync(false, null);
         await experience.ReportConnectionAsync(true, null);
         Assert.Single(revocations);
@@ -412,6 +413,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         detail = detail with { Summary = detail.Summary with { IsOwner = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
+        page.FindAll("button").Single(button => button.TextContent == "Cancel Quest").Click();
         page.Find("fluent-text-area").Input("Old owner intention.");
         await experience.ReportConnectionAsync(false, null);
         detail = detail with { Summary = detail.Summary with
@@ -429,7 +431,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         detail = detail with { Summary = detail.Summary with { IsOwner = true, Version = "ownership-restored" } };
         await experience.ReportConnectionAsync(true, null);
         Assert.False(page.FindComponent<QuestManagement>().Instance.Busy);
-        Assert.Equal("", page.FindComponent<FluentTextArea>().Instance.Value);
+        Assert.Empty(page.FindComponents<FluentTextArea>());
         Assert.Single(participations);
     }
 
@@ -458,6 +460,8 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         page.OnMarkupUpdated += (_, _) =>
             obsoleteWasPublished |= page.Markup.Contains("Obsolete protected projection", StringComparison.Ordinal);
         const string reason = "Keep intent across current authorization.";
+        if (!moderation)
+            page.FindAll("button").Single(button => button.TextContent == "Cancel Quest").Click();
         page.Find("fluent-text-area").Input(reason);
         var execute = page.FindComponent<QuestManagement>().Instance.Execute;
         var authorized = detail;
@@ -524,7 +528,10 @@ public sealed class QuestManagementLifecycleTests : BunitContext
             await experience.ReportConnectionAsync(false, null);
             await experience.ReportConnectionAsync(true, null);
         }
-        Assert.Equal(outcome == "denied" ? "" : reason, page.FindComponent<FluentTextArea>().Instance.Value);
+        if (outcome == "denied" && !moderation)
+            Assert.Empty(page.FindComponents<FluentTextArea>());
+        else
+            Assert.Equal(outcome == "denied" ? "" : reason, page.FindComponent<FluentTextArea>().Instance.Value);
         Assert.False(page.FindComponent<QuestManagement>().Instance.Busy);
         Assert.Empty(commands);
     }
@@ -545,6 +552,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         page.WaitForAssertion(() => Assert.Single(participations));
         detail = detail with { Summary = detail.Summary with { Id = Guid.NewGuid() } };
         page.Render(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
+        page.FindAll("button").Single(button => button.TextContent == "Cancel Quest").Click();
         page.Find("fluent-text-area").Input("Replacement Quest draft.");
         mutationGate.SetResult();
         await operation;
@@ -590,6 +598,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
             await experience.ReportConnectionAsync(false, null);
             await experience.ReportConnectionAsync(true, null);
         }
+        page.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();
         page.Find("fluent-text-area").Input("Current view intention.");
         var expectedReads = memberReads;
         await page.InvokeAsync(() => changed.InvokeAsync(new("", "Obsolete input.")));
@@ -616,6 +625,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         detail = detail with { Summary = detail.Summary with { IsOwner = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
+        page.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();
         page.Find("select").Change(member.Id.ToString());
         page.Find("fluent-text-area").Input("Intention subsequently cleared.");
         page.Find("fluent-text-area").Input("");
@@ -633,7 +643,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
             await page.InvokeAsync(() => management.Execute.InvokeAsync(new("revoke", member.Id, "Not reviewed for the new version.")));
             Assert.Empty(revocations);
             await ReloadAsync(page);
-            Assert.Equal("", page.Find("select").GetAttribute("value"));
+            Assert.Empty(page.FindAll("select"));
         }
         else
         {
@@ -675,7 +685,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     {
         page.Find("input[type=checkbox]").Change(true);
         return page.InvokeAsync(() => page.FindComponents<FluentButton>()
-            .Single(button => button.Markup.Contains(">Suspend", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+            .Single(button => button.Markup.Contains("Suspend", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
     }
 
     private static Task ReloadAsync(IRenderedComponent<QuestDetails> page) =>

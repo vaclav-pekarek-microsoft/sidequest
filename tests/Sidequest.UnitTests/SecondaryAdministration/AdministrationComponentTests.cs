@@ -97,6 +97,19 @@ public sealed class AdministrationComponentTests : BunitContext
         Assert.Equal(5, cut.FindAll("nav a").Count);
     }
 
+    /// <summary>Contact labels use email first and describe missing contact data without substituting internal identifiers.</summary>
+    /// <param name="email">Projected contact address, including absent-contact cases.</param>
+    /// <param name="name">Projected display name, including an email-equivalent name.</param>
+    /// <param name="expected">Exact visible contact label.</param>
+    [Theory]
+    [InlineData("person@example.invalid", "Person Name", "person@example.invalid (Person Name)")]
+    [InlineData(" person@example.invalid ", " person@example.invalid ", "person@example.invalid")]
+    [InlineData("person@example.invalid", null, "person@example.invalid")]
+    [InlineData(null, "Person Name", "Contact unavailable (Person Name)")]
+    [InlineData("", "", "Contact unavailable")]
+    public void AccountLabelsShowEmailFirstAndTruthfulMissingContacts(string? email, string? name, string expected) =>
+        Assert.Equal(expected, AccountLabel.Format(email, name));
+
     /// <summary>Offline and prerender callbacks never invoke application work or replay it on reconnection.</summary>
     /// <param name="interactive">Whether the component has attached interactive handlers.</param>
     /// <returns>Completion after rejected callbacks and the independent authorization-only reconnect.</returns>

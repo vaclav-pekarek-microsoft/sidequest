@@ -55,6 +55,8 @@ public sealed class NotificationComponentTests : BunitContext
         var component = Render<NotificationPreferences>();
         Assert.Contains("calendar updates cannot be disabled", component.Markup);
         Assert.Contains("Declining in Outlook does not change Sidequest attendance", component.Markup);
+        Assert.Equal(new[] { "Optional email", "Reminders and time zone" },
+            component.FindAll("fieldset.section-box > legend.section-heading").Select(x => x.TextContent));
         component.Find("#reminder-hours").Change("0.011");
         component.Find("form").Submit();
         component.WaitForAssertion(() => Assert.Contains("two decimal", component.Find("[role=alert]").TextContent));
@@ -78,6 +80,8 @@ public sealed class NotificationComponentTests : BunitContext
         await component.InvokeAsync(() => review.Instance.OnClick.InvokeAsync());
         Assert.Empty(service.Replays);
         Assert.Contains("Confirm replay", component.Markup);
+        Assert.Equal("Failed work", component.Find(".section-box #failed-work-heading").TextContent);
+        Assert.Equal("Confirm replay", component.Find(".section-box.danger-zone #replay-heading").TextContent);
         var confirm = component.FindComponents<FluentButton>().Single(x => x.Markup.Contains("Confirm replay"));
         await component.InvokeAsync(() => confirm.Instance.OnClick.InvokeAsync());
         Assert.Equal((id, "delivery"), Assert.Single(service.Replays));

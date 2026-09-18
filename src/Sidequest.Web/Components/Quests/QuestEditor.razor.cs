@@ -31,8 +31,8 @@ public partial class QuestEditor
             Title = Initial.Title, Description = Initial.Description, Location = Initial.Location,
             Capacity = Initial.SuggestedCapacity, Start = Initial.StartLocal, End = Initial.EndLocal,
             Visibility = Initial.Visibility,
-            StartOffsetHours = Initial.StartOffset is null ? null : (decimal)Initial.StartOffset.Value.TotalHours,
-            EndOffsetHours = Initial.EndOffset is null ? null : (decimal)Initial.EndOffset.Value.TotalHours
+            StartOffset = Initial.StartOffset,
+            EndOffset = Initial.EndOffset
         };
     }
 

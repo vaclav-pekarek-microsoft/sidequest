@@ -216,6 +216,21 @@ civil start time (UTC instant/ID ties). Reuse existing membership/private/draft
 authorization and reconnect handling. Full cards remain page-bounded.
 Compatibility and Switch account links are intentionally absent from navigation;
 the direct diagnostic route and protected sign-out still exist.
+Keep a single Quests navigation link before Events. Direct Entra links must use
+the shared `SignInLink` and retain the `data-authentication-change` handshake;
+synthetic mode alone uses the persona picker. Completion hides its continuation
+while verification is pending, then reveals it on a missing/failed/superseded
+binding rather than bypassing the device-generation boundary. The one connection
+bridge lives in the footer's collapsed device tools. Hide only healthy connection
+feedback, never its authorization/inert gates or failure notices. Global `[hidden]`
+styling must win over component/button display rules.
+Box form sections and separate compact filters from page actions. New Event
+create/update validation requires EndDate > StartDate; leave inclusive legacy
+`TimeRules.EventWindow` reads intact. Use the bundled zone selector and inherited
+Quest zone, with contextual first/second-occurrence choices for ambiguous local
+times, never free-form numeric offsets or silent DST resolution. Display contact
+labels only within existing authorization; never user GUIDs or newly exposed
+attendee email rosters.
 
 `/foundation` is an authenticated compatibility screen (not product logic): Fluent
 4.14.4 with .NET 10, text-field binding, EditForm/DataAnnotations errors, modal dialog

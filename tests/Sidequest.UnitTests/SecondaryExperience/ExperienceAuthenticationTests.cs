@@ -73,6 +73,10 @@ public sealed class ExperienceAuthenticationTests : BunitContext
             Assert.Equal("", proof);
         Assert.DoesNotContain("bbbbbbbb-bbbb", component.Markup);
         Assert.Empty(component.FindAll("[data-connection]"));
+        Assert.False(component.Find("[data-authentication-loader]").HasAttribute("hidden"));
+        Assert.Equal("true", component.Find("[data-authentication-loader]").GetAttribute("aria-hidden"));
+        Assert.True(component.Find("[data-authentication-continue]").HasAttribute("hidden"));
+        Assert.Equal("Signing you in. Getting your Quests ready...", component.Find("[data-authentication-result]").TextContent);
         if (kind == "without-generation")
         {
             Assert.NotNull(result.Properties);
@@ -81,7 +85,6 @@ public sealed class ExperienceAuthenticationTests : BunitContext
             Assert.Equal("/", continuation.GetAttribute("href"));
             Assert.Equal("false", continuation.GetAttribute("data-enhance-nav"));
             Assert.Equal("Continue to Sidequest", continuation.TextContent);
-            Assert.Contains("Checking the device-clearing boundary", component.Find("[data-authentication-result]").TextContent);
         }
     }
 

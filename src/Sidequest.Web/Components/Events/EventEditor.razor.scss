@@ -11,6 +11,14 @@
 }
 .editor label {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: .5rem;
+    min-width: 0;
+}
+.editor ::deep select {
+    width: 100%;
+    max-width: 100%;
+}
+.editor .text-muted {
+    margin: 0;
 }

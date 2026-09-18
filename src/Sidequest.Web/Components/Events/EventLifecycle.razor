@@ -2,8 +2,8 @@
 @inject NavigationManager Navigation
 @inject Sidequest.Application.Events.Implementation.IEventManagementQueries Management
 
-<section aria-label="Owner lifecycle actions">
-    <h2>Lifecycle</h2>
+<section class="section-box" aria-label="Owner lifecycle actions">
+    <h2 class="section-heading">Event actions</h2>
     <EventFeedback Busy="Busy" Error="@Error" />
     @if (Item.Status == EventStatus.Draft)
     {
@@ -12,14 +12,24 @@
     }
     @if (Item.Status is EventStatus.Draft or EventStatus.Active)
     {
-        <FluentButton Disabled="@Busy" OnClick="LoadImpactAsync">Review cancellation impact</FluentButton>
-        @if (affectedQuests is { } count)
+        <div class="page-actions">
+            <FluentButton Disabled="@Busy" OnClick="@(() => showCancellation = !showCancellation)"
+                          aria-expanded="@showCancellation" aria-controls="event-cancellation">@(showCancellation ? "Hide cancellation" : "Cancel Event…")</FluentButton>
+        </div>
+        @if (showCancellation)
         {
-            <p role="status">Cancellation currently affects @count Draft, Active, or Suspended child Quests. Counts may change while you review.</p>
+            <fieldset id="event-cancellation" class="section-box danger-zone" disabled="@Busy">
+                <legend>Cancel Event</legend>
+                <FluentButton Disabled="@Busy" OnClick="LoadImpactAsync">Review cancellation impact</FluentButton>
+                @if (affectedQuests is { } count)
+                {
+                    <p role="status">Cancellation currently affects @count Draft, Active, or Suspended child Quests. Counts may change while you review.</p>
+                }
+                <FluentTextArea Label="Cancellation reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
+                <FluentCheckbox @bind-Value="confirmed" Disabled="@Busy">Cancel all Draft, Active, and Suspended child Quests, close pending membership work, and withdraw affected calendars. This cannot be undone.</FluentCheckbox>
+                <FluentButton Disabled="@(Busy || affectedQuests is null || !confirmed || reason.Trim().Length < 10)" OnClick="@(() => TransitionAsync(EventStatus.Cancelled))">Cancel Event and affected Quests</FluentButton>
+            </fieldset>
         }
-        <FluentTextArea Label="Cancellation reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" />
-        <FluentCheckbox @bind-Value="confirmed">Cancel all Draft, Active, and Suspended child Quests, close pending membership work, and withdraw affected calendars. This cannot be undone.</FluentCheckbox>
-        <FluentButton Disabled="@(Busy || affectedQuests is null || !confirmed || reason.Trim().Length < 10)" OnClick="@(() => TransitionAsync(EventStatus.Cancelled))">Cancel Event and affected Quests</FluentButton>
     }
     @if (Item.Status is EventStatus.Completed or EventStatus.Cancelled)
     {
@@ -28,8 +38,18 @@
     }
     @if (Item.Status == EventStatus.Draft)
     {
-        <FluentCheckbox @bind-Value="deleteConfirmed">Permanently delete this unpublished Draft. Deletion is allowed only without requests, invitations, or Quests.</FluentCheckbox>
-        <FluentButton Disabled="@(Busy || !deleteConfirmed)" OnClick="DeleteAsync">Delete Draft</FluentButton>
+        <div class="page-actions">
+            <FluentButton Disabled="@Busy" OnClick="@(() => showDeletion = !showDeletion)"
+                          aria-expanded="@showDeletion" aria-controls="event-deletion">@(showDeletion ? "Hide deletion" : "Delete Draft…")</FluentButton>
+        </div>
+        @if (showDeletion)
+        {
+            <fieldset id="event-deletion" class="section-box danger-zone" disabled="@Busy">
+                <legend>Delete unpublished Draft</legend>
+                <FluentCheckbox @bind-Value="deleteConfirmed" Disabled="@Busy">Permanently delete this unpublished Draft. Deletion is allowed only without requests, invitations, or Quests.</FluentCheckbox>
+                <FluentButton Disabled="@(Busy || !deleteConfirmed)" OnClick="DeleteAsync">Delete Draft</FluentButton>
+            </fieldset>
+        }
     }
 </section>
 
@@ -37,6 +57,8 @@
     private string reason = "";
     private bool confirmed;
     private bool deleteConfirmed;
+    private bool showCancellation;
+    private bool showDeletion;
     private int? affectedQuests;
     /// <summary>Owner-authorized lifecycle and rowversion snapshot; never mutated by this component.</summary>
     [Parameter, EditorRequired] public EventSummary Item { get; set; } = null!;
@@ -63,6 +85,8 @@
             confirmed = false;
             affectedQuests = null;
             reason = "";
+            showCancellation = false;
+            showDeletion = false;
         });
         await Changed.InvokeAsync();
     }
@@ -82,5 +106,7 @@
         affectedQuests = null;
         confirmed = false;
         deleteConfirmed = false;
+        showCancellation = false;
+        showDeletion = false;
     }
 }

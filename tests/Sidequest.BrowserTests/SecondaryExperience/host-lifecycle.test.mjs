@@ -17,6 +17,8 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
     const warning = { hidden: true, textContent: "" };
     const message = { textContent: "" };
     const result = { textContent: "" };
+    const loader = { hidden: false };
+    const continuation = { href: "http://localhost/quests", hidden: true };
     const modal = {
         className: "components-reconnect-hide",
         addEventListener(name, callback) { reconnectListeners.set(name, callback); },
@@ -30,7 +32,12 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
     };
     const completion = marker === undefined ? null : {
         dataset: { authenticationCompletion: marker, authenticationBinding: binding },
-        querySelector(name) { return name === "[data-authentication-result]" ? result : { href: "http://localhost/quests" }; }
+        querySelector(name) {
+            if (name === "[data-authentication-result]") return result;
+            if (name === "[data-authentication-loader]") return loader;
+            if (name === "[data-authentication-continue]") return continuation;
+            throw new Error(`Unexpected completion selector: ${name}`);
+        }
     };
     class Form {
         dataset = {};
@@ -67,7 +74,7 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
     };
     const executable = source.replace(/^import [^\n]+\n/, "const { beforeAuthenticationChange, afterAuthenticationSuccess, reportCircuitConnection } = globalThis.__hostLifecycle;\n");
     const module = await import(`data:text/javascript;base64,${Buffer.from(executable + `\n// ${randomUUID()}`).toString("base64")}`);
-    return { module, listeners, reconnectListeners, buttons, reports, navigation, completions, checks, warning, message, result, Form, modal };
+    return { module, listeners, reconnectListeners, buttons, reports, navigation, completions, checks, warning, message, result, loader, continuation, Form, modal };
 }
 
 test("The native auth POST waits for clearing and preserves antiforgery form and submitter", async () => {
@@ -128,6 +135,8 @@ test("Submission before initializer installation stays native; missing completio
     assert.match(completion.result.textContent, /Sign-in succeeded/);
     assert.match(completion.result.textContent, /Continue uses the current online account/);
     assert.match(completion.result.textContent, /Nothing was refreshed/);
+    assert.equal(completion.loader.hidden, true);
+    assert.equal(completion.continuation.hidden, false);
 });
 
 test("A storage failure is visible and cannot prevent sign-out or pretend clearing succeeded", async () => {
@@ -176,6 +185,8 @@ test("Verified completion is awaited before navigation; superseded completion re
     await started;
     assert.deepEqual(state.completions, ["verified-epoch"]);
     assert.deepEqual(state.navigation, []);
+    assert.equal(state.loader.hidden, false);
+    assert.equal(state.continuation.hidden, true);
     release();
     await pending;
     assert.deepEqual(state.navigation, ["http://localhost/quests"]);
@@ -184,6 +195,8 @@ test("Verified completion is awaited before navigation; superseded completion re
     assert.deepEqual(stale.navigation, []);
     assert.match(stale.result.textContent, /superseded/);
     assert.match(stale.result.textContent, /Nothing was refreshed/);
+    assert.equal(stale.loader.hidden, true);
+    assert.equal(stale.continuation.hidden, false);
 });
 
 test("Completion verifies current cookies and the exact protected session before activating a matching device generation", async () => {
@@ -212,6 +225,8 @@ test("Logout, changed sessions, HTTP failures and network failures cannot activa
         assert.deepEqual(state.completions, [], `HTTP ${status}`);
         assert.deepEqual(state.navigation, [], `HTTP ${status}`);
         assert.match(state.result.textContent, /superseded/);
+        assert.equal(state.loader.hidden, true);
+        assert.equal(state.continuation.hidden, false);
     }
     for (const failure of [new TypeError("network"), new DOMException("timeout", "TimeoutError")]) {
         const state = await host({ marker: "old-epoch", check: async () => { throw failure; } });

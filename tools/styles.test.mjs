@@ -38,6 +38,16 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(layout, /action="\/auth\/logout" method="post"/);
     assert.match(layout, /<AntiforgeryToken\s*\/>/);
     assert.match(layout, /data-authentication-change/);
+    assert.doesNotMatch(layout, /My Quests|Discover Quests|Invited Quests/);
+    assert.ok(layout.indexOf('href="/quests"') < layout.indexOf('href="/events"'));
+    assert.match(layout, /<footer>[\s\S]*href="\/install">Install and device privacy/);
+    assert.match(layout, /<footer>[\s\S]*<ConnectionStatus @rendermode="InteractiveServer"/);
+    const home = await readFile(join(web, "Components", "Pages", "Home.razor"), "utf8");
+    assert.match(home, /class="landing-sign-in"><SignInLink Class="button-link"/);
+    assert.doesNotMatch(home, /View sign-in options|href="\/install"/);
+    const styles = compile(join(web, "wwwroot", "app.scss")).css;
+    assert.match(styles, /\.landing-sign-in\s*\{[^}]*justify-content: center/s);
+    assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 
 test("Only the requested NuGet proxy is enabled and local settings are excluded from publishing", async () => {

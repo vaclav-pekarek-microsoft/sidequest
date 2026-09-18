@@ -1,0 +1,11 @@
+.danger-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.danger-zone ::deep fluent-text-area {
+    width: 100%;
+}

@@ -1,5 +1,6 @@
 using Sidequest.Application.Events;
 using Sidequest.Domain.Model;
+using Sidequest.Domain.Rules;
 using Sidequest.IntegrationTests.FoundationPersistence;
 
 namespace Sidequest.IntegrationTests.CoreEvents;
@@ -8,6 +9,37 @@ namespace Sidequest.IntegrationTests.CoreEvents;
 /// <param name="database">Migrated database owned and cleaned by the existing SQL fixture.</param>
 public sealed class EventQueryTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
+    /// <summary>Returns stored contact labels only inside the existing recipient, member and owner authorization boundaries.</summary>
+    /// <returns>Completion after exact email projections and denied management and roster reads.</returns>
+    [Fact]
+    public async Task ContactEmailsFollowExistingEventAuthorization()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var owner = context.Service(seed.User);
+        var applicant = context.Service(seed.Other);
+        await applicant.RequestMembershipAsync(seed.Event.Id);
+        await owner.InviteAsync(seed.Event.Id, seed.Other.ObjectId);
+
+        var request = Assert.Single((await owner.ListRequestsAsync(seed.Event.Id, new())).Items);
+        var invitation = Assert.Single((await owner.ListInvitationsAsync(seed.Event.Id, new())).Items);
+        Assert.Equal(new PersonSummary(seed.Other.Id, seed.Other.DisplayName, seed.Other.Email), request.User);
+        Assert.Equal(request.User, invitation.User);
+        Assert.Equal(request.User, Assert.Single((await applicant.ListRequestsAsync(null, new())).Items).User);
+        Assert.Equal(request.User, Assert.Single((await applicant.ListInvitationsAsync(null, new())).Items).User);
+        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
+            applicant.ListRequestsAsync(seed.Event.Id, new()))).Code);
+        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
+            applicant.ListInvitationsAsync(seed.Event.Id, new()))).Code);
+        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
+            applicant.ListMembersAsync(seed.Event.Id, new()))).Code);
+
+        await owner.AddMemberAsync(seed.Event.Id, seed.Other.ObjectId, false);
+        var members = (await applicant.ListMembersAsync(seed.Event.Id, new())).Items;
+        Assert.Contains(members, x => x.User == request.User);
+        Assert.Contains(members, x => x.User == new PersonSummary(seed.User.Id, seed.User.DisplayName, seed.User.Email));
+    }
+
     /// <summary>Normalizes case/punctuation and uses Jaccard at the inclusive threshold while requiring inclusive date overlap and active discovery.</summary>
     /// <returns>A task completing after concrete similarity, order and privacy assertions.</returns>
     [Fact]

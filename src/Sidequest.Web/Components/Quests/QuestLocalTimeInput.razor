@@ -1,0 +1,71 @@
+@using Microsoft.AspNetCore.Components.Forms
+<div class="local-time-field">
+    <label>@Label
+        <InputDate TValue="DateTime" Type="InputDateType.DateTimeLocal" Value="local" ValueChanged="ChangeLocalAsync"
+                   ValueExpression="() => local" disabled="@Disabled" />
+    </label>
+    @if (offsets.Count == 2)
+    {
+        <p class="text-muted">This time occurs twice in @ZoneId when clocks move back. Choose which occurrence you mean.</p>
+        <label>@OccurrenceLabel
+            <select value="@Occurrence" @onchange="ChangeOccurrenceAsync" disabled="@Disabled">
+                <option value="">Choose an occurrence</option>
+                <option value="first">First occurrence (earlier)</option>
+                <option value="second">Second occurrence (later)</option>
+            </select>
+        </label>
+    }
+    else if (offsets.Count == 0)
+    {
+        <p role="alert">This local time does not exist in @ZoneId because the clocks move forward. Choose a different time.</p>
+    }
+</div>
+
+@code {
+    private DateTime local;
+    private IReadOnlyList<TimeSpan> offsets = [];
+    private string Occurrence => Offset == offsets.FirstOrDefault() ? "first" :
+        offsets.Count == 2 && Offset == offsets[1] ? "second" : "";
+
+    /// <summary>Accessible label for the Event-local date and time field.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    /// <summary>Accessible label identifying which boundary needs a repeated-time choice.</summary>
+    [Parameter, EditorRequired] public string OccurrenceLabel { get; set; } = "";
+    /// <summary>Read-only IANA zone inherited from the parent Event.</summary>
+    [Parameter, EditorRequired] public string ZoneId { get; set; } = "Etc/UTC";
+    /// <summary>Parent-owned local date/time, copied before editing.</summary>
+    [Parameter] public DateTime Value { get; set; }
+    /// <summary>Publishes changed wall-clock components to the form owner.</summary>
+    [Parameter] public EventCallback<DateTime> ValueChanged { get; set; }
+    /// <summary>Existing or explicitly selected offset; never guessed for repeated times.</summary>
+    [Parameter] public TimeSpan? Offset { get; set; }
+    /// <summary>Publishes an inferred ordinary offset or an explicit repeated-time choice.</summary>
+    [Parameter] public EventCallback<TimeSpan?> OffsetChanged { get; set; }
+    /// <summary>Disables input during unavailable or pending operations.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        local = Value;
+        offsets = QuestLocalTime.Candidates(local, ZoneId);
+    }
+
+    private async Task ChangeLocalAsync(DateTime value)
+    {
+        if (Disabled || value == local)
+            return;
+        local = value;
+        offsets = QuestLocalTime.Candidates(local, ZoneId);
+        await OffsetChanged.InvokeAsync(offsets.Count == 1 ? offsets[0] : null);
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    private Task ChangeOccurrenceAsync(ChangeEventArgs args) => Disabled ? Task.CompletedTask :
+        OffsetChanged.InvokeAsync(args.Value?.ToString() switch
+        {
+            "first" when offsets.Count == 2 => offsets[0],
+            "second" when offsets.Count == 2 => offsets[1],
+            _ => null
+        });
+}

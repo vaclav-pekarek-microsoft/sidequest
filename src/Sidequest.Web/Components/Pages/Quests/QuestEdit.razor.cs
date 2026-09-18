@@ -167,7 +167,7 @@ public partial class QuestEdit : IAsyncDisposable
             return;
         await RunAsync(async () =>
         {
-            var input = model.ToInput();
+            var input = model.ToInput(zone);
             if (Id is null)
             {
                 var id = await Quests.CreateAsync(Guid.Parse(selectedEvent), input, lifetime.Token);

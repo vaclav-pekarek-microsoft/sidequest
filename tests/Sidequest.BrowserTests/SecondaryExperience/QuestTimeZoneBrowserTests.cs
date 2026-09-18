@@ -48,8 +48,10 @@ public sealed class QuestTimeZoneBrowserTests(FoundationBrowserFixture fixture) 
                 .FillWhenActionableAsync("Synthetic evening meeting point");
             await page.GetByLabel("Starts in Event zone", new() { Exact = true }).FillWhenActionableAsync($"{date}T20:30");
             await page.GetByLabel("Ends in Event zone", new() { Exact = true }).FillWhenActionableAsync($"{date}T21:30");
-            await Expect(page.GetByLabel("Start UTC offset (hours)", new() { Exact = true })).ToHaveValueAsync("");
-            await Expect(page.GetByLabel("End UTC offset (hours)", new() { Exact = true })).ToHaveValueAsync("");
+            await Expect(page.GetByLabel("Start UTC offset (hours)", new() { Exact = true })).ToHaveCountAsync(0);
+            await Expect(page.GetByLabel("End UTC offset (hours)", new() { Exact = true })).ToHaveCountAsync(0);
+            await Expect(page.GetByLabel("Start occurrence", new() { Exact = true })).ToHaveCountAsync(0);
+            await Expect(page.GetByLabel("End occurrence", new() { Exact = true })).ToHaveCountAsync(0);
             await page.GetByRole(AriaRole.Button, new() { Name = "Save draft", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(new Regex("/quests/[0-9a-f-]{36}$"));
         });

@@ -1,5 +1,6 @@
 section { display: grid; gap: 1rem; min-width: 0; }
 label { display: block; overflow-wrap: anywhere; }
 select { display: block; width: 100%; max-width: 100%; }
-div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.page-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+summary { cursor: pointer; font-weight: 600; }
 ::deep fluent-text-area { width: 100%; min-width: 0; }

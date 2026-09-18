@@ -5,12 +5,15 @@
 @using Sidequest.Web.Experience
 @inject ExperienceSessionBinding SessionBinding
 
-<PageTitle>Completing sign-in · Sidequest</PageTitle>
-<h1>Completing sign-in</h1>
-<noscript><p>Sign-in completed, but device clearing and refresh require JavaScript. Clear this site's data before sharing the device.</p></noscript>
-<div data-authentication-completion="@(epoch ?? "")" data-authentication-binding="@(sessionProof ?? "")">
-    <p data-authentication-result role="status">Checking the device-clearing boundary before opening Sidequest.</p>
-    <a href="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" data-authentication-continue data-enhance-nav="false">Continue to Sidequest</a>
+<PageTitle>Signing you in · Sidequest</PageTitle>
+<noscript>
+    <p>Sign-in completed, but device clearing and refresh require JavaScript. Clear this site's data before sharing the device.</p>
+    <a href="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" data-enhance-nav="false">Continue to Sidequest</a>
+</noscript>
+<div class="authentication-progress" data-authentication-completion="@(epoch ?? "")" data-authentication-binding="@(sessionProof ?? "")">
+    <span class="loading-spinner" data-authentication-loader aria-hidden="true"></span>
+    <p data-authentication-result role="status">Signing you in. Getting your Quests ready...</p>
+    <a class="button-link" href="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" data-authentication-continue data-enhance-nav="false" hidden>Continue to Sidequest</a>
 </div>
 
 @code {

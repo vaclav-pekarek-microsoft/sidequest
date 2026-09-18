@@ -20,22 +20,30 @@ public sealed class QuestEditorModel
     public DateTime Start { get; set; }
     /// <summary>Local exclusive end interpreted in the parent Event zone.</summary>
     public DateTime End { get; set; }
-    /// <summary>Optional signed offset in hours for explicit overlap disambiguation.</summary>
-    public decimal? StartOffsetHours { get; set; }
-    /// <summary>Optional signed offset in hours for explicit overlap disambiguation.</summary>
-    public decimal? EndOffsetHours { get; set; }
+    /// <summary>Offset mapped from the start occurrence choice, or preserved from the existing instant.</summary>
+    public TimeSpan? StartOffset { get; set; }
+    /// <summary>Offset mapped from the end occurrence choice, or preserved from the existing instant.</summary>
+    public TimeSpan? EndOffset { get; set; }
     /// <summary>Visibility can only be changed while drafting.</summary>
     public QuestVisibility Visibility { get; set; }
 
     /// <summary>Creates immutable input without inferring an offset for a DST overlap.</summary>
-    /// <returns>Application configuration input; ambiguous/gap/containment checks remain server-side.</returns>
-    /// <exception cref="DomainException">An offset is outside the supported civil range.</exception>
-    public QuestInput ToInput()
+    /// <param name="zoneId">Read-only Event zone used to reject nonexistent or unresolved repeated local times.</param>
+    /// <returns>Application configuration input with validated offsets; containment remains server-side.</returns>
+    /// <exception cref="DomainException">A local time does not exist, needs an occurrence choice, or has an invalid offset.</exception>
+    public QuestInput ToInput(string zoneId)
     {
-        if (StartOffsetHours is < -14 or > 14 || EndOffsetHours is < -14 or > 14)
-            throw new DomainException(ErrorCode.Validation, "UTC offsets must be between -14 and 14 hours.", "Offset");
+        ValidateLocal(Start, StartOffset, zoneId, "start");
+        ValidateLocal(End, EndOffset, zoneId, "end");
         return new(Title, Description, Location, Capacity, Start, End,
-            StartOffsetHours is null ? null : TimeSpan.FromHours((double)StartOffsetHours.Value),
-            EndOffsetHours is null ? null : TimeSpan.FromHours((double)EndOffsetHours.Value), Visibility);
+            StartOffset, EndOffset, Visibility);
+    }
+
+    private static void ValidateLocal(DateTime local, TimeSpan? offset, string zoneId, string boundary)
+    {
+        if (QuestLocalTime.Candidates(local, zoneId).Count == 2 && offset is null)
+            throw new DomainException(ErrorCode.Validation,
+                $"Choose First occurrence or Second occurrence for the repeated {boundary} time.", "LocalTime");
+        TimeRules.ToUtc(local, zoneId, offset);
     }
 }

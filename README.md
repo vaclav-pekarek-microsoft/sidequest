@@ -80,6 +80,27 @@ The other participation/history filters remain available. Compatibility diagnost
 are still reachable at `/foundation`, but neither that link nor Switch account
 appears in navigation; protected sign-out remains available.
 
+The main menu has one **Quests** link before **Events**. Discover, invited and
+history views remain available within the pages, alongside compact filters and
+separate action toolbars. Forms use boxed sections; management controls reveal
+the selected action and its required reason. Authorized people pickers use email
+and display name, including administrator search by either field; restricted
+attendee rosters remain display-name-only.
+
+Event creation and updates require an end date strictly later than the start
+date and a selection from the bundled IANA time zones. Existing single-day
+Events remain readable with their original inclusive containment window.
+Quest editors use the Event zone without numeric UTC-offset fields. A repeated
+daylight-saving time asks for its first or second occurrence; nonexistent times
+are rejected rather than shifted.
+
+Entra sign-in starts directly from navigation or the centered Home button.
+Completion normally shows only a progress loader; verified device/session
+binding still precedes automatic navigation. Installation/privacy guidance and
+collapsed device tools are in the footer. Healthy connection details are hidden;
+connection and privacy failures remain visible. The favicon and install icons
+share the white-S green branding.
+
 ## Runtime configuration and providers
 
 `20260916112116_ReserveMembershipRequestHistory` adds a nonfiltered covering

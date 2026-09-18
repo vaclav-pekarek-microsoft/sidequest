@@ -372,7 +372,7 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
                 field.Length > "__RequestVerificationToken=".Length);
             Assert.Equal(!nativeLogout, fields.Any(field => field.StartsWith("experienceEpoch=", StringComparison.Ordinal) &&
                 field.Length > "experienceEpoch=".Length));
-            await Expect(signingOut.GetByRole(AriaRole.Link, new() { Name = "View sign-in options", Exact = true })).ToBeVisibleAsync();
+            await Expect(signingOut.Locator("main").GetByRole(AriaRole.Link, new() { Name = "Sign in", Exact = true })).ToBeVisibleAsync();
             Assert.Equal(401, await signingOut.EvaluateAsync<int>("async () => (await fetch('/experience/session', {redirect:'manual'})).status"));
         }
         finally

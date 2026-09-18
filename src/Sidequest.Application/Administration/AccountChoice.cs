@@ -4,4 +4,5 @@ namespace Sidequest.Application.Administration;
 /// <param name="Id">Internal account key used for commands, never a submitted email address.</param>
 /// <param name="DisplayName">Directory-maintained display label.</param>
 /// <param name="Version">Opaque account rowversion captured at selection.</param>
-public sealed record AccountChoice(Guid Id, string DisplayName, byte[] Version);
+/// <param name="Email">Trusted local contact address disclosed only after administrator authorization.</param>
+public sealed record AccountChoice(Guid Id, string DisplayName, byte[] Version, string Email);

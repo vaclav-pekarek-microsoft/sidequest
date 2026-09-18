@@ -68,6 +68,7 @@ test("Matching current-cookie proof is sent only in the no-store HTTP header bef
         assert.deepEqual(state.requests[0].options.headers, { "X-Sidequest-Circuit-Binding": "circuit-memory-proof" });
         assert.equal(state.main.inert, false);
         assert.equal(state.main.hidden, false);
+        assert.equal(state.elements.get("[data-connection]").hidden, true);
         assert.equal(state.calls[0][0], "ConnectionChangedAsync");
         assert.equal(state.calls[0][1], true);
         assert.equal(JSON.stringify(state.storage).includes("circuit-memory-proof"), false);
@@ -82,11 +83,15 @@ for (const storageFailure of [false, true]) {
             assert.equal(state.main.hidden, true);
             assert.deepEqual(state.calls, []);
             assert.match(state.elements.get("[data-connection]").textContent, /full online reload/);
+            assert.equal(state.elements.get("[data-connection]").hidden, false);
             assert.equal(state.elements.get("[data-refresh]").disabled, true);
             assert.deepEqual(state.signOut, { disabled: false, hidden: false });
             assert.deepEqual(state.storage.filter(call => call[0] === "clearAccountForEpoch"), [["clearAccountForEpoch", "captured-epoch"]]);
             assert.equal(state.storage.some(call => call[0] === "refreshJoined"), false);
-            if (storageFailure) assert.match(state.elements.get("[data-snapshot]").textContent, /clearing could not be verified/);
+            if (storageFailure) {
+                assert.match(state.elements.get("[data-snapshot]").textContent, /clearing could not be verified/);
+                assert.equal(state.elements.get("[data-device-tools]").open, true);
+            }
             state.module.reportCircuitConnection(true);
             await state.bridge.connection();
             assert.equal(state.main.hidden, true);
@@ -96,3 +101,19 @@ for (const storageFailure of [false, true]) {
         } finally { state.bridge.dispose(); }
     });
 }
+
+test("A lost transport reveals its notice and blocks actions; a verified reconnect hides it again", async () => {
+    const state = await setup(204);
+    try {
+        state.module.reportCircuitConnection(false);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(state.main.inert, true);
+        assert.equal(state.elements.get("[data-connection]").hidden, false);
+        assert.match(state.elements.get("[data-connection]").textContent, /Offline or disconnected/);
+        state.calls.length = 0;
+        state.module.reportCircuitConnection(true);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(state.main.inert, false);
+        assert.equal(state.elements.get("[data-connection]").hidden, true);
+    } finally { state.bridge.dispose(); }
+});

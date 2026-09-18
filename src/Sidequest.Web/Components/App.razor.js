@@ -102,6 +102,8 @@ export async function beforeWebStart() {
         await afterAuthenticationSuccess(completion.dataset.authenticationCompletion);
         location.replace(completion.querySelector("[data-authentication-continue]").href);
     } catch {
+        completion.querySelector("[data-authentication-loader]").hidden = true;
+        completion.querySelector("[data-authentication-continue]").hidden = false;
         completion.querySelector("[data-authentication-result]").textContent =
             "Sign-in succeeded, but device saving could not be activated or this sign-in was superseded. Nothing was refreshed. Continue uses the current online account; saving still requires a successful authorized refresh. If clearing failed, clear this site's data before sharing the device.";
     }
