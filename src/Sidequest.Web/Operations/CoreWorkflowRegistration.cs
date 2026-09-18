@@ -37,6 +37,13 @@ public static class CoreWorkflowRegistration
         if ((directory.TenantId != Guid.Empty && directory.TenantId != authentication.TenantId) ||
             (credentials.TenantId != Guid.Empty && credentials.TenantId != authentication.TenantId))
             throw new InvalidOperationException("Directory tenants must match the configured authentication tenant.");
+        if (authentication.IsHackathon)
+            directory = new GraphDirectoryOptions(authentication.TenantId, authentication.HackathonParticipants)
+            {
+                MaximumRecipients = directory.MaximumRecipients,
+                MaximumPages = directory.MaximumPages,
+                MaximumThrottlingRetries = directory.MaximumThrottlingRetries
+            };
 
         services.AddEventWorkflows(limits);
         services.AddEventUiRevalidation();
@@ -44,8 +51,14 @@ public static class CoreWorkflowRegistration
         services.AddSingleton(credentials);
         services.AddHttpClient<IGraphAccessTokenProvider, GraphClientCredentialTokenProvider>()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        services.AddHttpClient<IDirectoryGateway, GraphDirectoryGateway>()
+        services.AddHttpClient<GraphDirectoryGateway>(nameof(IDirectoryGateway))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddTransient<IDirectoryGateway>(provider =>
+        {
+            var inner = provider.GetRequiredService<GraphDirectoryGateway>();
+            return provider.GetService<OperationalActivityMetrics>() is { } metrics
+                ? new ObservedDirectoryGateway(inner, metrics) : inner;
+        });
         services.AddScoped<IQuestService, QuestService>();
         services.AddScoped<IQuestEventLifecycle, QuestEventLifecycle>();
         services.AddScoped<IBackgroundWorkHandler, QuestCompletionHandler>();

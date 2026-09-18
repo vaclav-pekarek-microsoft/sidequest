@@ -10,7 +10,7 @@ namespace Sidequest.Application.Quests;
 public interface IQuestService
 {
     /// <summary>Lists Quests in the selected authorized view without leaking private/draft resources or suppressed counts.</summary>
-    /// <param name="kind">Participation, ownership, discovery, history, or explicit moderation view.</param>
+    /// <param name="kind">Participation, ownership, discovery, history, joined-first Event-local board, or explicit moderation view.</param>
     /// <param name="eventId">Optional internal parent Event filter; null still restricts results to the actor's authorized scope.</param>
     /// <param name="page">One-based paging input with page size 1 through 100.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of the query.</param>
@@ -20,7 +20,7 @@ public interface IQuestService
     public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
         CancellationToken cancellationToken = default);
     /// <summary>Lists authorized Quests whose start instants match the optional range, filtering before totals and pagination.</summary>
-    /// <param name="kind">Authorized participation, ownership, discovery, history, or moderation view.</param>
+    /// <param name="kind">Authorized participation, ownership, discovery, history, joined-first Event-local board, or moderation view.</param>
     /// <param name="eventId">Optional internal parent Event filter; absence never broadens authorization.</param>
     /// <param name="page">One-based paging input with page size 1 through 100.</param>
     /// <param name="dates">Inclusive lower and exclusive upper start-instant bounds; null endpoints are unbounded.</param>

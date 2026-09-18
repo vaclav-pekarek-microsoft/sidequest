@@ -1,10 +1,17 @@
 @using Sidequest.Web.Experience
-<aside @ref="root" aria-label="Connection, installation and device basics">
-    <p data-connection role="status">Connecting… Online actions require a working server connection.</p>
-    <p data-snapshot role="status">Device basics have not been refreshed in this view.</p>
-    <p><a href="/experience/offline.html" data-enhance-nav="false">Read saved joined basics</a> · <a href="/install">Install and device privacy</a></p>
-    <button type="button" data-refresh disabled="@(!RendererInfo.IsInteractive)">Refresh saved joined basics</button>
-    <button type="button" data-install hidden>Install Sidequest</button>
-    <p data-install-status role="status"></p>
-    <small>Joined private Quest basics may be saved on this device for up to 24 hours. Anyone sharing this browser profile may read them. Storage and installation are not guaranteed.</small>
-</aside>
+<div @ref="root" class="device-controls">
+    <p class="connection-notice" data-connection role="status">Connecting… Online actions require a working server connection.</p>
+    <details data-device-tools>
+        <summary>Device options</summary>
+        <div class="device-options">
+            <p data-snapshot role="status">Device basics have not been refreshed in this view.</p>
+            <a href="/experience/offline.html" data-enhance-nav="false">Read saved joined basics</a>
+            <div class="device-buttons">
+                <button type="button" class="button-quiet" data-refresh disabled="@(!RendererInfo.IsInteractive)">Refresh saved joined basics</button>
+                <button type="button" data-install hidden>Install Sidequest</button>
+            </div>
+            <p data-install-status role="status"></p>
+            <small>Joined private Quest basics may be saved on this device for up to 24 hours. Anyone sharing this browser profile may read them. Storage and installation are not guaranteed.</small>
+        </div>
+    </details>
+</div>

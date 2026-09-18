@@ -8,7 +8,7 @@
     <p>Owners:
         @foreach (var owner in Item.Owners)
         {
-            <span @key="owner.Id">@owner.DisplayName (@owner.Email) </span>
+            <span @key="owner.Id">@owner.Email (@owner.DisplayName) </span>
         }
     </p>
 </article>

@@ -1,0 +1,5 @@
+@page "/quests/create"
+@page "/quests/{Id:guid}/edit"
+@attribute [Authorize]
+
+<QuestEdit Id="@Id" EventId="@EventId" />

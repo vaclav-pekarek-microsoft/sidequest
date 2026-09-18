@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const source = await readFile(new URL("./AuthenticationStartupBrowserTests.cs", import.meta.url), "utf8");
-const match = source.match(/private const string InitializerImportScript = """\r?\n([\s\S]*?)\r?\n\s*""";/);
+const match = source.match(/\bconst string InitializerImportScript = """\r?\n([\s\S]*?)\r?\n\s*""";/);
 assert.ok(match, "Execute the exact browser scenario's import-map resolver.");
 
 function resolve(map) {

@@ -1,0 +1,229 @@
+# A01–A26 acceptance evidence matrix
+
+Source and retained run: [613e795 / 35071694703](README.md#existing-source-pinned-execution-evidence).
+Requirements are [handoff §58](../sidequest-project-handoff.md); these concise
+labels do not replace its full expected outcomes.
+
+**U** = `tests\Sidequest.UnitTests`; **S** = `tests\Sidequest.IntegrationTests`
+(real SQL); **B** = `tests\Sidequest.BrowserTests` (synthetic loopback).
+References use exact `Class.Method` names; their unique source file is
+`<project>\<feature-directory>\<Class>.cs`. Theory arguments are omitted from
+method references, not from executed evidence. Every listed method has passed
+case(s) in the retained TRX. A passing method proves its assertions, not the
+entire acceptance row. All rows remain subject to release review.
+
+“Gap” below means the specified combined proof is **not established by the cited
+evidence**, not a claim that every possible test was exhaustively audited.
+This matrix is not line/branch coverage, mutation analysis or a new product test
+suite. No unexecuted scenario is marked passed.
+
+| ID / required behavior | Existing executed automated support | Additional proof / disposition |
+|---|---|---|
+| **A01** Wrong tenant/excluded guest denied; no bootstrap | U `AuthenticationTests.WrongTenantInvalidObjectOrMissingWorkforceAssignmentIsRejected`; U `AuthenticationTests.TenantAndEmailAloneNeverAdmitGuestOrAnonymousPrincipal`; U `AuthenticationTests.BootstrapRequiresMatchingExplicitTenantAndObject` | Claims and bootstrap rules exercised, not tenant configuration. **OPEN live**: approved wrong-tenant/guest accounts, real role assignments and local-account absence, including no accidental admin creation. |
+| **A02** Private Quest/image URL discloses no content, roster/count or existence | S `QuestAuthorizationTests.PrivateRead_RequiresInvitationAndMembershipAcrossRetainedStates`; S `QuestAuthorizationTests.OrdinaryRoster_ExposesAttendeeNamesOnly_AndHistoryIsRestricted`; S `MediaServiceTests.PrivateReads_RequireExplicitModerationAndExcludeUnpublished`; S `MediaServiceTests.ReadRace_DiscardsBytesAfterRevocation` | SQL/privacy adapters and media double, not deployed Blob permissions/cache behavior. **OPEN live**: distinct users request known/unknown private URLs, inspect response/cache and private network storage access. |
+| **A03** Event manager moderates with reason/audit, cannot ordinarily edit another owner's Quest | S `QuestAuthorizationTests.EventOwner_CannotUseAnyOrdinaryQuestManagementCommand`; S `QuestServiceTests.PrivateModeration_RedactsEveryRosterAndCount_WithoutGrantingOrdinaryAccess`; B `CoreWorkflowBrowserTests.PrivateInvitationModerationAndRevocationPreserveDistinctAccess` | Bounded UI/service proof. Release reviewer checks approved manager identity and retained moderation audit in deployed configuration; no ordinary-edit privilege inferred from moderation. |
+| **A04** Nonmember admin has no content bypass; reasoned recovery only | S `RecoveryTests.VerifiedRecoveryPreservesContentLifecycleAndNoAdminBypass`; S `RecoveryTests.ClosedExternalGateAndMissingProcedureDenyRecovery`; S `QuestServiceTests.CurrentActorLoss_DeniesQueriesAndCommands_DespiteOwnershipAndAdministrator` | This is **ownership recovery**, not backup restore. **OPEN live**: approved departure-verification procedure/evidence, admin role and operational gate. Test procedure is explicitly synthetic. |
+| **A05** Source-group changes/failures do not alter frozen individual grants | S `BulkMembershipTests.FrozenSnapshotReplayDoesNotRefetchAndRetainsPartialFailures`; S `BulkMembershipTests.ExpansionFailureCannotApplyPartialMembership`; S `BulkMembershipTests.RemovalOrRevocationWinsAgainstStaleSnapshot` | Frozen results and failure semantics exercised with directory doubles. **OPEN live**: approved Graph policy/group fixture, add/invite then change group and outage; subsequent access must not make an ongoing group check. |
+| **A06** Membership/invitation revocation removes access/participation, suppresses content and withdraws calendar | S `QuestEventLifecycleTests.MembershipLoss_AtomicallyRevokesInvitationsAndParticipation`; S `DeliveryPipelineTests.AccessRevokedBeforeSendSuppressesCalendarAndRead`; S `DeliveryPipelineTests.UncertainRequestAccessLossCreatesDurableCompensation`; B `ExperienceJourneyBrowserTests.PrivateInvitedOnlyNeverLeaksAndOnlineRevocationRemovesJoinedBasics` | Device cache refresh semantics and durable delivery proven in bounded environments. **OPEN** real client calendar withdrawal and disconnected-device limitations (A21/A23); immediate remote deletion while offline is not promised. |
+| **A07** Concurrent approvals/repeated accept create one membership/decision/history | S `EventMembershipTests.ConcurrentApprovalsProduceOneMembershipAndDecision`; S `EventMembershipTests.InviteAndAcceptAreRepeatSafeAndResolvePendingRequest`; S `DeliveryPipelineTests.MembershipDecisionSeparatesAffectedRequesterFromManagerObservers` | Actual parallel SQL approval and repeated acceptance proof. Distinguish producer envelope uniqueness from physical exactly-once email, which is not guaranteed. |
+| **A08** Follow/join/leave exclusivity, advisory capacity, repeats/races | S `QuestServiceTests.Participation_IsExclusiveIdempotent_AndCapacityIsAdvisory`; S `EventLockTests.LockEventAsync_SameKeySerializesMutators_UntilCommitOrRollback`; B `CoreWorkflowBrowserTests.MembershipApprovalPublicQuestParticipationAndCalendarRecovery` | The original cited run lacks composed participation races. **Supplemental A08 evidence below** adds overlapping Join-versus-Follow, repeated Join/Leave, and over-capacity cases with exact persisted counts, audit and durable delivery intent. Provider/client acceptance remains separate. |
+| **A09** Named private invitation is immediate read permission, not automatic attendance/acceptance | S `QuestServiceTests.InviteRevokeReinvite_PreservesIndependentOwnerAccess_AndNeverRestoresParticipation`; S `QuestAuthorizationTests.PrivateRead_RequiresInvitationAndMembershipAcrossRetainedStates`; B `CoreWorkflowBrowserTests.PrivateInvitationModerationAndRevocationPreserveDistinctAccess` | Invitation/owner access independence and browser revocation supported. **OPEN live** forwarded URL/nonmember check with approved distinct users; do not mislabel private invitations as Event consent invitations. |
+| **A10** Invalid state/date transition rejects atomically | S `EventServiceTests.EditEnforcesRowversionPublishedZoneAndChildContainment`; S `QuestServiceTests.FailedMutation_RollsBackAuditOutboxAndContent`; S `QuestFailureTests.OutboxFailure_RollsBackParticipationCalendarAndAudit`; S `QuestBoundaryTests.Containment_UsesExactExclusiveEnd` | Actual rollback and boundary proof; failures are not automatically replayed. Retain explicit conflict/validation observations in representative UI run. |
+| **A11** Event cancellation atomically cancels relevant public/private children | S `EventCancellationCompositionTests.CancelEvent_RealProducers_CoalesceParentStatusAndPerQuestCalendarWithdrawals`; S `EventCancellationCompositionTests.CancelEvent_DraftAndTerminalChildren_PreservePrivateAndHistoricalSemantics`; S `EventServiceTests.CancellationCascadeFailureRollsBackChildAndParent` | Composed audience/calendar intent plus rollback proof. **OPEN** supported Outlook delivery/withdrawal evidence; terminal children must not receive invented new cancellation. |
+| **A12** Suspended edit, moderator reinstatement, latest same-UID restoration, completion without cancellation | S `QuestServiceTests.SuspendEditReinstateCancelArchive_PreservesLifecycleAndDeliveryRules`; S `DeliveryPipelineTests.SuspendedEditModeratorNoticeIsGenericAndOwnershipRechecked`; S `QuestCompletionHandlerTests.Completion_ChecksDueAndCurrentEnd_AndReplaysWithoutCalendarCancellation` | The original cited run does not alone prove the complete transport journey. **Supplemental A12 evidence below** adds composed public/private suspend→edit→reinstate→complete journeys with exact latest rendered details and no final withdrawal. Real client restoration remains **OPEN A23**. |
+| **A13** Inherited Event zone, DST gap/overlap, midnight, UTC/local display | S `QuestBoundaryTests.LocalTime_DstGapAndOverlap_RequireExplicitValidMapping`; U `TimeRulesTests.EventWindow_DstDays_HaveExactInclusiveDateBoundaries`; U `TimeRulesTests.ToUtc_AutumnOverlap_BothBranchesReturnIndependentInstants`; U `TimeRulesTests.ToUtc_InputKindDoesNotOverrideEventZone` | Exact time-rule support. The original run lacks differing-user/Event-zone product-display proof. **Supplemental A13 cases below** add rendered inherited-zone and UTC/device-local next-date checks; require accepted-PR hosted execution evidence before citing them as passed. Supported-client gap/overlap input and display acceptance remains open. |
+| **A14** Same UID, ordered changes, exact retries, no roster/stale send | S `DeliveryPipelineTests.JoinLeaveRejoinRetainsUidAndMonotonicSequence`; S `DeliveryPipelineTests.CalendarRetryRetainsExactPayloadAndRecordsActualReceipt`; S `DeliveryPipelineTests.UncertainRequestThenSuspensionSendsWithdrawalAndSuppressesOldRetry`; U `RecipientCalendarRendererTests.Render_RoundTripsEscapesUtcAndOnlyRecipientWithExactRetries` | Calendar bytes/SQL ordering and controlled transport proof, not client ingestion. **OPEN A23**: original/update/withdraw/rejoin observed in mailbox/client; uncertain delivery may duplicate externally. |
+| **A15** Crash after commit/acceptance and racing workers recover durably | S `DeliveryPipelineTests.OutboxRecoveryDeduplicatesNotificationCalendarAndReminder`; S `DeliveryPipelineTests.ReceiptSurvivesCrashBeforeQueueCompletionWithoutResend`; S `SqlWorkQueueTests.ConcurrentClaimsAndExpiredRecoveryFenceOldCompletion`; S `DeliveryPipelineTests.StaleProviderCompletionCannotOverwriteReclaimedDelivery` | Controlled crash-boundary state and actual SQL worker race proof. **Gap/live**: actual host termination/restart at both boundaries, approved provider receipt reconciliation; these tests are not a killed deployment or SQL/Blob restore. |
+| **A16** Joined-only X-hour reminders; reschedule/rejoin/late windows; no stale/post-start work | S `ReminderCompositionTests.JoinedReminder_UsesDecimalLeadAndStartBoundary`; S `ReminderCompositionTests.EditQuestStart_SupersedesOldRevision_AndSchedulesOnlyJoinedRecipient`; S `ReminderCompositionTests.ReminderHandler_RejectsStaleOrIneligibleIntent_WithoutNotificationOrDelivery`; S `ReminderPipelineTests.LatenessAndStartBoundariesAreEnforced`; S `ReminderPipelineTests.ReminderCompletesOnceAcrossPreferenceToggleAndRejoin` | Rules include due+120s, +121s and start suppression; this is not actual elapsed healthy-provider latency. **OPEN A24** measured submission deadlines; do not count suppression as an on-time send. |
+| **A17** Stale edit vs suspend/revoke/edit preserves invariant and shows conflict | B `CoreWorkflowBrowserTests.ConcurrentEventEditorsPreserveWinnerAndUnsavedConflictInput`; S `QuestCoordinationTests.MembershipRemovalRacingOwnerAssignment_PreservesCrossResourceContinuity`; S `MediaServiceTests.ProviderRace_ReauthorizesAndNeverPublishesStaleCover` | The original run lacks stale Quest-edit composition. **Supplemental A17 cases below** add SQL-backed browser journeys against suspension, owner-access revocation and another Quest edit. Require accepted-PR execution evidence; retained conflict input and confirmed-access-loss redaction are distinct outcomes. |
+| **A18** Active published discovery summaries only; duplicate similarity/overlap | S `EventQueryTests.DuplicateSearchNormalizesAndHonorsJaccardOverlapAndPrivacy`; S `EventQueryTests.DuplicateSearchReturnsStableTopFive`; S `EventServiceTests.NonmemberSeesSummaryButNotDraftHistoryOrRoster`; S `QuestAuthorizationTests.DiscoveryPaging_UsesStableIdTieBreak_AndExcludesPrivateHints` | Bounded discovery/privacy proof. Representative data run must include nonmembers, drafts, private records, overlaps and boundary names; no all-owner-only workload. |
+| **A19** Equal owners, concurrent self-removal, verified last-owner departure, last admin | S `EventMembershipTests.RacingEqualOwnerRemovalsRetainLastEligibleOwner`; S `QuestBoundaryTests.ConcurrentOwnerRemovals_RetainOneEligibleOwner`; S `AdministratorTests.CompetingSelfRemovalsRetainLastEligibleAdministrator`; S `RecoveryTests.UnverifiedOrExistingEligibleOwnerDeniesRecovery`; S `QuestAuthorizationTests.DepartedActor_EveryServiceEntryPointReauthorizes` | Actual SQL concurrency and admission rules supported. **OPEN live** workforce-departure verification and approved recovery procedure, not a checkbox replacing external facts. |
+| **A20** Safe exact media/template boundaries; no public unvalidated asset/AI path | U `SkiaImageSanitizerTests.ActualByteLimit_IgnoresLyingAndNonseekableLength`; U `SkiaImageSanitizerTests.PixelLimit_IsInclusiveBeforeRasterAllocation`; U `SkiaImageSanitizerTests.PixelLimit_RejectsExactlyOnePixelOver`; U `SkiaImageSanitizerTests.InvalidContent_IsRejectedAfterRealDecode`; U `BusinessEmailRulesTests.SubstitutionCannotIntroduceMarkupOrSecondPassVariables`; U `BusinessEmailRulesTests.RejectsActiveOrMalformedLiteralHtml`; S `MediaServiceTests.ProviderRace_ReauthorizesAndNeverPublishesStaleCover` | Real decoding/template tests, storage doubles. **OPEN live** approved Blob isolation and upload rejection with real transport. Absence of a V1 AI path remains source/config review, not proven by a sanitizer test. |
+| **A21** Accessible 360px create/join + minimal circuit-free cold offline basics/expiry/clearing | B `CoreWorkflowBrowserTests.Mobile360RealQuestJoinIsKeyboardReachableWithoutOverflow`; B `ExperienceJourneyBrowserTests.OfflineColdLaunchRendersJoinedPrivateBasicsWithoutCircuitOrProtectedResponseCache`; B `ExperienceJourneyBrowserTests.ExplicitLogoutAndAccountSwitchClearPriorDeviceBasicsAcrossTabs`; B `OfflineStorageBrowserTests.ExactTwentyFourHourBoundaryPurgesRatherThanRendering`; B `HostLifecycleBrowserTests.DelayedSuccessfulSignInCompletionCannotUndoLaterLogout` | Actual loopback Chromium flows, not full WCAG certification. **OPEN** approved physical devices, screen readers, create validation/focus, contrast/reflow, native installation/offline storage policies. Follow [client runbook](client-runbook.md); UI polish deferred does not waive accessibility. |
+| **A22** Provider outage/poison/restart truthful UI, visible recovery, no obsolete replay | S `SqlWorkQueueTests.EightFailuresDeadLetterAndHonorRetryAfter`; S `DeliveryPipelineTests.UnknownAndMalformedWorkDeadLetterThroughRealRunner`; S `DeliveryPipelineTests.MissingProviderConfigurationDeadLettersWithoutDisablingInbox`; U `GraphDirectoryGatewayTests.ThrottlingWaitsForExactRetryAfterBeforeRetrying`; B `HostLifecycleBrowserTests.ActualReconnectKeepsInputAndRechecksCurrentHttpSession` | Controlled failure/reconnect proof. **OPEN** approved live outage/restart, queue/alert visibility and operator recovery without obsolete replay; reconnect is not provider recovery. |
+| **A23** Supported Outlook invitation/update/withdraw/restoration | U `RecipientCalendarRendererTests.Render_CancellationRetainsIdentityAndRedactsProtectedContent`; S `DeliveryPipelineTests.JoinLeaveRejoinRetainsUidAndMonotonicSequence` | **NO real mailbox/client proof. OPEN** execute [client runbook](client-runbook.md). Renderer/receipt tests and downloaded `.ics` are not Outlook acceptance. |
+| **A24** Representative 300 users, measured latency/queue targets and actual restore | S `SqlReadinessTests.CurrentSchemaIsHealthy` and U `AzureHostingTests.EncryptedKeyRing_SurvivesRestartAndWrappingKeyRotation` provide supporting readiness/key-ring contracts only; no load or backup-restore case claimed | **NO representative load or restore proof. OPEN** [load](load-runbook.md), [recovery](recovery-runbook.md). Offline numerical evaluator is a dossier aid, never a success certificate. Key-ring test uses synthetic storage/key resolver; readiness only checks SQL/migrations. |
+| **A25** Local end/reschedule/restarted completion; repeat-safe history; no calendar withdrawal | S `CompletionCompositionTests.EventCompletion_EarlyClaim_RetriesThenCompletesUsingImmutableCutoff`; S `CompletionCompositionTests.CompletionIntent_AfterRealEndEdit_DoesNotApplyOldDeadline`; S `CompletionCompositionTests.EarlyQuestCompletion_MustNotLoseDurableCompletionAtImmutableCutoff`; S `QuestEventLifecycleTests.CompletionCleanup_PreservesHistoricalCalendars_AndCancelsOnlyUnpublishedDrafts`; S `EventServiceTests.ArchiveRequiresAllChildrenTerminal` | Composed immutable-deadline/retry and history proof. **OPEN** host clock/zone configuration and actual restart observation; controlled queue recovery is not a deployment restart. |
+| **A26** Bulk pagination/dedup/ineligibility/throttle/failure/retry/removal; frozen individuals only | U `GraphDirectoryGatewayTests.ExpandSupportedGroupReadsAllTransitivePagesAndDeduplicates`; U `GraphDirectoryGatewayTests.ExpansionRejectsIncompleteOrUntrustedContinuation`; U `GraphDirectoryGatewayTests.ThrottlingWaitsForExactRetryAfterBeforeRetrying`; S `BulkMembershipTests.CompleteExpansionPrecedesMembershipAndDeduplicatesSnapshot`; S `BulkMembershipTests.FrozenSnapshotReplayDoesNotRefetchAndRetainsPartialFailures`; S `BulkMembershipTests.RemovalOrRevocationWinsAgainstStaleSnapshot` | Controlled Graph pagination/throttle and SQL snapshot proof. **OPEN live** approved group/paging/rate policy and visible partial progress; no assumption that app access remains group-derived. |
+
+## Supplemental A08 regression evidence
+
+These cases were added after the original `613e795` evidence baseline and are
+not claimed to exist in its retained TRX. Their source is
+`tests\Sidequest.IntegrationTests\CoreQuests\QuestServiceTests.cs` in this revision:
+
+- `Participation_JoinRacingFollow_PreservesExactStateAndIntent`: both Event-lock
+  orderings, exact accepted/conflicting command outcomes, Joined-only final state,
+  an explicit repeat Join, exact audit transitions, and one calendar-affecting
+  Joined envelope with the correct actor, recipients and revision.
+- `Participation_ConcurrentJoinAndLeave_PreserveCapacityAndRepeatSafety`: two
+  overlapping calls by either the same actor or distinct members; two distinct
+  members may join despite suggested capacity one. Repeated Join/Leave commits
+  one transition per actor, retains None rather than restoring Following, and
+  produces exact counts, audit, per-actor Joined/Left envelopes and consecutive
+  calendar revisions.
+
+The helper holds the first real Quest service call inside its already-acquired
+Event lock while starting the second call, then releases it without arbitrary
+sleeps or replaying a failed mutation. Each call uses its own SQL context and
+the real access checks, transaction boundary and change writer; the existing
+active-Event reconciliation fixture remains in use. Five focused cases,
+including the original sequential case, passed against fixture-owned LocalDB:
+
+```powershell
+dotnet test tests\Sidequest.IntegrationTests\Sidequest.IntegrationTests.csproj -c Release --no-build --filter "FullyQualifiedName~Participation_JoinRacingFollow|FullyQualifiedName~Participation_ConcurrentJoinAndLeave|FullyQualifiedName~Participation_IsExclusiveIdempotent"
+```
+
+Retain the accepted PR's hosted execution evidence with the release dossier.
+These assertions prove durable producer intent, not queue consumption, actual
+email submission or client ingestion, and do not independently approve A08 or
+release acceptance.
+
+## Supplemental A12 composed delivery evidence
+
+`SuspendedQuestDeliveryTests.SuspendEditReinstateComplete_RestoresLatestCalendarWithoutFinalWithdrawal`
+in `tests\Sidequest.IntegrationTests\CoreComposition` adds two cases, Public and
+Private, after the original `613e795` evidence baseline. These are not claimed
+to exist in that baseline's TRX.
+
+Each case uses real application producers, SQL transactions and queue leases,
+notification policy, calendar rendering and a deterministic recording email
+gateway. It joins an attendee, suspends through the Event manager, edits title,
+description, location and both times while suspended, rejects owner-only
+reinstatement, then reinstates through the manager. Assertions inspect the actual
+recipient-only REQUEST/CANCEL/REQUEST bytes: one UID, exact increasing sequences,
+latest content/times, redacted withdrawal and no transport delivery during the
+suspended edit. Both owner and moderator receive the exact generic, link-free
+inbox notice.
+
+The same execution consumes the obsolete original completion deadline without
+ending the extended Quest, then consumes the new deadline and repeats its handler.
+It verifies exactly one completion history/audit, retained Joined participation,
+unchanged final calendar state/version, and no extra outbox or transport message.
+Completion is not treated as cancellation.
+
+Both cases and the 12 existing cancellation-composition cases passed against
+fixture-owned LocalDB in Release:
+
+```powershell
+dotnet test tests\Sidequest.IntegrationTests\Sidequest.IntegrationTests.csproj -c Release --no-restore --filter "FullyQualifiedName~SuspendedQuestDeliveryTests|FullyQualifiedName~EventCancellationCompositionTests" -m:1 -p:UseSharedCompilation=false
+```
+
+Retain the accepted PR's hosted evidence with the dossier. This proves composed
+producer/worker/rendering behavior, not actual provider submission, Outlook
+ingestion, a killed host or release approval.
+
+## Supplemental A13 rendered zone evidence
+
+`QuestTimeZoneBrowserTests.InheritedEventZonePreservesUtcAndDifferentDeviceDay`
+adds January and July cases after the original evidence baseline. The cases use
+the existing CI-only Chromium fixture and real synthetic sign-in, Event/Quest
+creation, publication and persisted reload; they do not launch local browsers.
+
+Each Event covers one `America/New_York` date. A 20:30-21:30 Quest fits that
+Event's local date while both UTC instants and the actual `Europe/Prague` device
+display belong to the next date. Independent expected standard/daylight offsets,
+exact `<time datetime>` UTC instants, Event-local text and device-local text are
+asserted before publication, after publication and after reload. Create and edit
+screens must show the inherited read-only zone without a zone override control;
+the edit form must recover the original Event-local inputs.
+
+Source presence is not execution evidence. Retain the accepted PR's successful
+hosted run and full source SHA before citing these cases as passed. These cases
+supplement the existing gap/overlap and containment rule evidence; they do not
+independently prove gap rejection or explicit overlap selection in the browser,
+nor supported physical-client acceptance or release approval.
+
+## Supplemental A17 stale Quest edit evidence
+
+`CoreWorkflowBrowserTests.StaleQuestEditPreservesCommittedWinnerAndCurrentAccess`
+adds three cases after the original evidence baseline. Each opens a private Quest
+editor, changes all text fields and both local times without saving, commits a
+competing action through a different real synthetic identity, then submits the
+old editor exactly once.
+
+Moderator suspension and another equal owner's content edit must return an
+explicit version conflict, disable saving and retain all unsent inputs until
+explicit reload. Removing the original owner's access instead must clear the
+protected editor and deny private Quest access, while ordinary Event membership
+remains usable. The revocation case concerns Quest ownership, not membership or
+invitation revocation.
+
+Fresh authorized views check the winning status, text, both UTC instants and
+exact content-edit/action history counts before the stale save, after rejection
+and after explicit recovery. The ownership case also checks the remaining equal
+owner. These assertions establish no partial content edit or additional
+`ContentEdited` history; they do not inspect exact outbox or transport counts.
+
+These are deterministically ordered stale-snapshot journeys through real SQL,
+not tests of simultaneous SQL transaction scheduling. Retain the accepted PR's
+successful hosted run and source SHA before citing the new cases as executed.
+Existing SQL race/rollback evidence and live release review remain separate.
+
+## Supplemental publication/participation SQL concurrency evidence
+
+`PublicationParticipationConcurrencyTests.PublicationAndNonownerJoin_CommitWithoutCrossResourceCycle`
+in `tests\Sidequest.IntegrationTests\CoreQuests` overlaps draft publication with
+a nonowner joining a different Event's Quest. The four cases cover both staging
+orders and public/private publication. A SQL DMV-observed history lock wait
+establishes actual overlap; no user mutation is retried to hide a conflict.
+
+Draft publication does not query unused participation audiences. Drafts cannot
+be joined, and public discovery recipients are resolved by the outbox consumer.
+The regression checks both commits, one status-history entry, one completion
+schedule, exact audits and participation, public-only publication intent and
+the joining actor's calendar revision. Explicit repeated successful commands
+must not duplicate those effects.
+
+All four cases reject with conflicts against the original claim-fix baseline
+`ff6a01f`. With the publication correction, all four plus 32 adjacent Quest
+service/lifecycle cases passed against fixture-owned LocalDB. The isolated
+comparison run retained a visible NU1900 warning because NuGet's advisory
+service was unavailable; repository and hosted CI audit policy were unchanged.
+Retain the accepted PR's source-pinned hosted evidence before citing this as
+integrated acceptance. This does not establish process-kill recovery, provider
+delivery, representative load, or absence of every possible SQL deadlock.
+
+## Supplemental calendar-consumer SQL concurrency evidence
+
+`CalendarStateConcurrencyTests.DifferentEvents_StageCalendarAndCompleteLeasesExactlyOnce`
+in `tests\Sidequest.IntegrationTests\CoreDelivery` overlaps two real leased
+outbox handlers for separate Events. Eight cases combine absent/retained
+calendar intent, due/future Quest starts, and empty/separated inbox and reminder
+index ranges. Separating upstream ranges prevents their contention from hiding
+the calendar-state conversion defect.
+
+The consumer reserves indexed reminder, inbox and calendar write-intent keys
+instead of first taking shared locks and later converting them during inserts.
+Reminder reconciliation precedes the outbox's inbox/calendar effects. Existing
+Event locks, Serializable transactions, lease fences and atomic effect/queue
+completion remain; adjacent missing keys can still wait. This is not a claim
+of lock-free concurrency or a globally deadlock-free workload.
+
+The cases check exact calendar sequence/payload and retained uncertainty,
+notification and transport deduplication, reminder key/revision/due instant,
+completed lease state and repeat-safe handling. Reverting only the calendar
+reservation fails the two separated-range cases with absent calendar state;
+the restored correction passes all eight. Parent verification passed 97
+combined SQL cases covering these regressions, publication, reminder behavior
+and adjacent Quest lifecycle contracts. Successful source-pinned hosted
+execution remains required before accepting the combined change.
+
+## Remaining product automated follow-up
+
+Retain successful hosted **A13/A17** supplements and prioritize
+approved actual process-kill/restart exercises for **A15/A22/A25**. Define exact
+new case names only when implemented; proposed names are not executed evidence.
+The other rows' automated support must still be reviewed against every §58
+clause before sign-off.
+
+## Recording a later acceptance decision
+
+For each row retain: full deployed source/artifact SHA; environment and approved
+test-data profile; test/client versions; UTC interval; operator/reviewer identity
+(in restricted evidence, not public source); raw evidence digest/reference;
+observed outcome; deviations and defects; linked retest; and the approval decision.
+For A21/A23/A24 a unit/TRX link cannot fill the live-observation field. Store
+screenshots, raw traces, mailbox content and account mappings only in approved
+restricted storage. Do not commit identity tokens, cookies, real addresses or
+employee content in this directory.

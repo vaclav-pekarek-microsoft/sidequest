@@ -8,28 +8,37 @@
 <AdminPanel>
     <p>Global administration grants no Event membership, Quest content access or editing privileges.</p>
     <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
-    <FluentButton OnClick="LoadAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="LoadAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    }
     @if (assignments is not null && !Forbidden)
     {
-        @if (assignments.Count == 0)
-        {
-            <p>No administrator assignments are available.</p>
-        }
-        <ul>
-            @foreach (var assignment in assignments)
+        <section class="section-box" aria-labelledby="assigned-administrators">
+            <h2 class="section-heading" id="assigned-administrators">Current administrators</h2>
+            @if (assignments.Count == 0)
             {
-                <li @key="assignment.UserId">
-                    @assignment.DisplayName — @(assignment.Eligible ? "Eligible administrator" : "Assignment inactive: account ineligible")
-                    <FluentButton OnClick="@(() => Review(() => pendingRemoval = assignment))" Disabled="@Disabled">Review removal</FluentButton>
-                </li>
+                <p>No administrator assignments are available.</p>
             }
-        </ul>
-        <p>Page @pageNumber · at most 25 assignments per page</p>
-        <FluentButton OnClick="PreviousAsync" Disabled="@(Disabled || pageNumber == 1)">Previous administrators</FluentButton>
-        <FluentButton OnClick="NextAsync" Disabled="@(Disabled || assignments.Count < 25)">Next administrators</FluentButton>
-        <fieldset disabled="@Disabled">
-            <legend>Add a provisioned same-tenant account</legend>
-            <label for="admin-search">Search directory-maintained display names (2–100 characters)</label>
+            <ul>
+                @foreach (var assignment in assignments)
+                {
+                    <li @key="assignment.UserId">
+                        @AccountLabel.Format(assignment.Email, assignment.DisplayName) — @(assignment.Eligible ? "Eligible administrator" : "Assignment inactive: account ineligible")
+                        <FluentButton OnClick="@(() => Review(() => pendingRemoval = assignment))" Disabled="@Disabled">Review removal</FluentButton>
+                    </li>
+                }
+            </ul>
+            <p>Page @pageNumber · at most 25 assignments per page</p>
+            <div class="page-actions">
+                <FluentButton OnClick="PreviousAsync" Disabled="@(Disabled || pageNumber == 1)">Previous administrators</FluentButton>
+                <FluentButton OnClick="NextAsync" Disabled="@(Disabled || assignments.Count < 25)">Next administrators</FluentButton>
+            </div>
+        </section>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">Add an administrator</legend>
+            <p class="text-muted">Choose a provisioned same-tenant account.</p>
+            <label for="admin-search">Search email or display name (2–100 characters)</label>
             <input id="admin-search" maxlength="100" @bind="query" />
             <FluentButton OnClick="SearchAsync" Disabled="@Disabled">Search eligible accounts</FluentButton>
             @if (choices is { Count: 0 })
@@ -41,7 +50,7 @@
                 <ul>
                     @foreach (var choice in choices)
                     {
-                        <li @key="choice.Id">@choice.DisplayName
+                        <li @key="choice.Id">@AccountLabel.Format(choice.Email, choice.DisplayName)
                             <FluentButton OnClick="@(() => Review(() => pendingAddition = choice))" Disabled="@Disabled">Review addition</FluentButton>
                         </li>
                     }
@@ -50,18 +59,18 @@
         </fieldset>
         @if (pendingAddition is not null)
         {
-            <section aria-labelledby="add-heading">
-                <h2 id="add-heading">Confirm administrator addition</h2>
-                <p>@pendingAddition.DisplayName will manage global administrators and email settings, not private resource content.</p>
+            <section class="section-box" aria-labelledby="add-heading">
+                <h2 class="section-heading" id="add-heading">Confirm administrator addition</h2>
+                <p>@AccountLabel.Format(pendingAddition.Email, pendingAddition.DisplayName) will manage global administrators and email settings, not private resource content.</p>
                 <FluentButton OnClick="AddAsync" Disabled="@Disabled">Confirm administrator addition</FluentButton>
                 <FluentButton OnClick="@(() => Review(() => pendingAddition = null))" Disabled="@Disabled">Cancel addition</FluentButton>
             </section>
         }
         @if (pendingRemoval is not null)
         {
-            <section aria-labelledby="remove-heading">
-                <h2 id="remove-heading">Confirm administrator removal</h2>
-                <p>@pendingRemoval.DisplayName will lose administrative privileges. Login does not restore the role. At least one eligible administrator must remain.</p>
+            <section class="section-box danger-zone" aria-labelledby="remove-heading">
+                <h2 class="section-heading" id="remove-heading">Confirm administrator removal</h2>
+                <p>@AccountLabel.Format(pendingRemoval.Email, pendingRemoval.DisplayName) will lose administrative privileges. Login does not restore the role. At least one eligible administrator must remain.</p>
                 <FluentButton OnClick="RemoveAsync" Disabled="@Disabled">Confirm administrator removal</FluentButton>
                 <FluentButton OnClick="@(() => Review(() => pendingRemoval = null))" Disabled="@Disabled">Cancel removal</FluentButton>
             </section>

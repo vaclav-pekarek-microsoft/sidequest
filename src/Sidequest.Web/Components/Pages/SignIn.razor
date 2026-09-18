@@ -9,7 +9,7 @@
     <h1>Sign in to Sidequest</h1>
     <h2>Synthetic development personas</h2>
     <p>Loopback only. These are not real employees. Local SQL and the foundation schema must be available.</p>
-    <form method="post" action="/auth/development" data-enhance="false" data-authentication-change>
+    <form class="section-box" method="post" action="/auth/development" data-enhance="false" data-authentication-change>
         <AntiforgeryToken />
         <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
         <label for="persona">Test persona</label>

@@ -6,10 +6,15 @@
 
 <PageTitle>Event invitations · Sidequest</PageTitle>
 <h1>@(Id is null ? "My Event invitations" : "Manage Event invitations")</h1>
-<a href="/events">Events</a>
+<nav class="page-actions" aria-label="Invitation actions">
+    <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    }
+</nav>
 <p>Event invitations require your acceptance. Membership does not join or follow any Quest, including after rejoining an Event.</p>
 <EventFeedback Busy="Busy" Error="@Error" />
-<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
 @if (result is not null)
 {
     @if (result.Items.Count == 0)
@@ -18,8 +23,9 @@
     }
     @foreach (var invitation in result.Items)
     {
-        <article @key="invitation.Id">
-            <h2>@invitation.EventName · @invitation.User.DisplayName</h2>
+        <article @key="invitation.Id" class="section-box">
+            <h2>@invitation.EventName</h2>
+            <p>@invitation.User.Label</p>
             <p>@invitation.Status · Expires @invitation.ExpiresUtc.ToString("g") UTC</p>
             @if (invitation.Status == EventInvitationStatus.Pending)
             {

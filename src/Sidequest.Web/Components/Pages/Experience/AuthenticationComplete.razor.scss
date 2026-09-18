@@ -1,0 +1,14 @@
+.authentication-progress { max-width: 34rem; text-align: center; }
+.loading-spinner {
+    display: inline-block;
+    width: 3rem;
+    height: 3rem;
+    border: .25rem solid var(--sq-line);
+    border-top-color: var(--sq-accent);
+    border-radius: 50%;
+    animation: signing-in .8s linear infinite;
+}
+@keyframes signing-in { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .loading-spinner { animation: none; }
+}

@@ -1,0 +1,15 @@
+.dashboard-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    align-items: end;
+    gap: .75rem 1rem;
+    min-width: 0;
+    padding: 1rem 1.25rem 1.25rem;
+    border: 1px solid var(--sq-line);
+    border-radius: var(--sq-radius);
+    background: var(--sq-surface);
+    legend { padding-inline: .4rem; color: var(--sq-muted); font-size: .8rem; font-weight: 600; }
+    label { display: block; min-width: 0; font-size: .85rem; font-weight: 600; }
+    input, select { display: block; width: 100%; margin-top: .3rem; }
+    p { grid-column: 1 / -1; margin: .25rem 0; font-size: .8rem; color: var(--sq-muted); overflow-wrap: anywhere; }
+}

@@ -24,24 +24,29 @@ else
     <EditForm Model="model" OnValidSubmit="SaveAsync" FormName="notification-preferences">
         <DataAnnotationsValidator />
         <ValidationSummary />
-        <fieldset disabled="@ControlsDisabled">
-            <legend>Optional communications</legend>
-            <FluentCheckbox @bind-Value="model.NewQuestEmail" Disabled="@ControlsDisabled">Email me about new public Quests</FluentCheckbox>
-            <FluentCheckbox @bind-Value="model.ActivityEmail" Disabled="@ControlsDisabled">Email me optional joined/followed Quest activity</FluentCheckbox>
-            <FluentCheckbox @bind-Value="model.RemindersEnabled" Disabled="@ControlsDisabled">Enable attendee reminders (email and in-app)</FluentCheckbox>
+        <fieldset class="section-box" disabled="@ControlsDisabled">
+            <legend class="section-heading">Optional email</legend>
+            <FluentCheckbox Name="notification-new-quest-email" @bind-Value="model.NewQuestEmail" Disabled="@ControlsDisabled">Email me about new public Quests</FluentCheckbox>
+            <FluentCheckbox Name="notification-activity-email" @bind-Value="model.ActivityEmail" Disabled="@ControlsDisabled">Email me optional joined/followed Quest activity</FluentCheckbox>
+        </fieldset>
+        <fieldset class="section-box" disabled="@ControlsDisabled">
+            <legend class="section-heading">Reminders and time zone</legend>
+            <FluentCheckbox Name="notification-reminders" @bind-Value="model.RemindersEnabled" Disabled="@ControlsDisabled">Enable attendee reminders (email and in-app)</FluentCheckbox>
             <label for="reminder-hours">Remind me this many hours before start (0.01–168, up to two decimal places)</label>
             <InputNumber id="reminder-hours" @bind-Value="model.ReminderHours" min="0.01" max="168" step="0.01" />
             <ValidationMessage For="@(() => model.ReminderHours)" />
-            <FluentTextField Label="Preferred IANA time zone (optional)" @bind-Value="model.TimeZoneId" Disabled="@ControlsDisabled" />
-            <FluentButton Type="ButtonType.Submit" Disabled="@ControlsDisabled">Save preferences</FluentButton>
+            <FluentTextField Name="notification-time-zone" Label="Preferred IANA time zone (optional)" @bind-Value="model.TimeZoneId" Disabled="@ControlsDisabled" />
         </fieldset>
+        <div class="page-actions">
+            <FluentButton Type="ButtonType.Submit" Disabled="@ControlsDisabled">Save preferences</FluentButton>
+        </div>
     </EditForm>
     @if (EventId is not null)
     {
-        <section aria-labelledby="event-preference-heading">
-            <h2 id="event-preference-heading">This Event's new-Quest email</h2>
+        <section class="section-box" aria-labelledby="event-preference-heading">
+            <h2 class="section-heading" id="event-preference-heading">This Event's new-Quest email</h2>
             <p>This explicit override replaces your default for this Event only. Current Event membership is required.</p>
-            <FluentCheckbox @bind-Value="eventEnabled" Disabled="@ControlsDisabled">Enable new-Quest email for this Event</FluentCheckbox>
+            <FluentCheckbox Name="notification-event-email" @bind-Value="eventEnabled" Disabled="@ControlsDisabled">Enable new-Quest email for this Event</FluentCheckbox>
             <FluentButton OnClick="SaveEventAsync" Disabled="@ControlsDisabled">Save Event override</FluentButton>
         </section>
     }

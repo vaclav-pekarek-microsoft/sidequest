@@ -122,7 +122,7 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         Assert.Empty((await viewer.ListAsync(QuestListKind.History, null, new())).Items);
     }
 
-    /// <summary>Ordinary viewers receive attendee names and counts, not emails, follower names, invitation rosters or full moderation history.</summary>
+    /// <summary>Ordinary viewers receive attendee display names and counts, but not attendee emails, follower or invitation rosters, or full moderation history.</summary>
     /// <returns>Completion after independent owner/ordinary roster and history assertions.</returns>
     [Fact]
     public async Task OrdinaryRoster_ExposesAttendeeNamesOnly_AndHistoryIsRestricted()
@@ -134,16 +134,84 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         await viewer.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join);
         var detail = await viewer.GetAsync(scenario.Seed.Quest.Id);
         Assert.Equal(scenario.Seed.Other.Id, Assert.Single(detail.Attendees!).Id);
+        Assert.Equal(scenario.Seed.Other.DisplayName, Assert.Single(detail.Attendees!).DisplayName);
         Assert.Equal(1, detail.Summary.AttendeeCount);
         Assert.Equal(1, detail.Summary.FollowerCount);
         Assert.Null(detail.Followers);
         Assert.Null(detail.Invitees);
-        Assert.Equal(new[] { "DisplayName", "Id" }, typeof(Sidequest.Application.Events.PersonSummary).GetProperties().Select(p => p.Name).Order().ToArray());
-        Assert.Equal(scenario.Seed.User.Id, Assert.Single((await owner.GetAsync(scenario.Seed.Quest.Id)).Followers!).Id);
+        Assert.Equal(new[] { "DisplayName", "Id" }, typeof(QuestRosterPersonSummary).GetProperties().Select(p => p.Name).Order().ToArray());
+        Assert.DoesNotContain(scenario.Seed.Other.Email, System.Text.Json.JsonSerializer.Serialize(detail.Attendees));
+        var ownerDetail = await owner.GetAsync(scenario.Seed.Quest.Id);
+        Assert.Equal(scenario.Seed.User.Id, Assert.Single(ownerDetail.Followers!).Id);
+        Assert.Equal(scenario.Seed.User.DisplayName, Assert.Single(ownerDetail.Followers!).DisplayName);
+        Assert.DoesNotContain(scenario.Seed.User.Email, System.Text.Json.JsonSerializer.Serialize(ownerDetail.Followers));
         var ordinaryHistory = Assert.Single(await viewer.HistoryAsync(scenario.Seed.Quest.Id));
         Assert.Equal("Active", ordinaryHistory.Action);
         Assert.Null(ordinaryHistory.Actor);
-        Assert.Equal(2, (await owner.HistoryAsync(scenario.Seed.Quest.Id)).Count);
+        var history = await owner.HistoryAsync(scenario.Seed.Quest.Id);
+        Assert.Equal(2, history.Count);
+        Assert.Contains(history, item => item.Action.Contains($"{scenario.Seed.Other.Email} ({scenario.Seed.Other.DisplayName})", StringComparison.Ordinal));
+        Assert.Contains(history, item => item.Actor == $"{scenario.Seed.User.Email} ({scenario.Seed.User.DisplayName})");
+        Assert.All(history, item =>
+        {
+            Assert.DoesNotContain(scenario.Seed.User.Id.ToString("N"), item.Action);
+            Assert.DoesNotContain(scenario.Seed.Other.Id.ToString("N"), item.Action);
+        });
+    }
+
+    /// <summary>Even an owner receives names-only attendee, follower, and invitation rosters; moderation continues withholding all three.</summary>
+    /// <returns>Completion after actual invitation and participation commands prove roster identities, email exclusion, and moderation redaction.</returns>
+    [Fact]
+    public async Task PrivateRosters_RemainNamesOnlyForOwners_AndWithheldFromModeration()
+    {
+        var scenario = await QuestScenario.CreateAsync(database, true);
+        var owner = scenario.Service();
+        var viewer = scenario.Service(scenario.Seed.Other);
+        await owner.InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.Other.Id);
+        await owner.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Follow);
+        await viewer.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join);
+
+        var detail = await owner.GetAsync(scenario.Seed.Quest.Id);
+        Assert.Equal(new QuestRosterPersonSummary(scenario.Seed.Other.Id, scenario.Seed.Other.DisplayName),
+            Assert.Single(detail.Attendees!));
+        Assert.Equal(new QuestRosterPersonSummary(scenario.Seed.User.Id, scenario.Seed.User.DisplayName),
+            Assert.Single(detail.Followers!));
+        Assert.Equal(new QuestRosterPersonSummary(scenario.Seed.Other.Id, scenario.Seed.Other.DisplayName),
+            Assert.Single(detail.Invitees!));
+        foreach (var roster in new[] { detail.Attendees, detail.Followers, detail.Invitees })
+        {
+            var serialized = System.Text.Json.JsonSerializer.Serialize(roster);
+            Assert.DoesNotContain(scenario.Seed.User.Email, serialized);
+            Assert.DoesNotContain(scenario.Seed.Other.Email, serialized);
+            Assert.DoesNotContain("\"Email\"", serialized);
+        }
+
+        var moderation = await viewer.GetAsync(scenario.Seed.Quest.Id, moderation: true);
+        Assert.Null(moderation.Attendees);
+        Assert.Null(moderation.Followers);
+        Assert.Null(moderation.Invitees);
+    }
+
+    /// <summary>Historical actions whose target no longer resolves use an explicit safe label rather than displaying the internal identifier.</summary>
+    /// <returns>Completion after owner projection redacts the unresolved target and ordinary access still withholds detailed history.</returns>
+    [Fact]
+    public async Task History_UnresolvedPersonUsesSafeLabelWithoutExposingIdentifier()
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        var unresolved = Guid.NewGuid();
+        await FoundationSeed.PersistAsync(database, new AuditEntry
+        {
+            ResourceKind = ResourceKind.Quest, ResourceId = scenario.Seed.Quest.Id,
+            ActorId = scenario.Seed.User.Id, Action = $"OwnerRemoved:{unresolved:N}",
+            Reason = "", OccurredUtc = scenario.Clock.Now, CorrelationId = Guid.NewGuid().ToString("N")
+        });
+        var history = Assert.Single(await scenario.Service().HistoryAsync(scenario.Seed.Quest.Id));
+        Assert.Equal("OwnerRemoved:Unavailable person", history.Action);
+        Assert.Equal($"{scenario.Seed.User.Email} ({scenario.Seed.User.DisplayName})", history.Actor);
+        Assert.DoesNotContain(unresolved.ToString("N"), history.Action);
+        var ordinary = Assert.Single(await scenario.Service(scenario.Seed.Other).HistoryAsync(scenario.Seed.Quest.Id));
+        Assert.Equal("Active", ordinary.Action);
+        Assert.Null(ordinary.Actor);
     }
 
     /// <summary>Direct Quest lists and offline snapshots preserve never-published Event privacy through archive without hiding genuine published-history controls.</summary>

@@ -1,16 +1,18 @@
 @rendermode InteractiveServer
-<section class="dashboard-intro">
+<header class="dashboard-intro">
     <div>
-        <h1>My Quests</h1>
-        <p>Join to attend; follow without attending. Organizing does not imply either.</p>
+        <p class="eyebrow">Make room for a shared experience</p>
+        <h1>Quests</h1>
+        <p>Everything happening in your Events. Join to attend; follow without attending.</p>
     </div>
+</header>
+<nav class="page-actions dashboard-shortcuts" aria-label="Quest actions" data-online-actions>
     <a class="button-link" href="/quests/create">Create a Quest</a>
-</section>
-<div class="dashboard-shortcuts" data-online-actions>
     <a href="/events">Browse Events</a>
+    <a href="/quests?view=Discover">Discover Quests</a>
     <a href="/quests?view=History">Quest history</a>
     <a href="/quests?view=Invited">Private invitations</a>
-</div>
+</nav>
 <nav class="quest-view-navigation" aria-label="Quest views">
     @foreach (var option in ViewOptions)
     {
@@ -34,20 +36,27 @@
     </header>
     @if (loading)
     {
-        <p role="status">Loading authorized Quests…</p>
+        <p class="state-panel" role="status">Loading authorized Quests…</p>
     }
     else if (error is not null)
     {
-        <p role="alert">@error</p>
+        <p class="state-panel error-message" role="alert">@error</p>
         <button type="button" disabled="@(!RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)" @onclick="LoadAsync">Reload authorized Quests</button>
     }
     else if (result is null || result.Quests.Items.Count == 0)
     {
-        <p>No Quests in this view. Try another Event or date range. Invited Quests grant immediate access; no acceptance is required.</p>
+        <div class="state-panel">
+            <h3>A little space for something great</h3>
+            <p>No Quests in this view. Try another Event or date range. Invited Quests grant immediate access; no acceptance is required.</p>
+            <a href="/events">Explore your Events</a>
+        </div>
     }
     else
     {
-        <p class="result-caption">@result.Quests.TotalCount matching Quests. Ordered by start time, then identifier.</p>
+        <p class="result-caption">@result.Quests.TotalCount matching Quests.
+            @(filter.Kind == Sidequest.Application.Quests.QuestListKind.Board
+                ? "Joined first, then start date and time in each Event's time zone. Past and cancelled Quests keep their status."
+                : "Ordered by start time, then identifier.")</p>
         <div class="@(layout == QuestLayout.Board ? "quest-board" : "quest-list")">
             @foreach (var item in result.Quests.Items)
             {

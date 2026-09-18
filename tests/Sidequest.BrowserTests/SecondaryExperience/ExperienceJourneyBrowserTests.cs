@@ -138,6 +138,8 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
             """, quest.ToString());
         Assert.True(status is null or 4, "Cancellation is absent or explicitly marked Cancelled, never cached as active.");
         await page.GotoAsync("/");
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Your Quest board", Exact = true })).ToBeVisibleAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Upcoming Joined", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Upcoming Joined", Exact = true })).ToBeVisibleAsync();
         await Expect(page.Locator($"[data-protected-experience] a[href='/quests/{quest}']")).ToHaveCountAsync(0);
     }
@@ -154,7 +156,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         await other.GotoAsync("/experience/offline.html");
         await Expect(other.Locator("#quests h2")).ToHaveTextAsync("PRIOR ACCOUNT");
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Link, new() { Name = "View sign-in options", Exact = true })).ToBeVisibleAsync();
+        await Expect(page.Locator("main").GetByRole(AriaRole.Link, new() { Name = "Sign in", Exact = true })).ToBeVisibleAsync();
         await Expect(other.Locator("#quests article")).ToHaveCountAsync(0);
         Assert.False(await other.EvaluateAsync<bool>("async()=>!!(await (await import('/experience/snapshot-store.js?v=1')).readSnapshot())"));
         var bob = await ExperienceBrowserSupport.SignInAsync(context, "Bob");
@@ -206,8 +208,9 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         await request.GetByRole(AriaRole.Button, new() { Name = "Approve membership", Exact = true }).ClickAsync();
         await Expect(request.GetByText(new Regex("\\bApproved\\b"))).ToBeVisibleAsync();
         var quest = await ExperienceBrowserSupport.CreateQuestAsync(owner, eventId, $"Revocation {Guid.NewGuid():N}", privateQuest: true);
+        await ExperienceBrowserSupport.SelectQuestActionAsync(owner, "Invite (immediate access)");
         var select = owner.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member\\b") });
-        var option = select.GetByRole(AriaRole.Option, new() { NameRegex = new("^Bob\\b") });
+        var option = select.GetByRole(AriaRole.Option, new() { Name = "bob@sample.invalid (Bob)", Exact = true });
         var value = await option.GetAttributeAsync("value");
         Assert.NotNull(value);
         await select.SelectOptionAsync(value);
@@ -220,6 +223,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         await Expect(member.GetByRole(AriaRole.Heading, new() { Name = "Your participation: Joined", Exact = true })).ToBeVisibleAsync();
         await ExperienceBrowserSupport.RefreshAsync(member);
         Assert.True(await HasQuestAsync(member, quest));
+        await ExperienceBrowserSupport.SelectQuestActionAsync(owner, "Revoke invitation");
         await select.SelectOptionAsync(value);
         await ExperienceBrowserSupport.ConfirmAsync(owner, "Revoke invitation");
         await member.ReloadAsync();

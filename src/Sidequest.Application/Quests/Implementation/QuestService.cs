@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NodaTime;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
 using Sidequest.Application.Media.Implementation;
@@ -61,14 +62,46 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                 q.Status == QuestStatus.Cancelled || q.Status == QuestStatus.Archived),
             _ => query
         };
-        if (kind != QuestListKind.History)
+        if (kind is not (QuestListKind.History or QuestListKind.Board))
             query = query.Where(q => q.EndUtc > now && q.Status != QuestStatus.Cancelled &&
                 q.Status != QuestStatus.Completed && q.Status != QuestStatus.Archived);
+        if (kind == QuestListKind.Board)
+        {
+            var board = await BoardPageAsync(db, query, actor.Id, page, now, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return board;
+        }
         var count = await query.CountAsync(cancellationToken).ConfigureAwait(false);
         var items = await Summaries(db, query.OrderBy(q => q.StartUtc).ThenBy(q => q.Id).Skip(offset).Take(page.Limit),
             actor.Id, moderation, now).ToListAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(items, count, page.Page, page.Limit);
+    }
+
+    private static async Task<PageResult<QuestSummary>> BoardPageAsync(ISidequestDbContext db,
+        IQueryable<Quest> query, Guid actor, PageRequest page, DateTimeOffset now, CancellationToken token)
+    {
+        // SQL Server's zone catalog is not TZDB. Sort only authorized scalar keys with
+        // the same bundled IANA rules as scheduling, then fetch one bounded card page.
+        var keys = await (from quest in query
+                          join parent in db.Events on quest.EventId equals parent.Id
+                          select new
+                          {
+                              quest.Id,
+                              quest.StartUtc,
+                              parent.TimeZoneId,
+                              Joined = db.Participations.Any(p => p.QuestId == quest.Id &&
+                                  p.UserId == actor && p.Status == ParticipationStatus.Joined)
+                          }).ToListAsync(token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        var ids = keys.OrderByDescending(key => key.Joined)
+            .ThenBy(key => Instant.FromDateTimeOffset(key.StartUtc).InZone(TimeRules.Zone(key.TimeZoneId)).LocalDateTime)
+            .ThenBy(key => key.StartUtc)
+            .ThenBy(key => key.Id)
+            .Skip(page.Offset).Take(page.Limit).Select(key => key.Id).ToArray();
+        var items = await Summaries(db, query.Where(quest => ids.Contains(quest.Id)), actor, false, now)
+            .ToDictionaryAsync(quest => quest.Id, token).ConfigureAwait(false);
+        return new(ids.Select(id => items[id]).ToArray(), keys.Count, page.Page, page.Limit);
     }
 
     /// <inheritdoc />
@@ -98,7 +131,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                    where invitation.QuestId == id && invitation.Status == QuestInvitationStatus.Active &&
                        user.IsEligible && user.DepartureVerifiedUtc == null
                    orderby user.DisplayName, user.Id
-                   select new PersonSummary(user.Id, user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
+                   select new QuestRosterPersonSummary(user.Id, user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (moderation && quest.Visibility == QuestVisibility.Private)
             AuditModerationRead(db, quest, actor.Id, "ModerationDetailRead");
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -245,13 +278,17 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             if (quest.Status == QuestStatus.Draft)
                 throw Conflict("Draft Quests do not accept participation.");
-            var participation = await db.Participations.SingleOrDefaultAsync(
-                x => x.QuestId == id && x.UserId == actor, token).ConfigureAwait(false);
+            var participation = await db.FindQuestParticipationForUpdateAsync(id, actor, token).ConfigureAwait(false);
             var previous = participation?.Status ?? ParticipationStatus.None;
             var next = ParticipationRules.Apply(previous, command);
             if (next == previous)
                 return;
-            var audience = await QuestChanges.CaptureAsync(db, id, token).ConfigureAwait(false);
+            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
+            // Participation delivery uses only owners and the actor. Unused audience scans
+            // can lock unrelated participation PK ranges despite the exact-key reservation.
+            var owners = calendar
+                ? await db.QuestOwners.Where(x => x.QuestId == id).Select(x => x.UserId).ToArrayAsync(token).ConfigureAwait(false)
+                : [];
             if (participation is null)
             {
                 participation = new QuestParticipation { QuestId = id, UserId = actor };
@@ -259,14 +296,13 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             }
             participation.Status = next;
             participation.ChangedUtc = now;
-            var calendar = previous == ParticipationStatus.Joined || next == ParticipationStatus.Joined;
             if (calendar)
                 quest.CalendarRevision++;
             var change = QuestChanges.Audit(db, quest, actor, $"Participation:{actor:N}:{previous}->{next}", "", now);
             if (calendar)
                 QuestChanges.Notify(db, writer, quest, change, actor,
                     next == ParticipationStatus.Joined ? NotificationKind.Joined : NotificationKind.Left,
-                    audience.Owners.Append(actor), now,
+                    owners.Append(actor), now,
                     previousAttendees: previous == ParticipationStatus.Joined ? [actor] : [],
                     calendarChanged: true, affectedUsers: [actor]);
         }, cancellationToken);
@@ -279,7 +315,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             if (quest.Status != QuestStatus.Active || quest.Visibility != QuestVisibility.Private || quest.EndUtc <= now)
                 throw Conflict("Invitations require an active private Quest before its end.");
             await RequireTargetAsync(db, parent.Id, userId, token).ConfigureAwait(false);
-            var invitation = await db.QuestInvitations.SingleOrDefaultAsync(x => x.QuestId == id && x.UserId == userId, token).ConfigureAwait(false);
+            var invitation = await db.FindQuestInvitationForUpdateAsync(id, userId, token).ConfigureAwait(false);
             if (invitation?.Status == QuestInvitationStatus.Active)
                 return;
             if (invitation is null)
@@ -350,7 +386,20 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                              from user in actors.DefaultIfEmpty()
                              orderby entry.OccurredUtc descending, entry.Id
                              select new QuestHistoryItem(entry.Action, entry.Reason, entry.OccurredUtc,
-                                 user == null ? null : user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
+                                 user == null ? null : user.Email + " (" + user.DisplayName + ")")).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var personIds = history.SelectMany(item => item.Action.Split(':'))
+                .Select(part => Guid.TryParse(part, out var personId) ? personId : (Guid?)null)
+                .OfType<Guid>().Distinct().ToArray();
+            var labels = await db.Users.Where(user => personIds.Contains(user.Id))
+                .Select(user => new { user.Id, Label = user.Email + " (" + user.DisplayName + ")" })
+                .ToDictionaryAsync(user => user.Id, user => user.Label, cancellationToken).ConfigureAwait(false);
+            history = history.Select(item => item with
+            {
+                Action = string.Join(":", item.Action.Split(':').Select(part =>
+                    Guid.TryParse(part, out var personId)
+                        ? labels.GetValueOrDefault(personId, "Unavailable person")
+                        : part))
+            }).ToArray();
         }
         else
         {
@@ -479,19 +528,21 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         bool moderation, CancellationToken token)
     {
         var quest = await access.RequireQuestAsync(db, id, actor, owner, moderation, token).ConfigureAwait(false);
-        if (!await Visible(db, actor, moderation).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
+        if (!await Visible(db, actor, moderation, owner).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
             throw new DomainException(ErrorCode.NotFound, "This resource is unavailable.");
         return quest;
     }
 
-    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation) =>
+    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation, bool ownerOnly = false) =>
         db.Quests.Where(q =>
             db.Events.Any(e => e.Id == q.EventId && e.Status != EventStatus.Draft &&
                 (db.EventOwners.Any(o => o.EventId == e.Id && o.UserId == actor) ||
                  !db.EventStatusHistory.Any(h => h.EventId == e.Id &&
                      h.Previous == EventStatus.Draft && h.Next == EventStatus.Cancelled))) &&
             db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active) &&
-            (moderation
+            (ownerOnly && !moderation
+                ? db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
+                : moderation
                 ? q.Status != QuestStatus.Draft &&
                     !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
                     db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor)
@@ -521,14 +572,14 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             db.EventOwners.Any(o => o.EventId == parent.Id && o.UserId == actor),
             Convert.ToBase64String(quest.Version), quest.CoverAssetId);
 
-    private static async Task<List<PersonSummary>> RosterAsync(ISidequestDbContext db, Guid id,
+    private static async Task<List<QuestRosterPersonSummary>> RosterAsync(ISidequestDbContext db, Guid id,
         ParticipationStatus status, CancellationToken token) =>
         await (from participation in db.Participations
                join user in db.Users on participation.UserId equals user.Id
                where participation.QuestId == id && participation.Status == status &&
                    user.IsEligible && user.DepartureVerifiedUtc == null
                orderby user.DisplayName, user.Id
-               select new PersonSummary(user.Id, user.DisplayName)).ToListAsync(token).ConfigureAwait(false);
+               select new QuestRosterPersonSummary(user.Id, user.DisplayName)).ToListAsync(token).ConfigureAwait(false);
 
     private static async Task RequireTargetAsync(ISidequestDbContext db, Guid eventId, Guid userId, CancellationToken token)
     {

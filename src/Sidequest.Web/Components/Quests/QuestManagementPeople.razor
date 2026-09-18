@@ -1,0 +1,33 @@
+@using Sidequest.Application.Events
+<label>Event member / current owner
+    <select name="quest-management-person" value="@Selected" @onchange="ChangeAsync" disabled="@Busy">
+        <option value="">Choose a person</option>
+        @foreach (var person in Candidates)
+        {
+            <option @key="person.Id" value="@person.Id">@person.Label</option>
+        }
+    </select>
+</label>
+<div class="page-actions">
+    <FluentButton Disabled="@(Busy || MemberPage <= 1)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage - 1))">Previous members</FluentButton>
+    <FluentButton Disabled="@(Busy || !MoreMembers)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage + 1))">More members</FluentButton>
+</div>
+
+@code {
+    /// <summary>Authorized member and owner labels supplied by the page, without per-person queries.</summary>
+    [Parameter] public IReadOnlyList<PersonSummary> Candidates { get; set; } = [];
+    /// <summary>Selected hidden person identifier, retained by the page's management draft.</summary>
+    [Parameter] public string Selected { get; set; } = "";
+    /// <summary>Publishes selection immediately before confirmation can submit.</summary>
+    [Parameter] public EventCallback<string> SelectedChanged { get; set; }
+    /// <summary>Disables selection and paging while commands are unavailable.</summary>
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>One-based authorized member page.</summary>
+    [Parameter] public int MemberPage { get; set; } = 1;
+    /// <summary>Whether a subsequent authorized member page is available.</summary>
+    [Parameter] public bool MoreMembers { get; set; }
+    /// <summary>Requests a different bounded authorized member page from the page coordinator.</summary>
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+    private Task ChangeAsync(ChangeEventArgs args) =>
+        Busy ? Task.CompletedTask : SelectedChanged.InvokeAsync(args.Value?.ToString() ?? "");
+}

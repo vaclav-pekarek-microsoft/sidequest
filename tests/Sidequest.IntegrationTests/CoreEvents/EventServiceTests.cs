@@ -194,9 +194,13 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(ErrorCode.Validation, zone.Code);
         Assert.Equal("TimeZoneId", zone.Field);
         var containment = await Assert.ThrowsAsync<DomainException>(() =>
-            sut.EditAsync(seed.Event.Id, current.Summary.Version, EventTestContext.Input() with { StartDate = new(2026, 7, 16) }));
+            sut.EditAsync(seed.Event.Id, current.Summary.Version, EventTestContext.Input() with
+            {
+                StartDate = new(2026, 7, 16), EndDate = new(2026, 7, 17)
+            }));
         Assert.Equal(ErrorCode.Validation, containment.Code);
         Assert.Equal("EndDate", containment.Field);
+        Assert.Equal("These dates would exclude an existing Quest.", containment.Message);
         await using var read = database.CreateContext();
         var saved = await read.Events.SingleAsync(x => x.Id == seed.Event.Id);
         Assert.Equal("Updated Event", saved.Name);

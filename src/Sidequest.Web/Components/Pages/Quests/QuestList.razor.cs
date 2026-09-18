@@ -13,6 +13,7 @@ public partial class QuestList : IAsyncDisposable
 {
     private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
     [
+        (QuestListKind.Board, "All Quests"),
         (QuestListKind.Joined, "Upcoming Joined"),
         (QuestListKind.Following, "Following"),
         (QuestListKind.Organizing, "Organizing"),
@@ -42,10 +43,10 @@ public partial class QuestList : IAsyncDisposable
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private ILogger<QuestList> Logger { get; set; } = default!;
     [Inject] private ExperienceCoordinator Experience { get; set; } = default!;
-    /// <summary>Optional list view from a deep link; invalid values use Joined.</summary>
-    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+    /// <summary>Optional list view from a deep link; invalid values use the all-Quest Board.</summary>
+    [Parameter] public string? View { get; set; }
     /// <summary>Optional internal Event filter, never an access grant.</summary>
-    [SupplyParameterFromQuery(Name = "eventId")] public Guid? EventId { get; set; }
+    [Parameter] public Guid? EventId { get; set; }
 
     /// <inheritdoc />
     protected override void OnInitialized() =>
@@ -69,7 +70,7 @@ public partial class QuestList : IAsyncDisposable
     protected override async Task OnParametersSetAsync()
     {
         navigationVersion++;
-        kind = Enum.TryParse<QuestListKind>(View, true, out var parsed) && Enum.IsDefined(parsed) ? parsed : QuestListKind.Joined;
+        kind = Enum.TryParse<QuestListKind>(View, true, out var parsed) && Enum.IsDefined(parsed) ? parsed : QuestListKind.Board;
         eventFilter = EventId?.ToString() ?? "";
         page = 1;
         await LoadAsync();

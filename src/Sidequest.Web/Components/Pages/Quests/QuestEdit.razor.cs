@@ -34,7 +34,7 @@ public partial class QuestEdit : IAsyncDisposable
     /// <summary>Existing Quest identifier, or null for draft creation.</summary>
     [Parameter] public Guid? Id { get; set; }
     /// <summary>Optional Event preselection supplied by an authorized Event link.</summary>
-    [SupplyParameterFromQuery(Name = "eventId")] public Guid? EventId { get; set; }
+    [Parameter] public Guid? EventId { get; set; }
     [Inject] private IQuestService Quests { get; set; } = default!;
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -167,7 +167,7 @@ public partial class QuestEdit : IAsyncDisposable
             return;
         await RunAsync(async () =>
         {
-            var input = model.ToInput();
+            var input = model.ToInput(zone);
             if (Id is null)
             {
                 var id = await Quests.CreateAsync(Guid.Parse(selectedEvent), input, lifetime.Token);

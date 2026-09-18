@@ -35,6 +35,60 @@ public sealed class CoreWorkflowRegistrationTests
     internal static readonly Guid Tenant = new("66de072a-19dc-43ba-92a0-22459eb0a0f7");
     internal static FoundationAuthenticationSettings Authentication => new(false, Tenant, "Workforce", null);
 
+    /// <summary>Derives directory participant eligibility only from validated non-production Entra admission and ignores attempted directory-side overrides.</summary>
+    /// <param name="environment">The approved deployed or local real-Entra environment.</param>
+    [Theory]
+    [InlineData("Staging")]
+    [InlineData("Development")]
+    public void HackathonDirectoryCompositionUsesOnlyValidatedAuthenticationParticipants(string environment)
+    {
+        var participant = Guid.NewGuid();
+        var values = new Dictionary<string, string?>
+        {
+            ["Authentication:Mode"] = "Entra",
+            ["Authentication:AdmissionPolicy"] = "hackathon-assigned-users",
+            ["Authentication:HackathonRole"] = "Hackathon.Participant",
+            ["Authentication:HackathonParticipants:0"] = participant.ToString(),
+            ["AzureAd:TenantId"] = Tenant.ToString(),
+            ["AzureAd:ClientId"] = Guid.NewGuid().ToString(),
+            ["AzureAd:ClientSecret"] = "synthetic-unit-test-only",
+            ["Directory:Graph:IsHackathon"] = "false",
+            ["Directory:Graph:HackathonParticipants:0"] = Guid.NewGuid().ToString(),
+            ["Directory:Graph:MaximumPages"] = "9"
+        };
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+        var authentication = FoundationAuthenticationSettings.Load(configuration,
+            new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = environment });
+        var services = new ServiceCollection();
+        services.AddSidequestCoreWorkflows(configuration, authentication);
+        using var provider = services.BuildServiceProvider();
+        var directory = provider.GetRequiredService<GraphDirectoryOptions>();
+        Assert.True(directory.IsHackathon);
+        Assert.Equal(Tenant, directory.TenantId);
+        Assert.Equal(participant, Assert.Single(directory.HackathonParticipants));
+        Assert.Equal(9, directory.MaximumPages);
+        Assert.False(directory.WorkforcePolicyApproved);
+        Assert.Empty(directory.WorkforceExtension);
+    }
+
+    /// <summary>Refuses to manufacture a guest-capable directory policy from raw production configuration.</summary>
+    [Fact]
+    public void WorkforceDirectoryCompositionCannotBindHackathonOverride()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Directory:Graph:IsHackathon"] = "true",
+            ["Directory:Graph:HackathonParticipants:0"] = Guid.NewGuid().ToString()
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSidequestCoreWorkflows(configuration, Authentication);
+        using var provider = services.BuildServiceProvider();
+        var directory = provider.GetRequiredService<GraphDirectoryOptions>();
+        Assert.False(directory.IsHackathon);
+        Assert.Empty(directory.HackathonParticipants);
+        Assert.False(directory.WorkforcePolicyApproved);
+    }
+
     /// <summary>Resolves the complete production graph and checks scoped aliases, singleton leaves and independent closed contexts.</summary>
     /// <param name="customClock">Whether application registration must preserve an explicitly supplied deterministic clock.</param>
     /// <returns>A task completing after disposable operation contexts have been inspected.</returns>

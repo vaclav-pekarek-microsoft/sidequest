@@ -21,6 +21,72 @@ public sealed class GraphDirectoryGatewayTests
     private static string Person(Guid id, string policy = "true", string enabled = "true", string type = "Member") =>
         $$"""{"id":"{{id}}","displayName":"Ada","mail":null,"userPrincipalName":"not-mail@example.invalid","userType":"{{type}}","accountEnabled":{{enabled}},"extension_test_workforce":{{policy}}}""";
 
+    /// <summary>Accepts only enabled explicitly approved participants, including guests, without manufacturing workforce evidence.</summary>
+    /// <param name="listed">Whether the object was approved in the authoritative host list.</param>
+    /// <param name="enabled">Graph account-enabled flag.</param>
+    /// <param name="type">Graph user type.</param>
+    /// <param name="expected">Expected participant eligibility.</param>
+    /// <returns>A task completing after the real Graph parser applies the participant policy.</returns>
+    [Theory]
+    [InlineData(true, "true", "Guest", true)]
+    [InlineData(true, "true", "Member", true)]
+    [InlineData(false, "true", "Guest", false)]
+    [InlineData(false, "true", "Member", false)]
+    [InlineData(true, "false", "Guest", false)]
+    [InlineData(true, "true", "Unknown", false)]
+    public async Task HackathonDirectoryRequiresApprovedEnabledParticipant(bool listed, string enabled, string type, bool expected)
+    {
+        var source = new HashSet<Guid> { listed ? User : Guid.NewGuid() };
+        var policy = new GraphDirectoryOptions(Tenant, source);
+        source.Clear();
+        using var handler = new ControlledHttpHandler((_, _) => Task.FromResult(
+            ControlledHttpHandler.Json(Person(User, "null", enabled, type))));
+        using var http = new HttpClient(handler);
+        var result = await new GraphDirectoryGateway(http, new TokenStub(), policy, new ControlledTimeProvider()).GetUserAsync(User);
+        Assert.Equal(User, result.ObjectId);
+        Assert.Equal(Tenant, result.TenantId);
+        Assert.Equal(expected, result.IsEligible);
+        Assert.DoesNotContain("extension_", Assert.Single(handler.Requests).Uri);
+        Assert.Equal("", result.Email);
+        Assert.Single(policy.HackathonParticipants);
+    }
+
+    /// <summary>Rejects an empty participant policy without obtaining a token or issuing Graph requests.</summary>
+    /// <returns>A task completing after the fail-closed policy guard.</returns>
+    [Fact]
+    public async Task HackathonDirectoryEmptyPolicyFailsBeforeHttp()
+    {
+        using var handler = new ControlledHttpHandler((_, _) => throw new InvalidOperationException("Unexpected HTTP"));
+        using var http = new HttpClient(handler);
+        var tokens = new TokenStub();
+        var error = await Assert.ThrowsAsync<DomainException>(() =>
+            new GraphDirectoryGateway(http, tokens, new GraphDirectoryOptions(Tenant, new HashSet<Guid>()),
+                new ControlledTimeProvider()).GetUserAsync(User));
+        Assert.Equal(ErrorCode.DependencyUnavailable, error.Code);
+        Assert.Empty(handler.Requests);
+        Assert.Equal(0, tokens.Calls);
+    }
+
+    /// <summary>Applies the same authoritative participant intersection to complete group expansion, not just direct lookups.</summary>
+    /// <returns>A task completing after an approved guest survives and an unlisted enabled member is excluded.</returns>
+    [Fact]
+    public async Task HackathonGroupExpansionExcludesUnlistedIdentities()
+    {
+        var unlisted = Guid.Parse("20000000-0000-0000-0000-000000000003");
+        var replies = new Queue<string>([
+            $$"""{"id":"{{Group}}","displayName":"Team","securityEnabled":true,"groupTypes":[]}""",
+            $$"""{"value":[{{Person(User, "null", "true", "Guest")}},{{Person(unlisted)}}]}"""
+        ]);
+        using var handler = new ControlledHttpHandler((_, _) => Task.FromResult(ControlledHttpHandler.Json(replies.Dequeue())));
+        using var http = new HttpClient(handler);
+        var result = await new GraphDirectoryGateway(http, new TokenStub(),
+            new GraphDirectoryOptions(Tenant, new HashSet<Guid> { User }), new ControlledTimeProvider()).ExpandGroupAsync(Group);
+        Assert.Equal(User, Assert.Single(result).ObjectId);
+        Assert.True(result[0].IsEligible);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Empty(replies);
+    }
+
     /// <summary>Enumerates transitive users across trusted continuations and deduplicates overlapping pages for both supported group kinds.</summary>
     /// <param name="security">Whether the selected group is security-enabled.</param>
     /// <param name="types">Graph group type array, including Unified for Microsoft 365 groups.</param>

@@ -1,68 +1,88 @@
-@page "/quests/{Id:guid}"
-@attribute [Authorize]
 @rendermode InteractiveServer
 @using Sidequest.Web.Components.Quests
 @using Sidequest.Web.Components.Media
 @using Sidequest.Domain.Model
 <PageTitle>Quest · Sidequest</PageTitle>
-<p><a href="/quests">Back to Quests</a></p>
-@if (busy && detail is null)
+<nav class="page-actions" aria-label="Quest actions"><a href="/quests">Back to Quests</a></nav>
+@if (busy && (reauthorizationRequired || detail is null))
 {
     <p role="status">Loading authorized Quest…</p>
 }
+else if (reauthorizationRequired && error is null)
+{
+    <p role="status">Current access must be checked before showing this Quest.</p>
+}
 @if (error is not null)
 {
+    var requestVersion = navigationVersion;
+    var checkVersion = authorizationVersion;
     <p role="alert">@error</p>
-    <FluentButton OnClick="LoadAsync" Disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current state</FluentButton>
+    <FluentButton OnClick="() => ReloadAsync(requestVersion, checkVersion)" Disabled="@(busy || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">Reload current state</FluentButton>
 }
 @if (message is not null)
 {
     <p role="status">@message</p>
 }
-@if (detail is not null)
+@if (detail is not null && !reauthorizationRequired)
 {
+    var requestVersion = navigationVersion;
+    var checkVersion = authorizationVersion;
     <h1>@detail.Summary.Title</h1>
-    <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" Moderation="Moderation" />
-    <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
-    <p role="status"><strong>@detail.Summary.Status</strong> · @detail.Summary.Visibility · @detail.StatusReason</p>
-    <QuestTimes ZoneId="@detail.Summary.TimeZoneId" StartUtc="@detail.Summary.StartUtc" EndUtc="@detail.Summary.EndUtc" />
-    <p>@detail.Summary.Location</p>
-    <p class="description">@detail.Description</p>
-    <h2>Equal owners</h2>
-    <ul>
-        @foreach (var owner in detail.Owners)
-        {
-            <li @key="owner.Id">@owner.DisplayName · @owner.Email</li>
-        }
-    </ul>
+    <section class="section-box" aria-label="Quest details">
+        <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" Moderation="Moderation" />
+        <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
+        <p role="status"><strong>@detail.Summary.Status</strong> · @detail.Summary.Visibility · @detail.StatusReason</p>
+        <QuestTimes ZoneId="@detail.Summary.TimeZoneId" StartUtc="@detail.Summary.StartUtc" EndUtc="@detail.Summary.EndUtc" />
+        <p>@detail.Summary.Location</p>
+        <p class="description">@detail.Description</p>
+    </section>
+    <section class="section-box">
+        <h2 class="section-heading">Equal owners</h2>
+        <ul>
+            @foreach (var owner in detail.Owners)
+            {
+                <li @key="owner.Id">@owner.Email (@owner.DisplayName)</li>
+            }
+        </ul>
+    </section>
     @if (!Moderation)
     {
-        <p>@detail.Summary.AttendeeCount joined · @detail.Summary.FollowerCount following.
-            Suggested capacity: @(detail.Summary.SuggestedCapacity?.ToString() ?? "not set") (never a joining limit).</p>
-        @if (detail.Summary.AttendeeCount > detail.Summary.SuggestedCapacity)
-        {
-            <p>Above suggested capacity. Joining is still allowed.</p>
-        }
-        <QuestParticipationControls Summary="detail.Summary" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Change="ParticipateAsync" />
-        @if (detail.Summary.Participation == ParticipationStatus.Joined && detail.Summary.Status == QuestStatus.Active)
-        {
-            <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
-        }
-        <h2>Attendees</h2>
-        @if (detail.Attendees is { Count: > 0 })
-        {
-            <ul>@foreach (var person in detail.Attendees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
-        }
-        else { <p>No current attendees.</p> }
+        <section class="section-box">
+            <h2 class="section-heading">Participation</h2>
+            <p>@detail.Summary.AttendeeCount joined · @detail.Summary.FollowerCount following.
+                Suggested capacity: @(detail.Summary.SuggestedCapacity?.ToString() ?? "not set") (never a joining limit).</p>
+            @if (detail.Summary.AttendeeCount > detail.Summary.SuggestedCapacity)
+            {
+                <p>Above suggested capacity. Joining is still allowed.</p>
+            }
+            <QuestParticipationControls Summary="detail.Summary" Busy="@(ControlsDisabled || conflict)"
+                                        Change="command => ParticipateAsync(requestVersion, checkVersion, command)" />
+            @if (detail.Summary.Participation == ParticipationStatus.Joined && detail.Summary.Status == QuestStatus.Active)
+            {
+                <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
+            }
+        </section>
+        <section class="section-box">
+            <h2 class="section-heading">Attendees</h2>
+            @if (detail.Attendees is { Count: > 0 })
+            {
+                <ul>@foreach (var person in detail.Attendees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
+            }
+            else { <p>No current attendees.</p> }
+        </section>
         @if (detail.Followers is not null)
         {
-            <h2>Followers (owners only)</h2>
-            <ul>@foreach (var person in detail.Followers) { <li @key="person.Id">@person.DisplayName</li> }</ul>
+            <section class="section-box">
+                <h2 class="section-heading">Followers (owners only)</h2>
+                <ul>@foreach (var person in detail.Followers) { <li @key="person.Id">@person.DisplayName</li> }</ul>
+            </section>
         }
         @if (detail.Invitees is not null)
         {
-            <h2>Active private invitations (immediate access)</h2>
-            <ul>@foreach (var person in detail.Invitees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
+            <section class="section-box">
+                <h2 class="section-heading">Active private invitations (immediate access)</h2>
+                <ul>@foreach (var person in detail.Invitees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
+            </section>
         }
         @if (detail.Summary.CanModerate)
         {
@@ -71,22 +91,26 @@
     }
     @if (Moderation || detail.Summary.IsOwner)
     {
-        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(busy || conflict || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)" Members="members"
-                         MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="LoadMembersAsync" Execute="ExecuteAsync" />
+        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(ControlsDisabled || conflict || draftConflict)" Members="members"
+                         MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="page => LoadMembersAsync(requestVersion, checkVersion, page)"
+                         Draft="managementDraft" DraftChanged="draft => SetManagementDraft(requestVersion, checkVersion, draft)"
+                         Execute="request => ExecuteAsync(requestVersion, checkVersion, request)" />
     }
-    <h2>Authorized history</h2>
-    @if (history.Count == 0) { <p>No visible history.</p> }
-    else
-    {
-        <ul>
-            @foreach (var item in history)
-            {
-                <li>@item.OccurredUtc.ToString("u") · @item.Action · @item.Actor · @item.Reason</li>
-            }
-        </ul>
-    }
+    <section class="section-box">
+        <h2 class="section-heading">Authorized history</h2>
+        @if (history.Count == 0) { <p>No visible history.</p> }
+        else
+        {
+            <ul>
+                @foreach (var item in history)
+                {
+                    <li>@item.OccurredUtc.ToString("u") · @item.Action · @item.Actor · @item.Reason</li>
+                }
+            </ul>
+        }
+    </section>
 }
-else if (!busy && error is null)
+else if (!busy && !reauthorizationRequired && error is null)
 {
     <h1>Quest unavailable</h1>
 }

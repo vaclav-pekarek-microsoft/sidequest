@@ -202,6 +202,156 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
             .Select(x => x.CalendarRevision).Distinct().Count());
     }
 
+    /// <summary>Overlapping Join and Follow calls preserve exclusivity for either Event-lock ordering and emit only one calendar join.</summary>
+    /// <param name="joinFirst">Whether Join holds the Event lock before the competing Follow call starts.</param>
+    /// <returns>Completion after exact command outcomes, persisted counts, audit transitions, and delivery intent assertions.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Participation_JoinRacingFollow_PreservesExactStateAndIntent(bool joinFirst)
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        var id = scenario.Seed.Quest.Id;
+        var actor = scenario.Seed.User;
+        var first = joinFirst ? ParticipationCommand.Join : ParticipationCommand.Follow;
+        var second = joinFirst ? ParticipationCommand.Follow : ParticipationCommand.Join;
+
+        var outcomes = await RaceParticipationAsync(scenario, actor, first, actor, second);
+
+        Assert.Null(outcomes[0]);
+        if (joinFirst)
+            Assert.Equal(ErrorCode.Conflict, Assert.IsType<DomainException>(outcomes[1]).Code);
+        else
+            Assert.Null(outcomes[1]);
+        await scenario.Service().ParticipateAsync(id, ParticipationCommand.Join);
+        var detail = await scenario.Service().GetAsync(id);
+        Assert.Equal(ParticipationStatus.Joined, detail.Summary.Participation);
+        Assert.Equal(1, detail.Summary.AttendeeCount);
+        Assert.Equal(0, detail.Summary.FollowerCount);
+        await using var db = database.CreateContext();
+        var participation = Assert.Single(await db.Participations.Where(x => x.QuestId == id).ToListAsync());
+        Assert.Equal(actor.Id, participation.UserId);
+        Assert.Equal(ParticipationStatus.Joined, participation.Status);
+        var actions = await db.AuditEntries.Where(x => x.ResourceId == id).Select(x => x.Action).ToArrayAsync();
+        Assert.Equal(
+            joinFirst ? [$"Participation:{actor.Id:N}:None->Joined"] :
+                new[] { $"Participation:{actor.Id:N}:None->Following", $"Participation:{actor.Id:N}:Following->Joined" }.Order(),
+            actions.Order());
+        var message = Assert.Single(await db.OutboxMessages.Where(x => x.AggregateId == id).ToListAsync());
+        var intent = JsonSerializer.Deserialize<ChangeEnvelope>(message.PayloadJson)!;
+        Assert.Equal(NotificationKind.Joined, intent.Kind);
+        Assert.Equal(actor.Id, intent.ActorId);
+        Assert.Equal(new[] { actor.Id }, intent.AffectedUserIds);
+        Assert.Equal(new[] { actor.Id }, intent.RecipientIds);
+        Assert.NotNull(intent.PreviousAttendeeIds);
+        Assert.Empty(intent.PreviousAttendeeIds);
+        Assert.True(intent.CalendarChanged);
+        Assert.Equal(scenario.Seed.Quest.CalendarRevision + 1, intent.CalendarRevision);
+        Assert.Equal(intent.CalendarRevision, (await db.Quests.SingleAsync(x => x.Id == id)).CalendarRevision);
+    }
+
+    /// <summary>Competing joins and leaves are repeat-safe for one actor and never enforce advisory capacity against distinct actors.</summary>
+    /// <param name="sameActor">Whether both callers represent one actor rather than two individual members.</param>
+    /// <returns>Completion after exact joined/empty projections, retained participation rows, audit, calendar revisions, and per-actor intents.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Participation_ConcurrentJoinAndLeave_PreserveCapacityAndRepeatSafety(bool sameActor)
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        var id = scenario.Seed.Quest.Id;
+        await using (var prepare = database.CreateContext())
+        {
+            (await prepare.Quests.SingleAsync(x => x.Id == id)).SuggestedCapacity = 1;
+            await prepare.SaveChangesAsync();
+        }
+        var second = sameActor ? scenario.Seed.User : scenario.Seed.Other;
+        var count = sameActor ? 1 : 2;
+        var outcomes = await RaceParticipationAsync(scenario, scenario.Seed.User, ParticipationCommand.Join,
+            second, ParticipationCommand.Join);
+        Assert.All(outcomes, Assert.Null);
+        var joined = await scenario.Service().GetAsync(id);
+        Assert.Equal(ParticipationStatus.Joined, joined.Summary.Participation);
+        Assert.Equal(count, joined.Summary.AttendeeCount);
+        Assert.Equal(0, joined.Summary.FollowerCount);
+        Assert.Equal(1, joined.Summary.SuggestedCapacity);
+        Assert.Equal(ParticipationStatus.Joined, (await scenario.Service(second).GetAsync(id)).Summary.Participation);
+
+        outcomes = await RaceParticipationAsync(scenario, scenario.Seed.User, ParticipationCommand.Leave,
+            second, ParticipationCommand.Leave);
+        Assert.All(outcomes, Assert.Null);
+        var left = await scenario.Service().GetAsync(id);
+        Assert.Equal(ParticipationStatus.None, left.Summary.Participation);
+        Assert.Equal(0, left.Summary.AttendeeCount);
+        Assert.Equal(0, left.Summary.FollowerCount);
+        Assert.Equal(ParticipationStatus.None, (await scenario.Service(second).GetAsync(id)).Summary.Participation);
+        await using var db = database.CreateContext();
+        var participations = await db.Participations.Where(x => x.QuestId == id).ToListAsync();
+        var actors = new[] { scenario.Seed.User.Id, second.Id }.Distinct().Order().ToArray();
+        Assert.Equal(actors, participations.Select(x => x.UserId).Order());
+        Assert.All(participations, x => Assert.Equal(ParticipationStatus.None, x.Status));
+        var expectedActions = actors.SelectMany(actor => new[]
+            { $"Participation:{actor:N}:None->Joined", $"Participation:{actor:N}:Joined->None" }).Order();
+        Assert.Equal(expectedActions,
+            (await db.AuditEntries.Where(x => x.ResourceId == id).Select(x => x.Action).ToArrayAsync()).Order());
+        var intents = (await db.OutboxMessages.Where(x => x.AggregateId == id).ToListAsync())
+            .Select(x => JsonSerializer.Deserialize<ChangeEnvelope>(x.PayloadJson)!).ToArray();
+        Assert.Equal(count * 2, intents.Length);
+        foreach (var actor in actors)
+        {
+            var join = Assert.Single(intents, x => x.ActorId == actor && x.Kind == NotificationKind.Joined);
+            var leave = Assert.Single(intents, x => x.ActorId == actor && x.Kind == NotificationKind.Left);
+            Assert.NotNull(join.PreviousAttendeeIds);
+            Assert.Empty(join.PreviousAttendeeIds);
+            Assert.Equal(new[] { actor }, leave.PreviousAttendeeIds);
+            Assert.True(join.CalendarRevision < leave.CalendarRevision);
+            foreach (var intent in new[] { join, leave })
+            {
+                Assert.Equal(new[] { actor }, intent.AffectedUserIds);
+                Assert.Equal(new[] { scenario.Seed.User.Id, actor }.Distinct().Order(), intent.RecipientIds.Order());
+                Assert.True(intent.CalendarChanged);
+            }
+        }
+        var revision = scenario.Seed.Quest.CalendarRevision;
+        Assert.Equal(Enumerable.Range(1, count * 2).Select(offset => revision + offset),
+            intents.Select(x => x.CalendarRevision).Order());
+        Assert.Equal(revision + count * 2, (await db.Quests.SingleAsync(x => x.Id == id)).CalendarRevision);
+    }
+
+    private static async Task<Exception?[]> RaceParticipationAsync(QuestScenario scenario,
+        UserAccount firstActor, ParticipationCommand firstCommand, UserAccount secondActor, ParticipationCommand secondCommand)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        scenario.Reconciler.OnReconcileAsync = async (_, _, _, token) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                entered.SetResult();
+                await release.Task.WaitAsync(token);
+            }
+            return false;
+        };
+        var first = Record.ExceptionAsync(() => scenario.Service(firstActor).ParticipateAsync(
+            scenario.Seed.Quest.Id, firstCommand, deadline.Token));
+        try
+        {
+            await entered.Task.WaitAsync(deadline.Token);
+            var second = Record.ExceptionAsync(() => scenario.Service(secondActor).ParticipateAsync(
+                scenario.Seed.Quest.Id, secondCommand, deadline.Token));
+            release.TrySetResult();
+            return await Task.WhenAll(first, second);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await first;
+            scenario.Reconciler.OnReconcileAsync = null;
+        }
+    }
+
     /// <summary>Owner removal needs a meaningful reason but never bans the removed member from rejoining a public Quest.</summary>
     /// <returns>Completion after validation rollback, rejoin and recipient-only withdrawal assertions.</returns>
     [Fact]

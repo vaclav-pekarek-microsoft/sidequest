@@ -15,6 +15,7 @@ namespace Sidequest.Infrastructure.Background;
 public sealed class SqlWorkQueue(ISidequestDbContextFactory factory, TimeProvider clock, DurableWorkOptions options)
 {
     /// <summary>Claims the earliest due row, including abandoned expired processing work; concurrent claimers skip locked rows.</summary>
+    /// <remarks>Establishes ReadCommitted on its fresh context's connection before using READPAST, independently of inherited session isolation. Each update remains an atomic autocommit statement.</remarks>
     /// <param name="category">outbox, scheduled, or delivery.</param>
     /// <param name="cancellationToken">Cancels SQL work.</param>
     /// <returns>Ownership proof or null when no due work is available.</returns>
@@ -39,6 +40,7 @@ public sealed class SqlWorkQueue(ISidequestDbContextFactory factory, TimeProvide
         await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = db.Database.GetDbConnection().CreateCommand();
         command.CommandText = $"""
+            SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
             UPDATE [{table}] WITH (ROWLOCK) SET [Status] = 3, [LeaseId] = NULL, [LeaseUntilUtc] = NULL,
                 [LastError] = 'Eight interrupted attempts exhausted; investigate before replay.'
             WHERE [Attempts] >= 8 AND (([Status] = 1 AND [LeaseUntilUtc] <= @now) OR [Status] = 0);

@@ -102,8 +102,8 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         Assert.Single(await read.AuditEntries.Where(x => x.ResourceId == id && x.Action == "Membership.Removed").ToListAsync());
     }
 
-    /// <summary>Retained withdrawn requests count toward the configured rate limit until the exact one-hour window expires.</summary>
-    /// <returns>A task completing after idempotent repeats, limit rejection, and a later successful request.</returns>
+    /// <summary>Retained requests count through the inclusive hourly boundary, then permit a request one tick later without partial failure side effects.</summary>
+    /// <returns>A task completing after idempotent repeats, exact boundary rejections, and atomic request/audit/outbox assertions.</returns>
     [Fact]
     public async Task RequestRateLimitCountsHistoryAndResetsAfterWindow()
     {
@@ -114,12 +114,24 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         await sut.RequestMembershipAsync(seed.Event.Id);
         var request = Assert.Single((await sut.ListRequestsAsync(null, new())).Items);
         await sut.WithdrawRequestAsync(request.Id);
-        Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() => sut.RequestMembershipAsync(seed.Event.Id))).Code);
+        foreach (var elapsed in new[] { TimeSpan.Zero, TimeSpan.FromHours(1).Subtract(TimeSpan.FromTicks(1)), TimeSpan.FromHours(1) })
+        {
+            context.Clock.Now = FoundationSeed.Now.Add(elapsed);
+            var error = await Assert.ThrowsAsync<DomainException>(() => sut.RequestMembershipAsync(seed.Event.Id));
+            Assert.Equal(ErrorCode.Conflict, error.Code);
+            Assert.Equal("The request rate limit was reached. Try again later.", error.Message);
+            await using var rejected = database.CreateContext();
+            Assert.Single(await rejected.MembershipRequests.Where(x => x.EventId == seed.Event.Id).ToListAsync());
+            Assert.Single(await rejected.AuditEntries.Where(x => x.ResourceId == seed.Event.Id && x.Action == "Membership.Requested").ToListAsync());
+            Assert.Single(await rejected.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
+        }
         context.Clock.Now = FoundationSeed.Now.AddHours(1).AddTicks(1);
         await sut.RequestMembershipAsync(seed.Event.Id);
         await using var read = database.CreateContext();
         Assert.Equal(2, await read.MembershipRequests.CountAsync(x => x.EventId == seed.Event.Id));
         Assert.Single(await read.MembershipRequests.Where(x => x.EventId == seed.Event.Id && x.Status == MembershipRequestStatus.Pending).ToListAsync());
+        Assert.Equal(2, await read.AuditEntries.CountAsync(x => x.ResourceId == seed.Event.Id && x.Action == "Membership.Requested"));
+        Assert.Equal(2, await read.OutboxMessages.CountAsync(x => x.AggregateId == seed.Event.Id));
     }
 
     /// <summary>Rejects excess queued bulk starts atomically and reports frozen recipients through owner-only deterministic paging.</summary>
@@ -142,7 +154,8 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         Assert.Equal(2, second.TotalCount);
         var rows = first.Items.Concat(second.Items).ToArray();
         Assert.Equal(2, rows.Select(x => x.User.Id).Distinct().Count());
-        Assert.Contains(rows, x => x.User.Id == seed.Other.Id && x.Status == BulkRecipientStatus.Failed && x.Detail == "No longer eligible.");
+        Assert.Contains(rows, x => x.User.Id == seed.Other.Id && x.User.Email == seed.Other.Email &&
+            x.User.DisplayName == seed.Other.DisplayName && x.Status == BulkRecipientStatus.Failed && x.Detail == "No longer eligible.");
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
             context.Service(seed.Other).ListBulkRecipientsAsync(operation, new()))).Code);
         await using var read = database.CreateContext();
@@ -253,6 +266,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
     [InlineData("summary-long")]
     [InlineData("description-long")]
     [InlineData("reverse-dates")]
+    [InlineData("same-day")]
     [InlineData("invalid-zone")]
     public async Task CreateValidatesServerInputBeforePersistence(string partition)
     {
@@ -266,6 +280,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
             "summary-long" => EventTestContext.Input() with { DiscoverySummary = new string('s', 301) },
             "description-long" => EventTestContext.Input() with { Description = new string('d', 10001) },
             "reverse-dates" => EventTestContext.Input() with { EndDate = new(2026, 7, 14) },
+            "same-day" => EventTestContext.Input() with { EndDate = new(2026, 7, 15) },
             _ => EventTestContext.Input() with { TimeZoneId = "Unknown/Zone" }
         };
         var expectedField = partition switch
@@ -273,7 +288,7 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
             "name-short" or "name-long" => "Name",
             "summary-long" => "DiscoverySummary",
             "description-long" => "Description",
-            "reverse-dates" => "EndDate",
+            "reverse-dates" or "same-day" => "EndDate",
             _ => "TimeZoneId"
         };
         var error = await Assert.ThrowsAsync<DomainException>(() => context.Service(user).CreateAsync(input));

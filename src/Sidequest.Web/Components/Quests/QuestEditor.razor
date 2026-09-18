@@ -2,27 +2,35 @@
 <EditForm Model="model" OnValidSubmit="SaveAsync" FormName="quest-editor">
     <DataAnnotationsValidator />
     <ValidationSummary />
-    <p>Event time zone: <strong>@ZoneId</strong> (inherited, read-only).</p>
-    <p>Private Quest content and owners can be inspected by Event owners in an audited moderation view.
-        They cannot see invitation, attendee, or follower rosters in that view.</p>
-    <fieldset disabled="@Busy">
-        <legend>Quest details</legend>
-        <FluentTextField Label="Title" @bind-Value="model.Title" Disabled="@Busy" Required="true" />
-        <FluentTextArea Label="Description (plain text)" @bind-Value="model.Description" Disabled="@Busy" />
-        <FluentTextField Label="Location (required to publish)" @bind-Value="model.Location" Disabled="@Busy" />
-        <label>Suggested capacity <InputNumber @bind-Value="model.Capacity" /></label>
-        <label>Starts in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.Start" /></label>
-        <label>Ends in Event zone <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="model.End" /></label>
-        <p>During a daylight-saving overlap, explicitly enter the intended UTC offset in hours
-            (for example, 1 or 2). Leave blank for unambiguous times. Nonexistent times are rejected.</p>
-        <label>Start UTC offset (hours) <InputNumber @bind-Value="model.StartOffsetHours" step="0.25" /></label>
-        <label>End UTC offset (hours) <InputNumber @bind-Value="model.EndOffsetHours" step="0.25" /></label>
+    <fieldset class="section-box" disabled="@Busy">
+        <legend class="section-heading">Quest details</legend>
+        <FluentTextField Name="quest-title" Label="Title" @bind-Value="model.Title" Disabled="@Busy" Required="true" />
+        <FluentTextArea Name="quest-description" Label="Description (plain text)" @bind-Value="model.Description" Disabled="@Busy" />
+        <FluentTextField Name="quest-location" Label="Location (required to publish)" @bind-Value="model.Location" Disabled="@Busy" />
+        <label>Suggested capacity <InputNumber name="quest-capacity" @bind-Value="model.Capacity" /></label>
+    </fieldset>
+    <fieldset class="section-box" disabled="@Busy">
+        <legend class="section-heading">When</legend>
+        <p>Event time zone: <strong>@ZoneId</strong> (inherited, read-only).</p>
+        <div class="field-grid">
+            <QuestLocalTimeInput Label="Starts in Event zone" OccurrenceLabel="Start occurrence" ZoneId="@ZoneId"
+                                 @bind-Value="model.Start" @bind-Offset="model.StartOffset" Disabled="@Busy" />
+            <QuestLocalTimeInput Label="Ends in Event zone" OccurrenceLabel="End occurrence" ZoneId="@ZoneId"
+                                 @bind-Value="model.End" @bind-Offset="model.EndOffset" Disabled="@Busy" />
+        </div>
+    </fieldset>
+    <fieldset class="section-box" disabled="@Busy">
+        <legend class="section-heading">Who can see this Quest</legend>
         <label>Visibility
-            <InputSelect @bind-Value="model.Visibility" disabled="@Published">
+            <InputSelect name="quest-visibility" @bind-Value="model.Visibility" disabled="@Published">
                 <option value="@QuestVisibility.Public">Public within this Event</option>
                 <option value="@QuestVisibility.Private">Private, named Event members only</option>
             </InputSelect>
         </label>
-        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save @(Published ? "changes" : "draft")</FluentButton>
+        <p class="text-muted">Private Quest content and owners can be inspected by Event owners in an audited moderation view.
+            They cannot see invitation, attendee, or follower rosters in that view.</p>
     </fieldset>
+    <div class="page-actions">
+        <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save @(Published ? "changes" : "draft")</FluentButton>
+    </div>
 </EditForm>

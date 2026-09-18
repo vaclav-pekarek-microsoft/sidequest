@@ -1,11 +1,14 @@
-@page "/quests"
-@attribute [Authorize]
 @rendermode InteractiveServer
 @using Sidequest.Application.Quests
 @using Sidequest.Web.Components.Quests
 <PageTitle>Quests · Sidequest</PageTitle>
-<h1>My Quests</h1>
-<p><a href="/quests/create">Create a Quest</a> · <a href="/quests?view=History">History</a> · <a href="/quests?view=Invited">Private invitations</a></p>
+<h1>Quests</h1>
+<nav class="page-actions" aria-label="Quest actions" data-online-actions>
+    <a class="button-link" href="/quests/create">Create a Quest</a>
+    <a href="/quests?view=Discover">Discover Quests</a>
+    <a href="/quests?view=History">History</a>
+    <a href="/quests?view=Invited">Private invitations</a>
+</nav>
 <nav class="quest-view-navigation" aria-label="Quest views">
     @foreach (var option in ViewOptions)
     {
@@ -15,11 +18,11 @@
                 @onclick="() => SelectKindAsync(option.Kind)">@option.Label</button>
     }
 </nav>
-<fieldset class="quest-filters" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+<fieldset class="compact-filters quest-filters" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
     <legend>Find your Quests</legend>
     <label>
         <span>Event</span>
-        <select @bind="eventFilter" @bind:after="ResetAsync">
+        <select name="quest-list-event" @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
             <option value="">All my Events</option>
             @foreach (var item in events)
             {
@@ -29,12 +32,13 @@
     </label>
     <label>
         <span>From</span>
-        <input type="date" title="@DateSemantics" @bind="fromDate" @bind:after="ResetAsync" />
+        <input name="quest-list-from" type="date" title="@DateSemantics" @bind="fromDate" @bind:after="ResetAsync" />
     </label>
     <label>
         <span>Through</span>
-        <input type="date" title="@DateSemantics" @bind="throughDate" @bind:after="ResetAsync" />
+        <input name="quest-list-through" type="date" title="@DateSemantics" @bind="throughDate" @bind:after="ResetAsync" />
     </label>
+    <small class="filter-help text-muted">Inclusive start dates in @dateZone. Select an Event to use its time zone.</small>
 </fieldset>
 <header class="results-header">
     <h2>@ViewHeading</h2>

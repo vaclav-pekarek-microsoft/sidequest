@@ -6,7 +6,7 @@ using Sidequest.IntegrationTests.FoundationPersistence;
 
 namespace Sidequest.IntegrationTests.CoreDelivery;
 
-internal sealed class ObservedContextFactory(SqlTestDatabase database, DbCommandInterceptor observer) : ISidequestDbContextFactory
+internal sealed class ObservedContextFactory(SqlTestDatabase database, params IInterceptor[] observers) : ISidequestDbContextFactory
 {
     /// <inheritdoc/>
     public async Task<ISidequestDbContext> CreateAsync(CancellationToken cancellationToken = default)
@@ -16,6 +16,6 @@ internal sealed class ObservedContextFactory(SqlTestDatabase database, DbCommand
         var connectionString = template.Database.GetConnectionString() ??
             throw new InvalidOperationException("The owned SQL fixture is not initialized.");
         return new SidequestDbContext(new DbContextOptionsBuilder<SidequestDbContext>()
-            .UseSqlServer(connectionString).AddInterceptors(observer).Options);
+            .UseSqlServer(connectionString).AddInterceptors(observers).Options);
     }
 }

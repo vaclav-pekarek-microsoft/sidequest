@@ -422,7 +422,7 @@ public sealed class EventCancellationCompositionTests
     }
 
     internal static void AssertCalendar(EmailMessage message, Guid questId, long sequence, string method,
-        string recipient, DateTimeOffset stamp, DateTimeOffset start, DateTimeOffset end)
+        string recipient, DateTimeOffset stamp, DateTimeOffset start, DateTimeOffset end, string title = "Private title sentinel")
     {
         Assert.Equal(method, message.CalendarMethod);
         var calendar = Assert.IsType<string>(message.CalendarContent);
@@ -448,6 +448,6 @@ public sealed class EventCancellationCompositionTests
             Assert.DoesNotContain("sentinel", calendar);
         }
         else
-            Assert.Contains("SUMMARY:Private title sentinel", lines);
+            Assert.Contains($"SUMMARY:{title}", lines);
     }
 }
