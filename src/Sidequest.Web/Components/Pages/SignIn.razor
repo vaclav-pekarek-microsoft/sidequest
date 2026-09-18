@@ -1,18 +1,12 @@
 @page "/signin"
 @attribute [AllowAnonymous]
+@layout Layout.AuthenticationBoundaryLayout
 @inject FoundationAuthenticationSettings Authentication
 
 <PageTitle>Sign in · Sidequest</PageTitle>
-<h1>Sign in to Sidequest</h1>
-@if (Failed)
-{
-    <div role="alert" class="error-message">
-        Sign-in could not be completed. Check your workforce app-role assignment with your tenant administrator.
-        If you are assigned, ask support to check local account eligibility and SQL availability.
-    </div>
-}
 @if (Authentication.IsDevelopment)
 {
+    <h1>Sign in to Sidequest</h1>
     <h2>Synthetic development personas</h2>
     <p>Loopback only. These are not real employees. Local SQL and the foundation schema must be available.</p>
     <form method="post" action="/auth/development" data-enhance="false" data-authentication-change>
@@ -28,19 +22,23 @@
         <button type="submit">Sign in with synthetic identity</button>
     </form>
     <p>Admin is the only explicit bootstrap administrator. Alice, Bob and Carol have no administrative grant.</p>
+    <p>Application roles and equal resource ownership are stored in Sidequest, not inferred from Entra roles.</p>
 }
 else
 {
-    <p>Use your assigned workforce account. Guest accounts are excluded by the organization's approved workforce assignment policy.</p>
-    <a href="@($"/auth/login?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}")" data-enhance-nav="false" data-authentication-change>
-        Continue with Microsoft Entra
-    </a>
+    <section class="sign-in-progress" data-account-provider="@LoginUrl">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <p role="status">Redirecting to your account provider</p>
+    </section>
 }
-<p>Application roles and equal resource ownership are stored in Sidequest, not inferred from Entra roles.</p>
 
 @code {
+    private string LoginUrl => Failed
+        ? "/access-denied"
+        : $"/auth/login?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}";
+
     /// <summary>Gets or sets the untrusted requested destination, normalized to a local path before use.</summary>
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
-    /// <summary>Gets or sets whether a failed remote sign-in should display generic recovery guidance.</summary>
+    /// <summary>Gets or sets whether a failed provider response should redirect to explicit access-denied guidance.</summary>
     [SupplyParameterFromQuery] public bool Failed { get; set; }
 }

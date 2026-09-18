@@ -10,11 +10,17 @@
     <a href="/events/requests">My requests</a> ·
     <a href="/events/invitations">My invitations</a>
 </nav>
-<p>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Mine))">My Events</FluentButton>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.Available))">Available Events</FluentButton>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
-</p>
+<fieldset class="event-filters" disabled="@Busy">
+    <legend>Find your Events</legend>
+    <div class="event-filter-actions">
+        <button type="button" class="@(kind == EventListKind.Mine ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.Mine)">My Events</button>
+        <button type="button" class="@(kind == EventListKind.Available ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.Available)">Available Events</button>
+        <button type="button" class="@(kind == EventListKind.History ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.History)">History</button>
+    </div>
+</fieldset>
 <h2>@kind</h2>
 <EventFeedback Busy="Busy" Error="@Error" />
 <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>

@@ -5,7 +5,7 @@ import test from "node:test";
 
 const source = await readFile(new URL("../../../src/Sidequest.Web/Components/App.razor.js", import.meta.url), "utf8");
 
-async function host({ clear = async () => "attempt-epoch", complete = async () => {}, marker } = {}) {
+async function host({ clear = async () => "attempt-epoch", complete = async () => {}, marker, provider } = {}) {
     const listeners = new Map();
     const reconnectListeners = new Map();
     const buttons = new Map();
@@ -30,6 +30,7 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
         dataset: { authenticationCompletion: marker },
         querySelector(name) { return name === "[data-authentication-result]" ? result : { href: "http://localhost/quests" }; }
     };
+    const accountProvider = provider === undefined ? null : { dataset: { accountProvider: provider } };
     class Form {
         dataset = {};
         inputs = new Map();
@@ -49,7 +50,12 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
         addEventListener(name, callback) { listeners.set(name, callback); },
         getElementById() { return modal; },
         createElement() { return {}; },
-        querySelector(name) { return name === "[data-authentication-completion]" ? completion : warning; }
+        querySelector(name) {
+            if (name === "[data-authentication-warning]") return warning;
+            if (name === "[data-account-provider]") return accountProvider;
+            if (name === "[data-authentication-completion]") return completion;
+            return null;
+        }
     };
     globalThis.location = {
         href: "http://localhost/signin",
@@ -148,6 +154,10 @@ test("Entra and account-switch navigation await clearing and carry only the non-
     });
     assert.deepEqual(state.navigation, ["http://localhost/auth/login?returnUrl=%2Fquests&experienceEpoch=attempt-epoch"]);
     assert.deepEqual(state.completions, []);
+
+    const automatic = await host({ provider: "/auth/login?returnUrl=%2Fquests" });
+    await automatic.module.beforeWebStart();
+    assert.deepEqual(automatic.navigation, ["http://localhost/auth/login?returnUrl=%2Fquests&experienceEpoch=attempt-epoch"]);
 });
 
 test("Ordinary pages and missing completion markers never activate a new authentication epoch", async () => {

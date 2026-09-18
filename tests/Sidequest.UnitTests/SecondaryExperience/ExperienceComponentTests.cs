@@ -53,7 +53,7 @@ public sealed class ExperienceComponentTests : BunitContext
     {
         var component = Render<DashboardFilters>(p => p.Add(c => c.Disabled, true));
         Assert.True(component.Find("fieldset").HasAttribute("disabled"));
-        Assert.Equal("Filter Quests", component.Find("legend").TextContent);
+        Assert.Equal("Find your Quests", component.Find("legend").TextContent);
         Assert.DoesNotContain("View", component.Markup, StringComparison.Ordinal);
         Assert.Contains("Inclusive start dates in UTC (across Events)", component.Markup);
         Assert.Equal(new[] { "25", "50", "100" },

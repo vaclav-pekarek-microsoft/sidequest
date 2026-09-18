@@ -1,0 +1,7 @@
+.authentication-boundary {
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 2rem;
+}

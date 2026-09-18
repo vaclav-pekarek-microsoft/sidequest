@@ -39,6 +39,7 @@
     padding: 1rem;
     border: 1px solid var(--sq-line, #748c84);
     border-radius: .85rem;
+    background: var(--neutral-layer-1, #fff);
 }
 
 .quest-filters legend {
