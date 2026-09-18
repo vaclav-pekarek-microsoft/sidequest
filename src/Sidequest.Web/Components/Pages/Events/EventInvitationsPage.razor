@@ -8,7 +8,10 @@
 <h1>@(Id is null ? "My Event invitations" : "Manage Event invitations")</h1>
 <nav class="page-actions" aria-label="Invitation actions">
     <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    }
 </nav>
 <p>Event invitations require your acceptance. Membership does not join or follow any Quest, including after rejoining an Event.</p>
 <EventFeedback Busy="Busy" Error="@Error" />

@@ -4,7 +4,7 @@
 <fieldset class="dashboard-filters compact-filters" disabled="@Disabled" data-online-actions>
     <legend>Find your Quests</legend>
     <label>View
-        <select @bind="kind" @bind:after="NotifyAsync">
+        <select name="dashboard-view" @bind="kind" @bind:after="NotifyAsync">
             <option value="Board">All Quests</option>
             <option value="Joined">Upcoming Joined</option>
             <option value="Following">Following</option>
@@ -21,7 +21,7 @@
         <button type="button" disabled="@(Disabled || (long)EventPage * 100 >= EventTotal)" @onclick="() => EventPageChanged.InvokeAsync(EventPage + 1)">Next Event choices</button>
     }
     <label>Event
-        <select @bind="eventId" @bind:after="NotifyAsync">
+        <select name="dashboard-event" @bind="eventId" @bind:after="NotifyAsync">
             <option value="">All my Events</option>
             @foreach (var item in Events)
             {
@@ -29,10 +29,10 @@
             }
         </select>
     </label>
-    <label>From date <input type="date" @bind="from" @bind:after="NotifyAsync" /></label>
-    <label>Through date <input type="date" @bind="through" @bind:after="NotifyAsync" /></label>
+    <label>From date <input name="dashboard-from" type="date" @bind="from" @bind:after="NotifyAsync" /></label>
+    <label>Through date <input name="dashboard-through" type="date" @bind="through" @bind:after="NotifyAsync" /></label>
     <label>Quests per page
-        <select @bind="size" @bind:after="NotifyAsync">
+        <select name="dashboard-page-size" @bind="size" @bind:after="NotifyAsync">
             <option value="25">25</option><option value="50">50</option><option value="100">100</option>
         </select>
     </label>

@@ -12,7 +12,7 @@
 <fieldset class="compact-filters" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
     <legend>Filter Quests</legend>
     <label>View
-        <select @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+        <select name="quest-list-view" @bind="kind" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
             @foreach (var value in Enum.GetValues<QuestListKind>())
             {
                 <option value="@value">@value</option>
@@ -20,7 +20,7 @@
         </select>
     </label>
     <label>Event
-        <select @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
+        <select name="quest-list-event" @bind="eventFilter" @bind:after="ResetAsync" disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)">
             <option value="">All my Events</option>
             @foreach (var item in events)
             {
@@ -28,8 +28,8 @@
             }
         </select>
     </label>
-    <label>From date (inclusive) <input type="date" @bind="fromDate" @bind:after="ResetAsync" /></label>
-    <label>Through date (inclusive) <input type="date" @bind="throughDate" @bind:after="ResetAsync" /></label>
+    <label>From date (inclusive) <input name="quest-list-from" type="date" @bind="fromDate" @bind:after="ResetAsync" /></label>
+    <label>Through date (inclusive) <input name="quest-list-through" type="date" @bind="throughDate" @bind:after="ResetAsync" /></label>
     <small class="filter-help text-muted">Inclusive start dates in @dateZone. Select an Event to use its time zone.</small>
 </fieldset>
 @if (loading)

@@ -224,13 +224,23 @@ binding rather than bypassing the device-generation boundary. The one connection
 bridge lives in the footer's collapsed device tools. Hide only healthy connection
 feedback, never its authorization/inert gates or failure notices. Global `[hidden]`
 styling must win over component/button display rules.
-Box form sections and separate compact filters from page actions. New Event
+Box form sections and separate compact filters from page actions. Routine
+reload/refresh controls belong to error recovery, not healthy list/detail views.
+Keep explicit discard/reload for failed edits and version conflicts, and retain
+progress refresh only while a bulk operation is expanding or applying.
+Intentional device snapshot saving and draft-preserving settings/history checks
+are separate actions, not routine page reloads. New Event
 create/update validation requires EndDate > StartDate; leave inclusive legacy
 `TimeRules.EventWindow` reads intact. Use the bundled zone selector and inherited
 Quest zone, with contextual first/second-occurrence choices for ambiguous local
 times, never free-form numeric offsets or silent DST resolution. Display contact
 labels only within existing authorization; never user GUIDs or newly exposed
 attendee email rosters.
+Event timezone choices use bundled CLDR city groups sorted by the Event start
+date's UTC offset, not stale hard-coded offsets. Retain stored IANA identifiers
+and distinguish regional daylight-saving rules. Every native form field must
+have an id or name; supply Fluent input names so their native proxy controls are
+identified too. Repeated local-time controls need distinct instance identifiers.
 
 `/foundation` is an authenticated compatibility screen (not product logic): Fluent
 4.14.4 with .NET 10, text-field binding, EditForm/DataAnnotations errors, modal dialog

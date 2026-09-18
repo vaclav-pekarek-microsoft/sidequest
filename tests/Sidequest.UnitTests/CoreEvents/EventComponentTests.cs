@@ -1,11 +1,14 @@
 using Bunit;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
 using Sidequest.Application.Events.Implementation;
 using Sidequest.Domain.Model;
+using Sidequest.Domain.Rules;
 using Sidequest.UnitTests.SecondaryExperience;
 using Sidequest.Web.Components.Events;
+using Sidequest.Web.Components.Pages.Events;
 using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreEvents;
@@ -22,6 +25,114 @@ public sealed class EventComponentTests : BunitContext
 
     private static EventInput Input(string name = "Initial Event") =>
         new(name, "Private description", "Public discovery", new(2026, 7, 15), new(2026, 7, 16), "Europe/Prague");
+
+    /// <summary>Routine reload is absent on healthy Event pages, appears after a failed read, and disappears after an explicit successful retry.</summary>
+    /// <param name="pageType">Event page whose existing reload callback is exercised.</param>
+    /// <returns>Completion after reconnect failure and the real rendered recovery callback.</returns>
+    [Theory]
+    [InlineData(typeof(EventListPage))]
+    [InlineData(typeof(EventDetailPage))]
+    [InlineData(typeof(EventMembersPage))]
+    [InlineData(typeof(EventInvitationsPage))]
+    [InlineData(typeof(EventRequestsPage))]
+    [InlineData(typeof(EventEditPage))]
+    [InlineData(typeof(EventBulkProgressPage))]
+    public async Task EventReloadAppearsOnlyAfterFailureAndHidesAfterRecovery(Type pageType)
+    {
+        Services.AddLogging();
+        Services.AddSingleton(TimeProvider.System);
+        var experience = new ExperienceCoordinator();
+        var revalidation = new EventCircuitRevalidation();
+        Services.AddSingleton(experience);
+        Services.AddSingleton(revalidation);
+        var fail = false;
+        var reads = 0;
+        var id = Guid.NewGuid();
+        var summary = new EventSummary(id, "Event", "Discovery", new(2026, 7, 15), new(2026, 7, 16),
+            "Europe/Prague", EventStatus.Active, [], true, pageType == typeof(EventEditPage), "version");
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, _) =>
+        {
+            reads++;
+            if (fail)
+                throw new DomainException(ErrorCode.Conflict, "The item changed.");
+            return method.Name switch
+            {
+                nameof(IEventService.ListAsync) => Task.FromResult(new PageResult<EventSummary>([summary], 1, 1, 25)),
+                nameof(IEventService.GetAsync) => Task.FromResult(new EventDetail(summary, null)),
+                nameof(IEventService.ListMembersAsync) => Task.FromResult(new PageResult<MembershipSummary>([], 0, 1, 25)),
+                nameof(IEventService.ListRequestsAsync) => Task.FromResult(new PageResult<RequestSummary>([], 0, 1, 25)),
+                nameof(IEventService.ListInvitationsAsync) => Task.FromResult(new PageResult<EventInvitationSummary>([], 0, 1, 25)),
+                nameof(IEventService.GetBulkAsync) => Task.FromResult(new BulkOperationSummary(id, BulkMode.Add, BulkStatus.Completed, 0, 0, 0, 0, null)),
+                _ => throw new NotSupportedException(method.Name)
+            };
+        }));
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
+        {
+            Assert.Equal(nameof(IEventManagementQueries.ListBulkRecipientsAsync), method.Name);
+            return Task.FromResult(new PageResult<BulkRecipientSummary>([], 0, 1, 25));
+        }));
+        await experience.ReportConnectionAsync(true, null);
+        SetRendererInfo(new("Server", true));
+        var cut = Render(builder =>
+        {
+            builder.OpenComponent(0, pageType);
+            if (pageType == typeof(EventDetailPage) || pageType == typeof(EventMembersPage) ||
+                pageType == typeof(EventEditPage) || pageType == typeof(EventBulkProgressPage))
+                builder.AddAttribute(1, "Id", id);
+            builder.CloseComponent();
+        });
+        IEnumerable<IRenderedComponent<FluentButton>> Reloads() => cut.FindComponents<FluentButton>()
+            .Where(button => button.Find("fluent-button").TextContent.Contains("reload", StringComparison.OrdinalIgnoreCase) ||
+                button.Find("fluent-button").TextContent.Contains("Refresh progress", StringComparison.Ordinal));
+
+        Assert.Empty(cut.FindAll("[role=alert]"));
+        Assert.Empty(Reloads());
+        fail = true;
+        await revalidation.OnConnectionUpAsync(null!, default);
+        Assert.Contains("Reload and review", cut.Find("[role=alert]").TextContent);
+        var reload = Assert.Single(Reloads());
+        Assert.False(reload.Instance.Disabled);
+        fail = false;
+        var beforeRetry = reads;
+        await cut.InvokeAsync(() => reload.Instance.OnClick.InvokeAsync());
+        Assert.Equal(beforeRetry + (pageType == typeof(EventMembersPage) ? 2 : 1), reads);
+        Assert.Empty(cut.FindAll("[role=alert]"));
+        Assert.Empty(Reloads());
+    }
+
+    /// <summary>Progress refresh remains useful for unfinished bulk work but is absent after terminal outcomes.</summary>
+    /// <param name="status">Persisted operation status returned by the authorized query.</param>
+    /// <param name="visible">Whether another progress read can track ongoing work.</param>
+    /// <returns>Completion after the actual bulk progress page renders.</returns>
+    [Theory]
+    [InlineData(BulkStatus.Expanding, true)]
+    [InlineData(BulkStatus.Applying, true)]
+    [InlineData(BulkStatus.Completed, false)]
+    [InlineData(BulkStatus.Failed, false)]
+    public async Task BulkRefreshIsVisibleOnlyForUnfinishedWork(BulkStatus status, bool visible)
+    {
+        Services.AddLogging();
+        var experience = new ExperienceCoordinator();
+        Services.AddSingleton(experience);
+        Services.AddSingleton(new EventCircuitRevalidation());
+        var id = Guid.NewGuid();
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, _) =>
+        {
+            Assert.Equal(nameof(IEventService.GetBulkAsync), method.Name);
+            return Task.FromResult(new BulkOperationSummary(id, BulkMode.Add, status, 0, 0, 0, 0, null));
+        }));
+        Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
+        {
+            Assert.Equal(nameof(IEventManagementQueries.ListBulkRecipientsAsync), method.Name);
+            return Task.FromResult(new PageResult<BulkRecipientSummary>([], 0, 1, 25));
+        }));
+        await experience.ReportConnectionAsync(true, null);
+        SetRendererInfo(new("Server", true));
+        var cut = Render<EventBulkProgressPage>(p => p.Add(x => x.Id, id));
+        Assert.Equal(visible ? 1 : 0, cut.FindComponents<FluentButton>().Count(button =>
+            button.Find("fluent-button").TextContent.Contains("Refresh progress", StringComparison.Ordinal)));
+        Assert.Contains(status.ToString(), cut.Find("[role=status]").TextContent);
+    }
 
     /// <summary>Busy transitions update Fluent control parameters as well as the fieldset while retaining local edits and zone locks.</summary>
     /// <returns>A task completing after disabled and re-enabled control states are explicitly verified.</returns>
@@ -179,19 +290,32 @@ public sealed class EventComponentTests : BunitContext
         }
     }
 
-    /// <summary>Offers exactly the bundled TZDB identifiers and submits the selected zone, never a free-text identifier.</summary>
+    /// <summary>Offers grouped city labels backed by real TZDB identifiers and submits the selected zone unchanged.</summary>
     [Fact]
-    public void EditorOffersBundledTimeZonesAndSubmitsSelection()
+    public void EditorOffersGroupedTimeZonesAndSubmitsSelection()
     {
         var sent = new List<EventInput>();
         var cut = Render<EventEditor>(p => p.Add(x => x.Input, Input()).Add(x => x.Submitted, value => sent.Add(value)));
-        Assert.Equal(NodaTime.DateTimeZoneProviders.Tzdb.Ids, cut.FindAll("select option").Select(x => x.GetAttribute("value")));
+        Assert.Contains("Prague", cut.Find("option[value='Europe/Prague']").TextContent);
+        Assert.Contains("Budapest", cut.Find("option[value='Europe/Prague']").TextContent);
+        Assert.StartsWith("(UTC+02:00)", cut.Find("option[value='Europe/Prague']").TextContent);
+        Assert.StartsWith("(UTC-04:00)", cut.Find("option[value='America/New_York']").TextContent);
         Assert.False(cut.Find("select").HasAttribute("disabled"));
         cut.Find("select").Change("America/New_York");
         cut.Find("form").Submit();
         Assert.Equal("America/New_York", Assert.Single(sent).TimeZoneId);
     }
 
+    /// <summary>Changing the start date refreshes daylight-saving labels without changing the retained Event zone.</summary>
+    [Fact]
+    public void EditorUpdatesZoneOffsetsWhenStartDateChanges()
+    {
+        var cut = Render<EventEditor>(p => p.Add(x => x.Input, Input()));
+        cut.Find("input[name='event-start-date']").Change("2026-01-15");
+        Assert.StartsWith("(UTC+01:00)", cut.Find("option[value='Europe/Prague']").TextContent);
+        Assert.StartsWith("(UTC-05:00)", cut.Find("option[value='America/New_York']").TextContent);
+        Assert.Equal("Europe/Prague", cut.Find("select").GetAttribute("value"));
+    }
     /// <summary>Rejects a tampered unknown zone before invoking the parent command callback.</summary>
     [Fact]
     public void EditorRejectsUnknownTimeZone()

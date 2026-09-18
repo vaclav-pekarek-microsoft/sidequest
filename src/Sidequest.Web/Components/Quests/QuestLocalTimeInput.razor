@@ -1,14 +1,14 @@
 @using Microsoft.AspNetCore.Components.Forms
 <div class="local-time-field">
     <label>@Label
-        <InputDate TValue="DateTime" Type="InputDateType.DateTimeLocal" Value="local" ValueChanged="ChangeLocalAsync"
+        <InputDate id="@fieldId" name="@fieldId" TValue="DateTime" Type="InputDateType.DateTimeLocal" Value="local" ValueChanged="ChangeLocalAsync"
                    ValueExpression="() => local" disabled="@Disabled" />
     </label>
     @if (offsets.Count == 2)
     {
         <p class="text-muted">This time occurs twice in @ZoneId when clocks move back. Choose which occurrence you mean.</p>
         <label>@OccurrenceLabel
-            <select value="@Occurrence" @onchange="ChangeOccurrenceAsync" disabled="@Disabled">
+            <select name="@($"{fieldId}-occurrence")" value="@Occurrence" @onchange="ChangeOccurrenceAsync" disabled="@Disabled">
                 <option value="">Choose an occurrence</option>
                 <option value="first">First occurrence (earlier)</option>
                 <option value="second">Second occurrence (later)</option>
@@ -23,6 +23,7 @@
 
 @code {
     private DateTime local;
+    private readonly string fieldId = $"quest-local-time-{Guid.NewGuid():N}";
     private IReadOnlyList<TimeSpan> offsets = [];
     private string Occurrence => Offset == offsets.FirstOrDefault() ? "first" :
         offsets.Count == 2 && Offset == offsets[1] ? "second" : "";

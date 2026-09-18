@@ -1,6 +1,6 @@
 @using Sidequest.Application.Events
 <label>Event member / current owner
-    <select value="@Selected" @onchange="ChangeAsync" disabled="@Busy">
+    <select name="quest-management-person" value="@Selected" @onchange="ChangeAsync" disabled="@Busy">
         <option value="">Choose a person</option>
         @foreach (var person in Candidates)
         {

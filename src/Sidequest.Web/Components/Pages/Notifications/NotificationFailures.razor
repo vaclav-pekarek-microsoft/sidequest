@@ -13,7 +13,10 @@
 {
     <p role="alert">@Error</p>
 }
-<FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Refresh failures</FluentButton>
+@if (Error is not null)
+{
+    <FluentButton OnClick="RetryAsync" Disabled="@RefreshDisabled">Refresh failures</FluentButton>
+}
 @if (Busy)
 {
     <p>Loading delivery state…</p>

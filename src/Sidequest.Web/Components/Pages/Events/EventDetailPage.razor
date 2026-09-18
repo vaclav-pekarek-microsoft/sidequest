@@ -8,7 +8,10 @@
 <h1>Event</h1>
 <nav class="page-actions" aria-label="Event navigation">
     <a href="/events">Back to Events</a>
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+    }
 </nav>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (detail is not null)
@@ -53,7 +56,7 @@
         {
             <section class="section-box danger-zone" aria-label="Leave Event">
                 <h2 class="section-heading">Leave Event</h2>
-                <FluentCheckbox @bind-Value="leaveConfirmed">I understand leaving removes Quest invitations, attendance, follows, and applicable calendar entries.</FluentCheckbox>
+                <FluentCheckbox Name="event-leave-confirmation" @bind-Value="leaveConfirmed">I understand leaving removes Quest invitations, attendance, follows, and applicable calendar entries.</FluentCheckbox>
                 <FluentButton Disabled="@(Busy || !leaveConfirmed)" OnClick="LeaveAsync">Leave Event</FluentButton>
                 <p>Owners must remove all Event and child Quest ownership assignments before leaving.</p>
             </section>

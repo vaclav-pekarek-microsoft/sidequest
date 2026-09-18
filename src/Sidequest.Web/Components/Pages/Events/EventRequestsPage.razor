@@ -8,14 +8,17 @@
 <h1>@(Id is null ? "My membership requests" : "Manage membership requests")</h1>
 <nav class="page-actions" aria-label="Request actions">
     <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    }
 </nav>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (Id is not null)
 {
     <section class="section-box" aria-label="Membership decision">
         <h2 class="section-heading">Decision reason</h2>
-        <FluentTextArea Label="Decision reason (required for rejection, 10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
+        <FluentTextArea Name="event-request-decision-reason" Label="Decision reason (required for rejection, 10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
     </section>
 }
 @if (result is not null)

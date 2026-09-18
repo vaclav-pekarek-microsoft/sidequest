@@ -9,7 +9,10 @@
 <h1>Bulk membership progress</h1>
 <nav class="page-actions" aria-label="Bulk progress actions">
     <a href="/events">Back to Events</a>
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
+    @if (Error is not null || progress?.Status is BulkStatus.Expanding or BulkStatus.Applying)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
+    }
 </nav>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (progress is not null)

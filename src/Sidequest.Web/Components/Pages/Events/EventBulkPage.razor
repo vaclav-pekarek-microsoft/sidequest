@@ -20,13 +20,13 @@
             <p>Selected group: @selected.DisplayName</p>
             <div class="field-grid">
                 <label>Action
-                    <InputSelect @bind-Value="mode" disabled="@Busy">
+                    <InputSelect name="event-bulk-mode" @bind-Value="mode" disabled="@Busy">
                         <option value="@BulkMode.Add">Add individual memberships (never restore removed users)</option>
                         <option value="@BulkMode.Invite">Invite individuals to accept membership</option>
                     </InputSelect>
                 </label>
             </div>
-            <FluentCheckbox @bind-Value="confirmed" Disabled="@Busy">I confirm this one-time expansion. Application may finish with explicit skips or partial failures; later removals take precedence.</FluentCheckbox>
+            <FluentCheckbox Name="event-bulk-confirmation" @bind-Value="confirmed" Disabled="@Busy">I confirm this one-time expansion. Application may finish with explicit skips or partial failures; later removals take precedence.</FluentCheckbox>
             <div class="page-actions">
                 <FluentButton Disabled="@(Busy || !confirmed)" OnClick="StartAsync">Start background expansion</FluentButton>
             </div>

@@ -8,7 +8,10 @@
 <AdminPanel>
     <p>Global administration grants no Event membership, Quest content access or editing privileges.</p>
     <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
-    <FluentButton OnClick="LoadAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="LoadAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    }
     @if (assignments is not null && !Forbidden)
     {
         <section class="section-box" aria-labelledby="assigned-administrators">

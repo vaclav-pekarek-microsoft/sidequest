@@ -7,7 +7,10 @@
 <h1>Individual members and equal owners</h1>
 <nav class="page-actions" aria-label="Membership actions">
     <a href="@($"/events/{Id}")">Back to Event</a>
-    <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload and recheck access</FluentButton>
+    }
 </nav>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (detail?.Summary.IsOwner == true)
@@ -18,8 +21,8 @@
         @if (selected is not null)
         {
             <p>Selected: @selected.Email (@selected.DisplayName)</p>
-            <FluentCheckbox @bind-Value="restore" Disabled="@Busy">Explicitly restore this individual if previously removed. Prior Quest participation is never restored.</FluentCheckbox>
-            <FluentCheckbox @bind-Value="ownerConfirmed" Disabled="@Busy">I confirm granting equal owner permissions and required individual membership.</FluentCheckbox>
+            <FluentCheckbox Name="event-member-restore" @bind-Value="restore" Disabled="@Busy">Explicitly restore this individual if previously removed. Prior Quest participation is never restored.</FluentCheckbox>
+            <FluentCheckbox Name="event-owner-confirmation" @bind-Value="ownerConfirmed" Disabled="@Busy">I confirm granting equal owner permissions and required individual membership.</FluentCheckbox>
             <div class="page-actions">
                 <FluentButton Disabled="@Busy" OnClick="@(() => AddAsync(false, false))">Add individual member</FluentButton>
                 @if (detail.Summary.Status == EventStatus.Active)
@@ -32,9 +35,9 @@
     </section>
     <section class="section-box danger-zone" aria-label="Remove access">
         <h2 class="section-heading">Remove access</h2>
-        <FluentTextArea Label="Membership removal reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
-        <FluentCheckbox @bind-Value="removalConfirmed" Disabled="@Busy">I confirm removal ends this user's Quest invitations, attendance, follows, and applicable calendars. Owners must first be removed from all Event and child Quest owner lists.</FluentCheckbox>
-        <FluentCheckbox @bind-Value="removeOwnerConfirmed" Disabled="@Busy">I confirm removing the selected equal owner role. At least one eligible owner must remain; membership itself is retained.</FluentCheckbox>
+        <FluentTextArea Name="event-membership-removal-reason" Label="Membership removal reason (10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
+        <FluentCheckbox Name="event-member-removal-confirmation" @bind-Value="removalConfirmed" Disabled="@Busy">I confirm removal ends this user's Quest invitations, attendance, follows, and applicable calendars. Owners must first be removed from all Event and child Quest owner lists.</FluentCheckbox>
+        <FluentCheckbox Name="event-owner-removal-confirmation" @bind-Value="removeOwnerConfirmed" Disabled="@Busy">I confirm removing the selected equal owner role. At least one eligible owner must remain; membership itself is retained.</FluentCheckbox>
     </section>
 }
 @if (members is not null)

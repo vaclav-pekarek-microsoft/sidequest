@@ -28,7 +28,7 @@ public sealed class NotificationComponentTests : BunitContext
     }
 
     /// <summary>Loading transitions to an explicit empty inbox without displaying raw exception details after an authorization failure.</summary>
-    /// <returns>Completion after the held load and a subsequent denied refresh have updated the rendered inbox.</returns>
+    /// <returns>Completion after the held load, denied reconnect and explicit successful recovery.</returns>
     [Fact]
     public async Task InboxLoadingEmptyAndDeniedStatesAreSafe()
     {
@@ -36,6 +36,7 @@ public sealed class NotificationComponentTests : BunitContext
         service.Inbox = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var component = Render<NotificationInbox>();
         Assert.Contains("Loading notifications", component.Markup);
+        Assert.DoesNotContain(component.FindComponents<FluentButton>(), x => x.Markup.Contains("Refresh"));
         await component.InvokeAsync(async () =>
         {
             service.Inbox.SetResult(new PageResult<NotificationSummary>([], 0, 1, 25));
@@ -48,12 +49,20 @@ public sealed class NotificationComponentTests : BunitContext
                 Assert.Equal(1, service.CountCalls);
             });
         });
+        Assert.DoesNotContain(component.FindComponents<FluentButton>(), x => x.Markup.Contains("Refresh"));
         service.Denied = true;
-        var refresh = component.FindComponents<FluentButton>().Single(x => x.Markup.Contains("Refresh"));
-        await component.InvokeAsync(() => refresh.Instance.OnClick.InvokeAsync());
+        await experience.ReportConnectionAsync(false, null);
+        await experience.ReportConnectionAsync(true, null);
         Assert.Contains("no longer has access", component.Find("[role=alert]").TextContent);
         Assert.DoesNotContain("private-secret", component.Markup);
         Assert.DoesNotContain("No notifications on this page", component.Markup);
+        var refresh = component.FindComponents<FluentButton>().Single(x => x.Markup.Contains("Refresh"));
+        Assert.False(refresh.Instance.Disabled);
+        service.Denied = false;
+        await component.InvokeAsync(() => refresh.Instance.OnClick.InvokeAsync());
+        Assert.Contains("No notifications on this page", component.Markup);
+        Assert.DoesNotContain(component.FindComponents<FluentButton>(), x => x.Markup.Contains("Refresh"));
+        Assert.Empty(component.FindAll("[role=alert]"));
     }
 
     /// <summary>Arbitrary decimal hours are accepted while precision errors remain visible and mandatory communication cannot be opted out.</summary>

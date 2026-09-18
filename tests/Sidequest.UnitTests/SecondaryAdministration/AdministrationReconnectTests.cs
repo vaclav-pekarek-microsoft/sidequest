@@ -80,6 +80,37 @@ public sealed class AdministrationReconnectTests : BunitContext
         SetRendererInfo(new("Server", true));
     }
 
+    /// <summary>Administrator access refresh is contextual to a failed authorization check and disappears after successful recovery.</summary>
+    /// <param name="recoveryPage">Whether to render ownership recovery rather than administrator assignments.</param>
+    /// <returns>Completion after denial and the rendered recovery callback.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AccessRefreshAppearsOnlyAfterFailure(bool recoveryPage)
+    {
+        await coordinator.ReportConnectionAsync(true, null);
+        var cut = Render(builder =>
+        {
+            builder.OpenComponent(0, recoveryPage ? typeof(OwnershipRecovery) : typeof(Administrators));
+            builder.CloseComponent();
+        });
+        IEnumerable<IRenderedComponent<FluentButton>> Refreshes() => cut.FindComponents<FluentButton>()
+            .Where(button => button.Find("fluent-button").TextContent.Trim() == "Refresh administrator access");
+
+        Assert.Empty(Refreshes());
+        Assert.Empty(cut.FindAll("[role=alert]"));
+        authorized = false;
+        await coordinator.ReportConnectionAsync(false, null);
+        await coordinator.ReportConnectionAsync(true, null);
+        Assert.Contains("Administrator access is required", cut.Find("[role=alert]").TextContent);
+        var refresh = Assert.Single(Refreshes());
+        Assert.False(refresh.Instance.Disabled);
+        authorized = true;
+        await cut.InvokeAsync(() => refresh.Instance.OnClick.InvokeAsync());
+        Assert.Empty(Refreshes());
+        Assert.Empty(cut.FindAll("[role=alert]"));
+    }
+
     /// <summary>Business reconnection refreshes current saved values, retains both drafts and original versions, requires explicit version adoption and clears on revocation.</summary>
     /// <returns>Completion after offline no-call, real read-service authorization, draft/version and denial assertions.</returns>
     [Fact]
