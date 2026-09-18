@@ -16,6 +16,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, WorkforceAuthenticationStateProvider>();
 builder.Services.AddScoped<ICurrentUser, CircuitCurrentUser>();
 builder.Services.AddScoped<WorkforceAccounts>();
+builder.Services.AddScoped<DevelopmentDataSeeder>();
 builder.Services.AddSidequestApplication();
 builder.Services.AddSidequestInfrastructure(builder.Configuration);
 builder.Services.AddSidequestDelivery(builder.Configuration);

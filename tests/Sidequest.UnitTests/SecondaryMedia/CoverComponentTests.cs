@@ -87,12 +87,13 @@ public sealed class CoverComponentTests : BunitContext
         Assert.DoesNotContain("Cover updated.", component.Markup);
     }
 
-    /// <summary>The default cover supplies meaningful text; moderation changes only the mediated endpoint query, never a storage URL.</summary>
+    /// <summary>The generated placeholder is labeled by Quest name; moderation changes only the mediated endpoint query, never a storage URL.</summary>
     [Fact]
     public void Display_DefaultAndModerationUseAccessiblePrivatePresentation()
     {
         var empty = Render<QuestCover>(parameters => parameters.Add(x => x.QuestTitle, "Board games"));
-        Assert.Equal("Default cover for Board games", empty.Find("[role=img]").GetAttribute("aria-label"));
+        Assert.Equal("https://placehold.co/600x400?text=Board%20games", empty.Find("img").GetAttribute("src"));
+        Assert.Equal("Cover for Board games", empty.Find("img").GetAttribute("alt"));
         var id = Guid.NewGuid();
         var cover = Render<QuestCover>(parameters => parameters.Add(x => x.AssetId, id)
             .Add(x => x.QuestTitle, "Board games").Add(x => x.Moderation, true));

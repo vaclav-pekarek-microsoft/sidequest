@@ -1,5 +1,7 @@
 @using Sidequest.Application.Quests
-<article>
+@using Sidequest.Web.Components.Media
+<article class="dashboard-quest-card">
+    <QuestCover AssetId="Item.CoverAssetId" QuestTitle="@Item.Title" />
     <h3><a href="@($"/quests/{Item.Id}")">@Item.Title</a></h3>
     <p>@Item.EventName · @Item.Status · @Item.Visibility</p>
     <QuestTimeDisplay ZoneId="@Item.TimeZoneId" StartUtc="@Item.StartUtc" EndUtc="@Item.EndUtc" />

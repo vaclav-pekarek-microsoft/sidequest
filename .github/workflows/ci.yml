@@ -57,6 +57,7 @@ jobs:
           export ConnectionStrings__Sidequest="$SIDEQUEST_SQL_CONNECTION"
           export ASPNETCORE_ENVIRONMENT=Development
           export Authentication__Mode=Development
+          export DevelopmentData__Seed=false
           export Delivery__Email__SenderAddress=calendar@sidequest.example.test
           dotnet tool restore
           dotnet ef database update --project src/Sidequest.Infrastructure --startup-project src/Sidequest.Infrastructure --configuration Release --no-build

@@ -12,10 +12,19 @@ namespace Sidequest.Web.Components.Experience;
 /// <summary>Owns authorized dashboard paging; rechecks access during interactive activation and reconnection rather than trusting prerendered state.</summary>
 public partial class QuestDashboard : IAsyncDisposable
 {
+    private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
+    [
+        (QuestListKind.Joined, "Upcoming Joined"),
+        (QuestListKind.Following, "Following"),
+        (QuestListKind.Organizing, "Organizing"),
+        (QuestListKind.Discover, "Discover"),
+        (QuestListKind.Invited, "Invited")
+    ];
     private readonly CancellationTokenSource lifetime = new();
     private IReadOnlyList<EventSummary> events = [];
     private DashboardPage? result;
     private DashboardFilter filter = new(QuestListKind.Joined, null, null, null);
+    private QuestLayout layout = QuestLayout.Board;
     private int page = 1;
     private int eventPage = 1;
     private int eventTotal;
@@ -43,6 +52,12 @@ public partial class QuestDashboard : IAsyncDisposable
         if (!lifetime.IsCancellationRequested) StateHasChanged();
     });
     private async Task FilterAsync(DashboardFilter next) { filter = next; page = 1; await LoadAsync(); }
+    private async Task SelectKindAsync(QuestListKind kind)
+    {
+        filter = filter with { Kind = kind };
+        page = 1;
+        await LoadAsync();
+    }
     private async Task PreviousAsync() { page--; await LoadAsync(); }
     private async Task NextAsync() { page++; await LoadAsync(); }
     private async Task EventPageAsync(int next) { eventPage = next; await LoadAsync(); }
@@ -100,5 +115,11 @@ public partial class QuestDashboard : IAsyncDisposable
         generation++;
         await lifetime.CancelAsync();
         lifetime.Dispose();
+    }
+
+    private enum QuestLayout
+    {
+        Board,
+        List
     }
 }

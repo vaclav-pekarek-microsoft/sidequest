@@ -39,7 +39,11 @@ public static class AuthenticationEndpoints
     {
         if (settings.IsDevelopment)
         {
-            app.MapPost("/auth/development", async (HttpContext context, IAntiforgery antiforgery, WorkforceAccounts accounts) =>
+            app.MapPost("/auth/development", async (
+                HttpContext context,
+                IAntiforgery antiforgery,
+                WorkforceAccounts accounts,
+                DevelopmentDataSeeder seeder) =>
             {
                 if (!IsLoopback(context)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 await antiforgery.ValidateRequestAsync(context);
@@ -48,6 +52,7 @@ public static class AuthenticationEndpoints
                 if (persona is null) return Results.BadRequest("Choose a documented synthetic persona.");
                 var principal = DevelopmentPersonas.CreatePrincipal(persona);
                 await accounts.ProvisionAsync(principal, context.RequestAborted);
+                await seeder.SeedAsync(context.RequestAborted);
                 WorkforceSession.Stamp(principal, context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow());
                 var properties = ExperienceAuthentication.CreateProperties(form["returnUrl"], form["experienceEpoch"]);
                 await context.SignInAsync(FoundationAuthenticationSettings.CookieScheme, principal, properties);

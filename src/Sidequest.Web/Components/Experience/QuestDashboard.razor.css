@@ -1,0 +1,109 @@
+.dashboard-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 0.5rem 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  background: linear-gradient(110deg, #e6f0e8, #f4f6ec);
+  border: 1px solid var(--sq-line);
+  border-radius: 1.2rem;
+}
+.dashboard-intro p {
+  margin: 0.25rem 0;
+  max-width: 42rem;
+}
+.dashboard-intro .button-link {
+  flex-shrink: 0;
+}
+
+.dashboard-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  margin-block: 1rem 1.75rem;
+}
+.dashboard-shortcuts a {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.dashboard-results {
+  margin-top: 2rem;
+}
+
+.quest-view-navigation,
+.results-header,
+.layout-switcher {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.quest-view-navigation {
+  margin-block: 1rem;
+}
+
+.quest-view-navigation button,
+.layout-switcher button {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--sq-line);
+  border-radius: 999px;
+  background: var(--neutral-layer-1, #fff);
+  color: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.quest-view-navigation button.selected,
+.layout-switcher button.selected {
+  border-color: var(--accent-fill-rest, #0f6cbd);
+  background: var(--accent-fill-rest, #0f6cbd);
+  color: var(--foreground-on-accent-rest, #fff);
+}
+
+.quest-view-navigation button:focus-visible,
+.layout-switcher button:focus-visible {
+  outline: 3px solid #875900;
+  outline-offset: 2px;
+}
+
+.results-header {
+  justify-content: space-between;
+}
+
+.results-header h2 {
+  margin-block: 0.5rem;
+}
+
+.result-caption {
+  color: var(--sq-muted);
+  font-size: 0.9rem;
+}
+
+.quest-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: stretch;
+  gap: 1.2rem;
+}
+
+.quest-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block: 1.75rem 1rem;
+}
+.dashboard-pagination span {
+  color: var(--sq-muted);
+  font-size: 0.9rem;
+}
