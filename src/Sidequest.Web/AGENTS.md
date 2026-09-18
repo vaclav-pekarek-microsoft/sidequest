@@ -128,6 +128,11 @@ guests/external identities. **A tenant ID, email domain or role name alone does 
 prove employment.** A guest mistakenly assigned this role is a tenant policy failure.
 Entra owners must verify guest exclusion and role issuance with live accounts before release.
 No Graph call, email check or group membership grants application permissions.
+Keep both the OpenID Connect option and its actual configured JSON token handler's
+inbound claim mapping disabled. Microsoft.Identity.Web replaces the framework
+handler; setting only `MapInboundClaims` on the options does not update that
+replacement. Admission requires the validated raw `tid`, `oid` and `roles` names.
+Exercise the configured handler with signed tokens, not only hand-built principals.
 
 The explicitly approved D41 hackathon profile selects
 `Authentication:AdmissionPolicy=hackathon-assigned-users` only in Staging or real-Entra
