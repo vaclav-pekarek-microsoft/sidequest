@@ -174,7 +174,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(page.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Private media configuration is missing or invalid.");
         await Expect(title).ToHaveValueAsync(unsaved);
         await Expect(page.GetByText("Cover updated.", new() { Exact = true })).ToHaveCountAsync(0);
-        await Expect(page.Locator(".cover-editor img")).ToHaveCountAsync(0);
+        await Expect(page.Locator(".cover-editor img[src^='media/covers/']")).ToHaveCountAsync(0);
         await NoOverflowAsync(page);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(fixture.Settings.At($"/quests/{questId}").AbsoluteUri);

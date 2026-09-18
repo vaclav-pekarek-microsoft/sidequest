@@ -173,10 +173,9 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         var page = await ExperienceBrowserSupport.SignInAsync(context);
         await page.GotoAsync("/");
         await Expect(page.Locator("[data-connection]")).ToContainTextAsync("Connected");
-        var view = page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true });
+        var view = page.GetByRole(AriaRole.Button, new() { Name = "Following", Exact = true });
         await Expect(view).ToBeEnabledAsync();
         await view.FocusAsync();
-        await page.Keyboard.PressAsync("f");
         await page.Keyboard.PressAsync("Enter");
         Assert.False(await page.EvaluateAsync<bool>("()=>document.documentElement.scrollWidth>document.documentElement.clientWidth"));
         await page.EvaluateAsync("async()=> (await import('/Components/Experience/ConnectionStatus.razor.js')).reportCircuitConnection(false)");

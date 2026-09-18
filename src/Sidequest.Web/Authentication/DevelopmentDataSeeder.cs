@@ -9,6 +9,7 @@ namespace Sidequest.Web.Authentication;
 internal sealed class DevelopmentDataSeeder(
     ISidequestDbContextFactory factory,
     FoundationAuthenticationSettings settings,
+    IConfiguration configuration,
     TimeProvider clock)
 {
     private static readonly Guid[] EventIds =
@@ -39,6 +40,9 @@ internal sealed class DevelopmentDataSeeder(
     /// <returns>A task that completes when the existing seed is detected or the catalog transaction commits.</returns>
     public async Task SeedAsync(CancellationToken cancellationToken)
     {
+        if (!configuration.GetValue("DevelopmentData:Seed", true))
+            return;
+
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await db.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
         if (await db.Events.AnyAsync(item => EventIds.Contains(item.Id), cancellationToken).ConfigureAwait(false))
