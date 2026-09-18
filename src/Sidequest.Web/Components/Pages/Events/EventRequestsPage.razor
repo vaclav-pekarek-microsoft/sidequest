@@ -6,12 +6,20 @@
 
 <PageTitle>Membership requests · Sidequest</PageTitle>
 <h1>@(Id is null ? "My membership requests" : "Manage membership requests")</h1>
-<a href="/events">Events</a>
+<nav class="page-actions" aria-label="Request actions">
+    <a href="@(Id is { } eventId ? $"/events/{eventId}" : "/events")">@(Id is null ? "Back to Events" : "Back to Event")</a>
+    @if (Error is not null)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
+    }
+</nav>
 <EventFeedback Busy="Busy" Error="@Error" />
-<FluentButton Disabled="@Busy" OnClick="LoadAsync">Reload</FluentButton>
 @if (Id is not null)
 {
-    <FluentTextArea Label="Decision reason (required for rejection, 10–2,000 characters)" @bind-Value="reason" Maxlength="2000" />
+    <section class="section-box" aria-label="Membership decision">
+        <h2 class="section-heading">Decision reason</h2>
+        <FluentTextArea Name="event-request-decision-reason" Label="Decision reason (required for rejection, 10–2,000 characters)" @bind-Value="reason" Maxlength="2000" Disabled="@Busy" />
+    </section>
 }
 @if (result is not null)
 {
@@ -21,8 +29,9 @@
     }
     @foreach (var request in result.Items)
     {
-        <article @key="request.Id">
-            <h2>@request.EventName · @request.User.DisplayName</h2>
+        <article @key="request.Id" class="section-box">
+            <h2>@request.EventName</h2>
+            <p>@request.User.Label</p>
             <p>@request.Status · @request.CreatedUtc.ToString("g") UTC</p>
             <p>@request.Reason</p>
             @if (request.Status == MembershipRequestStatus.Pending)

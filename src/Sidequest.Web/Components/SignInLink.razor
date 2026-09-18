@@ -1,0 +1,10 @@
+@inject FoundationAuthenticationSettings Authentication
+
+<a href="@(Authentication.IsDevelopment ? "/signin" : "/auth/login")"
+   class="@Class" data-enhance-nav="false"
+   data-authentication-change="@(Authentication.IsDevelopment ? null : string.Empty)">Sign in</a>
+
+@code {
+    /// <summary>Gets or sets the optional presentation classes for the direct sign-in link.</summary>
+    [Parameter] public string? Class { get; set; }
+}

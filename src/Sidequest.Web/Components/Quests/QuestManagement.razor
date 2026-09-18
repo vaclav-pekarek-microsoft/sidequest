@@ -7,72 +7,90 @@
     }
     else
     {
+        <section class="section-box">
+            <h3 class="section-heading">Content and publishing</h3>
+            <div class="page-actions">
+                @if (Detail.Summary.Status is QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended)
+                {
+                    <a href="@($"/quests/{Detail.Summary.Id}/edit")">Edit content</a>
+                }
+                @if (Detail.Summary.Status == QuestStatus.Draft)
+                {
+                    <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("publish")'>Publish draft</button>
+                }
+                @if (Detail.Summary.Status is QuestStatus.Completed or QuestStatus.Cancelled)
+                {
+                    <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("archive")'>Archive</button>
+                }
+            </div>
+        </section>
+        <section class="section-box">
+            <h3 class="section-heading">Owners</h3>
+            <p class="text-muted">Owners have equal management rights. Adding an owner never joins them to the Quest.</p>
+            <div class="page-actions">
+                @if (Detail.Summary.Status != QuestStatus.Archived)
+                {
+                    <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("add-owner")'>Add equal owner</button>
+                }
+                <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("remove-owner")'>Remove owner access</button>
+            </div>
+        </section>
+        @if (Detail.Summary.Visibility == QuestVisibility.Private)
+        {
+            <section class="section-box">
+                <h3 class="section-heading">Private invitations</h3>
+                <p class="text-muted">Invitations grant immediate access, not attendance. Revoking one can end access and attendance.</p>
+                <div class="page-actions">
+                    @if (Detail.Summary.Status == QuestStatus.Active)
+                    {
+                        <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("invite")'>Invite (immediate access)</button>
+                    }
+                    <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("revoke")'>Revoke invitation</button>
+                </div>
+            </section>
+        }
+        @if (Detail.Summary.Status is QuestStatus.Active or QuestStatus.Suspended)
+        {
+            <section class="section-box">
+                <h3 class="section-heading">Attendance</h3>
+                <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("remove-attendee")'>Remove attendee</button>
+            </section>
+        }
         @if (Detail.Summary.Status is QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended)
         {
-            <a href="@($"/quests/{Detail.Summary.Id}/edit")">Edit content</a>
+            <details class="section-box danger-zone">
+                <summary>Cancellation and deletion</summary>
+                <p>Cancellation withdraws attendee calendars. Deleting a draft cannot be undone.</p>
+                <div class="page-actions">
+                    <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("cancel")'>Cancel Quest</button>
+                    @if (Detail.Summary.Status == QuestStatus.Draft)
+                    {
+                        <button type="button" disabled="@Busy" @onclick='() => SelectActionAsync("delete")'>Delete draft</button>
+                    }
+                </div>
+            </details>
         }
-        <label>Event member / current owner
-            <select @bind="selected" disabled="@Busy">
-                <option value="">Choose a person</option>
-                @foreach (var person in Candidates)
-                {
-                    <option @key="person.Id" value="@person.Id">@person.DisplayName</option>
-                }
-            </select>
-        </label>
-        <FluentButton Disabled="@(Busy || MemberPage <= 1)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage - 1))">Previous members</FluentButton>
-        <FluentButton Disabled="@(Busy || !MoreMembers)" OnClick="@(() => PageChanged.InvokeAsync(MemberPage + 1))">More members</FluentButton>
     }
-    <FluentTextArea Label="Reason (10–2000 characters for cancellation, moderation, or removal)" @bind-Value="reason" Disabled="@Busy" />
-    <label>
-        <input type="checkbox" @bind="confirmed" disabled="@Busy" />
-        I confirm this action. Cancellation/suspension withdraws attendee calendars; removal can end access
-        and attendance; ownership changes give/remove equal management rights. Nothing joins another person.
-    </label>
-    <div>
-        @if (Moderation)
-        {
-            @if (Detail.Summary.Status == QuestStatus.Active)
+    @if (CurrentAction.Length > 0)
+    {
+        <section class="section-box management-confirmation" aria-label="Confirm Quest action">
+            <h3 class="section-heading">@ActionLabel</h3>
+            @if (NeedsPerson)
             {
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("suspend"))">Suspend</FluentButton>
+                <QuestManagementPeople Candidates="Candidates.ToArray()" Selected="@selected" SelectedChanged="SelectPersonAsync"
+                                       Busy="Busy" MemberPage="MemberPage" MoreMembers="MoreMembers" PageChanged="PageChanged" />
             }
-            @if (Detail.Summary.Status == QuestStatus.Suspended)
+            @if (NeedsReason)
             {
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("reinstate"))">Reinstate with latest details</FluentButton>
+                <FluentTextArea Name="quest-management-reason" Label="Reason (10–2000 characters)" @bind-Value="reason" @bind-Value:after="PublishDraftAsync" Immediate="true" Disabled="@Busy" />
             }
-        }
-        else
-        {
-            @if (Detail.Summary.Status == QuestStatus.Draft)
-            {
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("publish"))">Publish draft</FluentButton>
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("delete"))">Delete draft</FluentButton>
-            }
-            @if (Detail.Summary.Status is QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended)
-            {
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("cancel"))">Cancel Quest</FluentButton>
-            }
-            @if (Detail.Summary.Status is QuestStatus.Completed or QuestStatus.Cancelled)
-            {
-                <FluentButton Disabled="@Disabled" OnClick="@(() => SendAsync("archive"))">Archive</FluentButton>
-            }
-            @if (Detail.Summary.Status != QuestStatus.Archived)
-            {
-                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("add-owner"))">Add equal owner</FluentButton>
-            }
-            <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("remove-owner"))">Remove owner access</FluentButton>
-            @if (Detail.Summary.Visibility == QuestVisibility.Private)
-            {
-                @if (Detail.Summary.Status == QuestStatus.Active)
-                {
-                    <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("invite"))">Invite (immediate access)</FluentButton>
-                }
-                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("revoke"))">Revoke invitation</FluentButton>
-            }
-            @if (Detail.Summary.Status is QuestStatus.Active or QuestStatus.Suspended)
-            {
-                <FluentButton Disabled="@TargetDisabled" OnClick="@(() => SendAsync("remove-attendee"))">Remove attendee</FluentButton>
-            }
-        }
-    </div>
+            <label>
+                <input name="quest-management-confirmation" type="checkbox" @bind="confirmed" disabled="@Busy" />
+                I confirm this action. @ConfirmationDescription
+            </label>
+            <FluentButton Disabled="@(NeedsPerson ? TargetDisabled : Disabled)" OnClick="@(() => SendAsync(CurrentAction))">
+                @(Moderation ? ActionLabel : $"Confirm: {ActionLabel}")
+            </FluentButton>
+        </section>
+    }
 </section>

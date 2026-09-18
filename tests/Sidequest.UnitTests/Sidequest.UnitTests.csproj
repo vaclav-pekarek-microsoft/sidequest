@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
-    <PackageReference Include="bunit" Version="2.11.3" />
+    <PackageReference Include="bunit" Version="2.10.3" />
     <ProjectReference Include="..\..\src\Sidequest.Web\Sidequest.Web.csproj" />
   </ItemGroup>
 

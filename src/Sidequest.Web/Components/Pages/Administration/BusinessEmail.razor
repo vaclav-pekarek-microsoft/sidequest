@@ -12,19 +12,22 @@
     <FluentButton OnClick="RefreshAsync" Disabled="@Disabled">Check current settings without discarding edits</FluentButton>
     @if (settings is not null && !Forbidden)
     {
-        <fieldset disabled="@Disabled">
-            <legend>Nonsecret message configuration</legend>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">Message branding</legend>
             <label for="email-brand">Message brand (1–80 characters)</label>
             <input id="email-brand" maxlength="80" @bind="brand" />
             <FluentButton OnClick="@(() => Review(() => pendingKey = BusinessEmailRules.BrandKey))" Disabled="@Disabled">Review brand change</FluentButton>
+        </fieldset>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">Reply-to contact</legend>
             <label for="email-reply">Reply-to mailbox (optional, no display name)</label>
             <input id="email-reply" maxlength="320" @bind="replyTo" />
             <FluentButton OnClick="@(() => Review(() => pendingKey = BusinessEmailRules.ReplyToKey))" Disabled="@Disabled">Review reply-to change</FluentButton>
         </fieldset>
         @if (currentSettings is not null)
         {
-            <section aria-labelledby="current-settings">
-                <h2 id="current-settings">Latest saved values</h2>
+            <section class="section-box" aria-labelledby="current-settings">
+                <h2 class="section-heading" id="current-settings">Latest saved values</h2>
                 @foreach (var setting in currentSettings)
                 {
                     <p @key="setting.Key">@setting.Key: @(setting.Value.Length == 0 ? "(none)" : setting.Value)</p>
@@ -35,8 +38,8 @@
         }
         @if (pendingKey is not null)
         {
-            <section aria-labelledby="settings-confirm">
-                <h2 id="settings-confirm">Confirm email setting change</h2>
+            <section class="section-box" aria-labelledby="settings-confirm">
+                <h2 class="section-heading" id="settings-confirm">Confirm email setting change</h2>
                 <p>Save @pendingKey as @(pendingKey == BusinessEmailRules.BrandKey ? brand : replyTo)? This changes future prepared mail, not recipient, sender, organizer or mandatory delivery policy.</p>
                 <FluentButton OnClick="SaveAsync" Disabled="@Disabled">Confirm setting change</FluentButton>
                 <FluentButton OnClick="@(() => Review(() => pendingKey = null))" Disabled="@Disabled">Cancel change</FluentButton>

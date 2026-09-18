@@ -1,15 +1,26 @@
 @using Sidequest.Application.Quests
+@using Sidequest.Domain.Model
 @using Sidequest.Web.Components.Media
-<article class="dashboard-quest-card">
+<article class="quest-card @(Item.Participation == ParticipationStatus.Joined ? "quest-card-joined" : "")">
     <QuestCover AssetId="Item.CoverAssetId" QuestTitle="@Item.Title" />
-    <h3><a href="@($"/quests/{Item.Id}")">@Item.Title</a></h3>
-    <p>@Item.EventName · @Item.Status · @Item.Visibility</p>
+    <div class="card-meta">
+        <a class="event-label" href="@($"/events/{Item.EventId}")">@Item.EventName</a>
+        <span class="status-badge status-@Item.Status.ToString().ToLowerInvariant()">@Item.Status</span>
+    </div>
+    <h3><a class="quest-title" href="@($"/quests/{Item.Id}")">@Item.Title</a></h3>
+    <div class="card-tags">
+        <span class="participation-badge">@Item.Participation</span>
+        @if (Item.IsOwner)
+        {
+            <span class="subtle-badge">Organizing</span>
+        }
+        <span class="subtle-badge">@Item.Visibility</span>
+    </div>
     <QuestTimeDisplay ZoneId="@Item.TimeZoneId" StartUtc="@Item.StartUtc" EndUtc="@Item.EndUtc" />
-    <p>@Item.Location</p>
-    <p>You: @Item.Participation @(Item.IsOwner ? "· Organizing" : "")</p>
+    <p class="card-location">@Item.Location</p>
     @if (Item.AttendeeCount is not null)
     {
-        <p>@Item.AttendeeCount joined · @Item.FollowerCount following</p>
+        <p class="card-statistics">@Item.AttendeeCount joined · @Item.FollowerCount following</p>
     }
     @if (Item.IsOwner && InvitedCount is not null)
     {

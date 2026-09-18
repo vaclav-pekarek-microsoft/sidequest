@@ -61,14 +61,36 @@ public sealed class QuestDashboardTests : BunitContext
         Assert.Empty(component.FindAll("article"));
         Assert.Equal("/quests?view=Invited", component.Find("a[href*='Invited']").GetAttribute("href"));
         Assert.Equal("true", component.FindAll("button").Single(button => button.TextContent == "Board").GetAttribute("aria-pressed"));
-        Assert.Equal("true", component.FindAll("button").Single(button => button.TextContent == "Upcoming Joined").GetAttribute("aria-pressed"));
+        Assert.Equal("false", component.FindAll("button").Single(button => button.TextContent == "Upcoming Joined").GetAttribute("aria-pressed"));
         Assert.True(component.FindAll("button").Single(b => b.TextContent == "Next Quests").HasAttribute("disabled"));
     }
 
-    private void Register(Func<Task<PageResult<QuestSummary>>> list)
+    /// <summary>The signed-in Home view requests the event-scoped board rather than hiding unjoined Quests behind the old Joined default.</summary>
+    [Fact]
+    public void HomeDefaultsToAuthorizedBoardAndRendersJoinedCardClasses()
     {
-        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((method, _) =>
-            method.Name == nameof(IQuestService.ListAsync) ? list() : throw new NotSupportedException()));
+        QuestListKind? requested = null;
+        var quest = new QuestSummary(Guid.NewGuid(), Guid.NewGuid(), "Approved Event", "Shared activity", "Garden",
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), "Europe/Prague", QuestStatus.Active,
+            QuestVisibility.Public, 2, 0, null, ParticipationStatus.Joined, false, false, "", null);
+        Register(() => Task.FromResult(new PageResult<QuestSummary>([quest], 1, 1, 25)), kind => requested = kind);
+        var component = Render<QuestDashboard>();
+        Assert.Equal(QuestListKind.Board, requested);
+        Assert.Equal("Your Quest board", component.Find(".dashboard-results h2").TextContent);
+        Assert.Single(component.FindAll(".quest-board .quest-card-joined"));
+        Assert.Equal("Shared activity", component.Find(".quest-title").TextContent);
+        Assert.Contains("Joined first", component.Find(".result-caption").TextContent);
+        Assert.Empty(component.FindAll("[style]"));
+    }
+
+    private void Register(Func<Task<PageResult<QuestSummary>>> list, Action<QuestListKind>? queried = null)
+    {
+        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((method, arguments) =>
+        {
+            if (method.Name != nameof(IQuestService.ListAsync)) throw new NotSupportedException();
+            queried?.Invoke((QuestListKind)arguments![0]!);
+            return list();
+        }));
         Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, _) =>
             method.Name == nameof(IEventService.ListAsync) ?
                 Task.FromResult(new PageResult<EventSummary>([], 0, 1, 100)) : throw new NotSupportedException()));

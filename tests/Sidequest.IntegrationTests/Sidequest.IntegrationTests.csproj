@@ -17,6 +17,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\Sidequest.Infrastructure\Sidequest.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Sidequest.Web\Sidequest.Web.csproj" />
   </ItemGroup>
 
 </Project>

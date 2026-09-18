@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,11 @@ public sealed class DurableWorkHostedService(IServiceScopeFactory scopes, Durabl
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         options.Validate();
+        if (!options.Enabled)
+        {
+            logger.LogInformation("Durable work polling is disabled for this host. An independently configured worker must process pending SQL work.");
+            return;
+        }
         await Task.WhenAll(Enumerable.Range(0, options.Concurrency).Select(_ => RunLoopAsync(stoppingToken))).ConfigureAwait(false);
     }
 
@@ -37,7 +43,8 @@ public sealed class DurableWorkHostedService(IServiceScopeFactory scopes, Durabl
             }
             catch (Exception error)
             {
-                logger.LogError("Durable work polling is unavailable ({FailureType}). Pending work remains in SQL.", error.GetType().Name);
+                logger.LogError("Durable work polling is unavailable ({FailureType}, SQL number {SqlNumber}). Pending work remains in SQL.",
+                    error.GetType().Name, error is SqlException sql ? sql.Number : (int?)null);
             }
             if (!worked)
             {

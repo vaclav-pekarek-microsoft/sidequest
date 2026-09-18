@@ -1,7 +1,7 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-09-15.
+**Last revised:** 2026-09-18.
 **Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
@@ -473,9 +473,21 @@ Joining does not require organizer approval. See sections 50 and 54.
 
 ## 20. User Dashboard
 
-The main Sidequest dashboard should be **Quest-centric**.
+The main Sidequest dashboard is a **Quest-centric board**. Its default view contains
+all ordinarily accessible Quests from Events where the user has current individual
+membership, with Joined Quests first and other participation states afterward.
+Within each partition, order by start date/time in the parent Event's IANA time zone;
+break equal local times by UTC instant, then identifier. Apply access and date filters
+before pagination. Only the selected page loads full cards and owner-only statistics.
+Private/draft visibility is unchanged. Past, cancelled and archived Quests remain
+clearly labelled; users can narrow the board with the existing views below.
 
-Sections:
+Event membership and Quest participation remain separate. Because membership is
+already the access prerequisite, "joined first" describes Quest attendance rather
+than admitting Quests from unjoined Events. Pending Event invitations do not disclose
+Quest content. Membership revocation removes cards on reauthorization.
+
+Additional views:
 
 ### Upcoming
 
@@ -1469,15 +1481,21 @@ Commands and queries enforce time cutoffs even if the completion job is late.
 
 ### Data and time
 
-- Event dates are inclusive local dates in a required IANA time zone, with end date
-  on or after start date; publication requires that the Event has not ended. Quests store
+- Event dates are inclusive local dates in a required IANA time zone selected from
+  the bundled time-zone list. New create/update commands require end date strictly
+  after start date (D42); existing single-day records remain readable and retain
+  their inclusive date-window and Quest-containment semantics. No data migration
+  rewrites those records. Publication requires that the Event has not ended. Quests store
   `StartUtc` and `EndUtc`, with end strictly after start; their time zone comes from
   the parent Event's IANA zone ID. Do not store a separately editable Quest zone.
   Validate the Quest interval against midnight at Event start through the exclusive
   midnight after Event end in that same inherited zone. Use a maintained time-zone library
   capable of mapping IANA zones consistently across Windows and Azure.
 - Reject nonexistent daylight-saving local times. For ambiguous local times, require
-  the user to choose the intended offset before conversion. Never guess silently.
+  a contextual choice between the first and second occurrence, mapped internally to
+  the correct offset before conversion. Do not ask users to enter UTC offsets or
+  choose a separate Quest time zone. Never guess silently; editing an existing
+  repeated time preserves its selected occurrence.
 - Display Quest-local date/time in the inherited Event zone first, with a labeled user-local equivalent
   when different. Prefer a saved user zone, otherwise browser zone; fall back to the
   Quest zone with an explicit label. Calendar files use UTC start/end.
@@ -1503,7 +1521,7 @@ Completed/Cancelled/Archived Events are not candidates. No AI or hidden Event hi
 
 | Screen | Required behavior |
 |--------|-------------------|
-| Home / My Quests | Upcoming joined and Following tabs are mutually exclusive per user/Quest; Organizing may overlap either; Event filter and history link |
+| Home / Quests | Home is the authorized joined-first board (section 20); the Quests page retains joined/following/organizing/discover/invited views, Event filter and separate history actions |
 | Discover | Public Active Quests in the user's Events; Event/date filters; no private items or private-count hints |
 | Events | My Events, Available Events that are open to requests, Pending Requests; create Event action and duplicate warning |
 | Event detail | Member context, public Quests, create Quest; manager-only settings/membership/moderation tabs |
@@ -1525,6 +1543,25 @@ On access revocation, clear protected visible state on the next server authoriza
 check; reauthorize after reconnect and on every subsequent data request. The explicit
 offline joined-Quest cache is the limited exception described in section 56; do not
 promise immediate remote revocation of data on a disconnected device.
+
+Navigation is Quest-first: one **Quests** link before **Events**, not separate
+My Quests, Discover Quests and Invited Quests links. List filters are compact;
+create, history, invitation and management actions occupy a separate action area.
+Group form sections in boxes with headings. Separate lifecycle, ownership and
+cancellation actions; reveal cancellation and required reasons only when selected.
+Use authorized email/display-name labels, never visible user identifiers. This
+does not broaden roster/contact authorization: retain display-name-only attendee
+rosters and owner-only follower/invitation rosters.
+
+Anonymous Home and navigation start Entra sign-in directly, with a centered Home
+button; the explicitly synthetic development profile retains its persona picker.
+Normal authentication completion shows a loader and short progress text. Missing,
+superseded or unverifiable device/session bindings must still stop automatic
+activation and reveal explicit recovery/continuation. Sign-out semantics are
+unchanged. Installation/privacy guidance and collapsed device tools live in the
+footer; healthy connection details no longer occupy the page. Connection loss,
+revoked access and device-clearing failures remain visible and fail closed.
+The favicon and installation icons use a white S on the green application accent.
 
 Target WCAG 2.2 AA: keyboard navigation, visible focus, labeled inputs, meaningful
 validation, sufficient contrast, non-color status indicators, and screen-reader feedback.
@@ -1991,6 +2028,26 @@ SQL/Blob restore evidence, operational-owner assignment or production deployment
 M4 must still establish those release requirements; bounded provisioning conflicts
 are reported, not claimed to have been eliminated.
 
+M4 implementation now includes a disabled Azure infrastructure baseline, offline
+deployment-parameter preflight, opt-in managed-identity encrypted Data Protection,
+privacy-scoped operational metric export, migration-history-aware readiness and
+sequential queue sampling. Operational SQL remains in Infrastructure behind focused
+Application contracts. Missing, failed and stale observations are unavailable, not
+healthy zero backlogs. The preflight emits disabled-only ARM parameters and is not
+deployment authorization or proof of real identities/network suitability.
+
+The monitoring-enabled host passed
+[CI 34978801478](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978801478):
+1,922 unit, 1,032 real-SQL and 97 browser-project cases, all executed and passed.
+This includes a controlled Quest-reason input journey with the later Fluent change
+event withheld; reason capture no longer depends on that event. The offline preflight
+also passed its 29 cases in
+[infrastructure CI 34978440069](https://github.com/vaclav-pekarek-microsoft/sidequest/actions/runs/34978440069).
+These are bounded implementation results, not completion of M4: approval-gated OIDC
+deployment, private-runner SQL bootstrap/migrations, remaining operational signals
+and alerts, live provider/identity/device checks, measured load and actual recovery
+evidence remain unfinished. No Azure resources or deployment approvals were created.
+
 Shared M2 integration contracts:
 
 - `ChangeEnvelope.AffectedUserIds` captures the action targets separately from the actor,
@@ -2236,6 +2293,12 @@ not V1 release requirements.
 | D36 | 2026-09-14 | Implementation is authorized. Automatically merge verified PRs when configured review/CI requirements pass, while retaining PR-only changes and the vaclav-pekarek-microsoft identity. M1 foundation begins before parallel feature work; external approval gates still apply. |
 | D37 | 2026-09-14 | C# implementation must follow good engineering standards, including pragmatic SOLID. All public classes/types and members, methods, properties, constructors, fields, and enum values require proper XML documentation; enforce missing-documentation failures in builds and review semantic quality before merging. |
 | D38 | 2026-09-14 | Adopt PlagueHO/github-copilot-assets-library's csharp-best-practices.instructions.md as the C# baseline for all development agents, pinned at commit ea4125167b98053f083cffcc79883221f872da30. Record its application in repository instructions and EditorConfig; retain D37's public XML documentation requirement and apply the baseline before foundation integration. |
+| D39 | 2026-09-15 | Use standard GitHub environment reviews for Azure planning, with deployment-owner manual verification of administrator-bypass controls before planning is enabled. Supported API checks do not prove that bypass is disabled or distinguish every bypass from an ordinary approval. A manual-verification acknowledgement is a trusted operator assertion, not API evidence. Planning remains disabled by default, main-source-bound and environment-reviewed; relevant protection/identity changes require disabling planning and reverification. This accepts the approval model only: it does not verify current settings, assign an owner, create an identity/environment, authorize cloud access, deploy resources or enable the application. |
+| D40 | 2026-09-17 | Authorize a separate low-cost hackathon dev/test staging profile, exclusively in subscription `b75472bd-4174-4f66-b159-bae420212abc`, resource group `sidequest-rg`. Prefer economical US/Europe placement for a mainly US audience; West US 3 was selected from checked prices and subscription SQL availability. The owner clarified that the earlier USD 30/month figure is guidance, not a strict ceiling: favor simplicity and low total cost rather than elaborate budget enforcement. The owner expressly permits dropping private SQL networking: use Entra-only authentication, TLS, narrow explicit firewall entries and no "Allow Azure services" rule. Omit NAT/private endpoints and premium sizing in this separate profile; do not modify or activate the production template. Owner-supervised local SQL provisioning/bootstrap from an accepted, source-pinned PR is authorized for this dev/test subscription; production federated deployment controls under D39 remain unchanged. SQL uses Basic 5 DTUs/2 GB, an Entra administrator group, separate application/migration identities and explicit runtime table permissions. Do not claim production capacity, restore objectives or workforce/provider acceptance from this profile. Preserve the existing subscription spending limit; production use requires a separately approved eligible subscription. |
+| D41 | 2026-09-17 | Extend the approved low-cost hackathon staging work to the complete application and its supporting resources, still exclusively in D40's subscription and resource group and through accepted PRs. The owner explicitly approved a separate assigned-participant hackathon sign-in policy that can include their guest account; production workforce policy remains unchanged. Modernize the UI with class-based custom SCSS, no authored inline CSS; hide Compatibility and Switch account navigation while retaining sign-out. Replace nuget.org with the requested Microsoft package-feed proxy. Keep real local development settings ignored and unpublished, supporting the shared staging SQL database without redirecting tests there. Redefine signed-in Home as the authorized, joined-first Quest board described in section 20; use Event-local civil ordering with deterministic ties and retain privacy and lifecycle labels. Actual provider, identity and deployment evidence must be recorded rather than inferred from configuration. |
+| D42 | 2026-09-18 | Polish the Quest-first UI with green/white-S icons, direct Entra entry, a centered Home sign-in button, loader-first authentication completion, footer installation/privacy tools, compact filters, separate action areas and boxed form sections. Use authorized email/display-name labels instead of user IDs without expanding roster privacy. New Event create/update operations require end date strictly after start and a supported timezone selection; keep legacy inclusive date-window reads and containment. Quests inherit the Event zone without numeric UTC-offset entry; repeated local times require a contextual first/second-occurrence choice. Reveal destructive actions and reasons only when needed. Preserve authorization, version/draft/reconnect guards, explicit device-boundary recovery and the confirmed federated sign-out flow. |
+
+| D43 | 2026-09-18 | Hide routine Reload/Refresh actions on healthy pages; retain error/conflict recovery and progress refresh for unfinished bulk operations. Give native form fields explicit identifiers, including Fluent native proxy controls. Present Event timezones as readable CLDR city groups sorted by their UTC offset on the Event start date, preserving stored IANA identifiers and regional daylight-saving rules rather than replacing zones with fixed offsets. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2259,10 +2322,12 @@ implementation in this documentation session.
 | Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |
 | Azure subscription, region, budget, deploy identity, operational owner | Infrastructure provisioning | Approved hosting and access configuration |
+| GitHub Azure-planning environment protections and administrator controls | Before enabling any live Azure planning | Deployment-owner verification of required reviewers, self-review prevention, main-only branch restrictions and disabled administrator bypass; explicit owner-controlled acknowledgement under D39, repeated after relevant protection/identity changes |
 | Email provider/domain, organizer mailbox identity, test recipients | Live notification/calendar integration | Verified sender and Outlook delivery/update/cancellation smoke-test results |
 | Retention, residency, employee-data/device access and recovery targets | Before production data | Organizational approval including offline joined/private Quest basics, shared-device disclosure, and documented cleanup/restore procedure |
 
-All external gates above remain open/unverified. No live tenant/provider resources,
+Except for the bounded subscription, budget and staging provisioning authorization
+in D40, external gates above remain open/unverified. No live tenant/provider resources,
 compatibility evidence, operational owner, or organizational policy approval is implied
 by product acceptance. Record each gate's actual evidence when it is satisfied.
 

@@ -9,8 +9,8 @@
     <p>Templates are not Razor or executable code. Allowed variables: <code>{{Brand}}</code>, <code>{{Summary}}</code>, <code>{{CalendarGuidance}}</code>. Both bodies must retain Summary and CalendarGuidance.</p>
     <p>HTML is an attribute-free XHTML fragment: p, br, strong, em, ul, ol, li, h2, blockquote only. Close all tags, use &lt;br /&gt;, and encode literal ampersands. No links, styles, scripts, comments or resource-content variables.</p>
     <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
-    <fieldset disabled="@Disabled">
-        <legend>Template category</legend>
+    <fieldset class="section-box compact-filters" disabled="@(Disabled || history is null || Forbidden)">
+        <legend class="section-heading">Choose a template</legend>
         <label for="template-key">Category</label>
         <select id="template-key" @bind="selectedKey">
             @foreach (var key in BusinessEmailRules.TemplateKeys)
@@ -18,35 +18,40 @@
                 <option @key="key" value="@key">@key</option>
             }
         </select>
-        <FluentButton OnClick="LoadSelectedAsync" Disabled="@Disabled">Open selected category (discard current draft)</FluentButton>
+        <FluentButton OnClick="LoadSelectedAsync" Disabled="@(Disabled || history is null || Forbidden)">Open selected category (discard current draft)</FluentButton>
     </fieldset>
     @if (history is not null && !Forbidden)
     {
         <p>Editing @loadedKey against revision @revision. Saving appends a revision and never replaces old history.</p>
-        <fieldset disabled="@Disabled">
-            <legend>Unsaved template wording</legend>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">Subject line</legend>
             <label for="template-subject">Subject (1–200 single-line characters)</label>
             <input id="template-subject" maxlength="200" @bind="subject" @bind:after="InvalidatePreview" />
+        </fieldset>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">Message body</legend>
             <label for="template-html">Inert XHTML body (1–2,000 characters)</label>
             <textarea id="template-html" maxlength="2000" @bind="html" @bind:after="InvalidatePreview"></textarea>
             <label for="template-text">Plain-text alternative (1–2,000 characters)</label>
             <textarea id="template-text" maxlength="2000" @bind="text" @bind:after="InvalidatePreview"></textarea>
-            <FluentButton OnClick="PreviewAsync" Disabled="@Disabled">Preview with synthetic values</FluentButton>
-            <FluentButton OnClick="@(() => Review(() => confirming = true))" Disabled="@Disabled">Review new revision</FluentButton>
-            <FluentButton OnClick="RefreshHistoryAsync" Disabled="@Disabled">Check latest history, keep edits</FluentButton>
+            <div class="page-actions">
+                <FluentButton OnClick="PreviewAsync" Disabled="@Disabled">Preview with synthetic values</FluentButton>
+                <FluentButton OnClick="@(() => Review(() => confirming = true))" Disabled="@Disabled">Review new revision</FluentButton>
+                <FluentButton OnClick="RefreshHistoryAsync" Disabled="@Disabled">Check latest history, keep edits</FluentButton>
+            </div>
         </fieldset>
         @if (confirming)
         {
-            <section aria-labelledby="template-confirm">
-                <h2 id="template-confirm">Confirm new template revision</h2>
+            <section class="section-box" aria-labelledby="template-confirm">
+                <h2 class="section-heading" id="template-confirm">Confirm new template revision</h2>
                 <p>Newly prepared @loadedKey email will use this wording. Already attempted messages keep their frozen content. Previous revisions remain available.</p>
                 <FluentButton OnClick="SaveAsync" Disabled="@Disabled">Confirm append revision</FluentButton>
                 <FluentButton OnClick="@(() => Review(() => confirming = false))" Disabled="@Disabled">Cancel save</FluentButton>
             </section>
         }
         <TemplatePreview Preview="@preview" />
-        <section aria-labelledby="template-history">
-            <h2 id="template-history">Recent saved versions and compiled default</h2>
+        <section class="section-box" aria-labelledby="template-history">
+            <h2 class="section-heading" id="template-history">Recent saved versions and compiled default</h2>
             <p>Latest observed revision: @latestRevision. History page @historyPage. Choosing wording copies it into the draft; it does not modify history.</p>
             <FluentButton OnClick="AcceptLatestVersion" Disabled="@Disabled">Use latest revision as base, keep edits</FluentButton>
             <ul>
@@ -69,5 +74,6 @@
     else if (!Busy)
     {
         <p>Templates are unavailable. Current administrator access and valid stored configuration are required.</p>
+        <FluentButton OnClick="LoadSelectedAsync" Disabled="@Disabled">Retry template access</FluentButton>
     }
 </AdminPanel>

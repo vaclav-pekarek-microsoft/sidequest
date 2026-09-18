@@ -341,6 +341,14 @@ public sealed class ProvisioningRetryTests
             return Task.FromResult<IDbContextTransaction>(Transaction);
         }
 
+        /// <inheritdoc />
+        public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(IsolationLevel.Serializable, Isolation);
+            return users.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.ObjectId == objectId, cancellationToken);
+        }
+
         /// <inheritdoc/>
         /// <remarks>Records a save attempt and returns the configured failure or a successful affected-row count.</remarks>
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -355,6 +363,40 @@ public sealed class ProvisioningRetryTests
         /// <inheritdoc/>
         public Task LockEventAsync(Guid eventId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Account provisioning does not acquire Event locks.");
+
+        /// <inheritdoc />
+        public Task<MembershipRequestState> ReadMembershipRequestStateForUpdateAsync(Guid eventId, Guid userId,
+            DateTimeOffset since, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not request Event membership.");
+
+        /// <inheritdoc/>
+        public Task<QuestInvitation?> FindQuestInvitationForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not grant Quest invitations.");
+
+        /// <inheritdoc/>
+        public Task<QuestParticipation?> FindQuestParticipationForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not change Quest participation.");
+
+        /// <inheritdoc/>
+        public Task<CalendarDeliveryState?> FindCalendarDeliveryStateForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not change calendar intent.");
+
+        /// <inheritdoc/>
+        public Task<bool> HasNotificationForUpdateAsync(Guid sourceChangeId, Guid userId, NotificationKind kind,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not produce inbox effects.");
+
+        /// <inheritdoc/>
+        public Task<List<ScheduledWork>> ReadReminderSchedulesForUpdateAsync(Guid questId, Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not schedule reminders.");
+
+        /// <inheritdoc/>
+        public Task<bool> HasScheduledWorkForUpdateAsync(string deduplicationKey, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not schedule completion work.");
 
         /// <inheritdoc/>
         public Task<bool> HasPendingScheduledWorkForUpdateAsync(string deduplicationPrefix, CancellationToken cancellationToken = default) =>

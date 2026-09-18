@@ -31,11 +31,11 @@ public sealed class AdministrationService(ISidequestDbContextFactory factory, IR
                       where user.TenantId == actor.TenantId
                       orderby user.DisplayName, user.Id
                       select new AdministratorSummary(user.Id, user.DisplayName,
-                          user.IsEligible && user.DepartureVerifiedUtc == null, assignment.Version))
+                          user.IsEligible && user.DepartureVerifiedUtc == null, assignment.Version, user.Email))
             .Skip(page.Offset).Take(page.Limit).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Selects at most 25 currently eligible, provisioned same-tenant accounts by trusted display label.</summary>
+    /// <summary>Selects at most 25 currently eligible, provisioned same-tenant accounts by trusted display name or email.</summary>
     /// <param name="query">At least two and at most 100 trimmed search characters; no arbitrary mailbox is accepted.</param>
     /// <param name="cancellationToken">Cancels authorization and SQL reads.</param>
     /// <returns>Minimal local account choices; directory provisioning remains the existing identity workflow.</returns>
@@ -48,9 +48,9 @@ public sealed class AdministrationService(ISidequestDbContextFactory factory, IR
         if (query.Length is < 2 or > 100)
             throw new DomainException(ErrorCode.Validation, "Enter 2–100 search characters.", nameof(query));
         return await db.Users.AsNoTracking().Where(x => x.TenantId == actor.TenantId &&
-                x.IsEligible && x.DepartureVerifiedUtc == null && x.DisplayName.Contains(query))
+                x.IsEligible && x.DepartureVerifiedUtc == null && (x.DisplayName.Contains(query) || x.Email.Contains(query)))
             .OrderBy(x => x.DisplayName).ThenBy(x => x.Id).Take(25)
-            .Select(x => new AccountChoice(x.Id, x.DisplayName, x.Version))
+            .Select(x => new AccountChoice(x.Id, x.DisplayName, x.Version, x.Email))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 

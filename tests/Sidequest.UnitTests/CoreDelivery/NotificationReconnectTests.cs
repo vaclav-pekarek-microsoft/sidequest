@@ -67,8 +67,8 @@ public sealed class NotificationReconnectTests : BunitContext
         var saveEvent = Button(preferences, "Save Event override").Instance.OnClick;
 
         await experience.ReportConnectionAsync(false, null);
-        Assert.True(Button(inbox, "Refresh").Instance.Disabled);
-        Assert.True(Button(failures, "Refresh failures").Instance.Disabled);
+        Assert.DoesNotContain(inbox.FindComponents<FluentButton>(), button => button.Markup.Contains("Refresh", StringComparison.Ordinal));
+        Assert.DoesNotContain(failures.FindComponents<FluentButton>(), button => button.Markup.Contains("Refresh failures", StringComparison.Ordinal));
         Assert.True(Button(preferences, "Retry").Instance.Disabled);
         Assert.DoesNotContain("old protected notification", inbox.Markup);
         Assert.DoesNotContain("Confirm replay", failures.Markup);
@@ -509,6 +509,8 @@ public sealed class NotificationReconnectTests : BunitContext
     private async Task VerifyTransientListAsync<T>(IRenderedComponent<T> component, string retry, string content)
         where T : NotificationViewBase
     {
+        Assert.DoesNotContain(component.FindComponents<FluentButton>(), button =>
+            button.Find("fluent-button").TextContent.Trim() == retry);
         await experience.ReportConnectionAsync(false, null);
         var failure = new InvalidOperationException("private-provider-secret");
         service.ReadFailure = failure;
@@ -521,6 +523,8 @@ public sealed class NotificationReconnectTests : BunitContext
         await ClickAsync(component, retry);
         Assert.Contains(content, component.Markup);
         Assert.Equal(3, service.ListCalls + service.FailureCalls);
+        Assert.DoesNotContain(component.FindComponents<FluentButton>(), button =>
+            button.Find("fluent-button").TextContent.Trim() == retry);
     }
 
     private async Task VerifyDisposedMutationAsync<T>(IRenderedComponent<T> component, string? action, string stateField)
@@ -597,7 +601,8 @@ public sealed class NotificationReconnectTests : BunitContext
         await component.InvokeAsync(() => component.Instance.DisposeAsync().AsTask());
         Assert.True(Assert.Single(service.Tokens).IsCancellationRequested);
         release();
-        await reconnect.WaitAsync(TimeSpan.FromSeconds(1));
+        // Verify disposal fencing after completion, not a one-second runner scheduling budget.
+        await reconnect;
         Assert.False((bool)typeof(NotificationViewBase)
             .GetProperty("Busy", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(component.Instance)!);
         Assert.Null(Field(component.Instance, stateField));

@@ -1,8 +1,8 @@
 @inherits EventViewBase
 
-<fieldset disabled="@Busy">
-    <legend>@(Groups ? "Choose a source group" : "Choose a workforce user")</legend>
-    <FluentTextField Label="Directory search (at least two characters)" @bind-Value="query" Disabled="@Busy" Maxlength="100" />
+<fieldset disabled="@Busy" class="section-box">
+    <legend class="section-heading">@(Groups ? "Choose a source group" : "Choose a workforce user")</legend>
+    <FluentTextField Name="directory-search" Label="Directory search (at least two characters)" @bind-Value="query" Disabled="@Busy" Maxlength="100" />
     <FluentButton OnClick="SearchAsync" Disabled="@(Busy || query.Trim().Length < 2)">Search directory</FluentButton>
     <EventFeedback Busy="Busy" Error="@Error" />
     @if (searched && users.Count == 0 && groups.Count == 0 && Error is null)
@@ -13,13 +13,13 @@
         @foreach (var user in users)
         {
             <li @key="user.ObjectId">
-                <FluentButton OnClick="@(() => UserSelected.InvokeAsync(user))">@user.DisplayName (@user.Email)</FluentButton>
+                <FluentButton Disabled="@Busy" OnClick="@(() => UserSelected.InvokeAsync(user))">@user.Email (@user.DisplayName)</FluentButton>
             </li>
         }
         @foreach (var group in groups)
         {
             <li @key="group.ObjectId">
-                <FluentButton OnClick="@(() => GroupSelected.InvokeAsync(group))">@group.DisplayName</FluentButton>
+                <FluentButton Disabled="@Busy" OnClick="@(() => GroupSelected.InvokeAsync(group))">@group.DisplayName</FluentButton>
             </li>
         }
     </ul>

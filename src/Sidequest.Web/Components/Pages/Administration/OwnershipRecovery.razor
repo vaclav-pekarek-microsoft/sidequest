@@ -9,11 +9,15 @@
     <p>Recovery is limited to one supplied Event or Quest where every owner has verified departure evidence from the externally approved process. A Graph outage, absence, disabled flag or unanswered message is not proof.</p>
     <p>This screen cannot verify departure or disable accounts. Deployment operators must first enable an approved procedure. No title, description or private roster is disclosed.</p>
     <AdminFeedback Error="@Error" Busy="@Busy" Status="@Status" />
-    <FluentButton OnClick="CheckAccessAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    @if (Error is not null)
+    {
+        <FluentButton OnClick="CheckAccessAsync" Disabled="@Disabled">Refresh administrator access</FluentButton>
+    }
     @if (authorized && !Forbidden)
     {
-        <fieldset disabled="@Disabled">
-            <legend>Exact resource supplied by the approved process</legend>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">1. Check the resource</legend>
+            <p class="text-muted">Use the exact resource supplied by the approved process.</p>
             <label for="recovery-kind">Resource type</label>
             <select id="recovery-kind" @bind="kind" @bind:after="ClearPreview">
                 <option value="@ResourceKind.Event">Event</option>
@@ -22,7 +26,10 @@
             <label for="recovery-id">Resource ID</label>
             <input id="recovery-id" @bind="resourceId" @bind:after="ClearPreview" />
             <FluentButton OnClick="PreviewAsync" Disabled="@Disabled">Check recovery evidence</FluentButton>
-            <label for="replacement-search">Replacement display-name search</label>
+        </fieldset>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">2. Choose a replacement owner</legend>
+            <label for="replacement-search">Search replacement email or display name</label>
             <input id="replacement-search" maxlength="100" @bind="query" />
             <FluentButton OnClick="SearchAsync" Disabled="@Disabled">Search eligible replacement</FluentButton>
             @if (choices is { Count: 0 })
@@ -36,17 +43,20 @@
                     <option value="">Choose one account</option>
                     @foreach (var choice in choices)
                     {
-                        <option @key="choice.Id" value="@choice.Id">@choice.DisplayName</option>
+                        <option @key="choice.Id" value="@choice.Id">@AccountLabel.Format(choice.Email, choice.DisplayName)</option>
                     }
                 </select>
             }
+        </fieldset>
+        <fieldset class="section-box" disabled="@Disabled">
+            <legend class="section-heading">3. Explain the recovery</legend>
             <label for="recovery-reason">Mandatory reason (10–2,000 characters; do not include private content)</label>
             <textarea id="recovery-reason" maxlength="2000" @bind="reason"></textarea>
         </fieldset>
         @if (preview is not null)
         {
-            <section aria-labelledby="recovery-confirm">
-                <h2 id="recovery-confirm">Confirm narrowly scoped ownership recovery</h2>
+            <section class="section-box danger-zone" aria-labelledby="recovery-confirm">
+                <h2 class="section-heading" id="recovery-confirm">Confirm narrowly scoped ownership recovery</h2>
                 <p>Replace verified departed owners on this @preview.Kind only. Create/reactivate required individual Event membership for the replacement. Lifecycle and content stay unchanged, including archived resources. Attendance, follows and invitations are not restored. The operation is audited and queues required ownership mail.</p>
                 <FluentButton OnClick="RecoverAsync" Disabled="@(Disabled || selectedId.Length == 0)">Confirm ownership recovery</FluentButton>
                 <FluentButton OnClick="ClearPreview" Disabled="@Disabled">Cancel confirmation</FluentButton>

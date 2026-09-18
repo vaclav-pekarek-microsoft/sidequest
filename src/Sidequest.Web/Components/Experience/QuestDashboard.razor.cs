@@ -14,6 +14,7 @@ public partial class QuestDashboard : IAsyncDisposable
 {
     private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
     [
+        (QuestListKind.Board, "All Quests"),
         (QuestListKind.Joined, "Upcoming Joined"),
         (QuestListKind.Following, "Following"),
         (QuestListKind.Organizing, "Organizing"),
@@ -23,7 +24,7 @@ public partial class QuestDashboard : IAsyncDisposable
     private readonly CancellationTokenSource lifetime = new();
     private IReadOnlyList<EventSummary> events = [];
     private DashboardPage? result;
-    private DashboardFilter filter = new(QuestListKind.Joined, null, null, null);
+    private DashboardFilter filter = new(QuestListKind.Board, null, null, null);
     private QuestLayout layout = QuestLayout.Board;
     private int page = 1;
     private int eventPage = 1;
@@ -35,7 +36,12 @@ public partial class QuestDashboard : IAsyncDisposable
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private ExperienceCoordinator Coordinator { get; set; } = default!;
     [Inject] private ILogger<QuestDashboard> Logger { get; set; } = default!;
-    private string Heading => filter.Kind == QuestListKind.Joined ? "Upcoming Joined" : filter.Kind.ToString();
+    private string Heading => filter.Kind switch
+    {
+        QuestListKind.Board => "Your Quest board",
+        QuestListKind.Joined => "Upcoming Joined",
+        _ => filter.Kind.ToString()
+    };
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()

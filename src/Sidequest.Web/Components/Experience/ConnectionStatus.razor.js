@@ -97,7 +97,7 @@ class ConnectionBridge {
             const saved = await readSnapshot();
             if (saved) this.status(`Saved basics last refreshed ${new Date(saved.refreshedUtc).toLocaleString()}; times, status and access may have changed.`);
         } catch (error) {
-            this.status(error instanceof Error ? error.message : "Device storage is unavailable. Basics have not been saved.");
+            this.status(error instanceof Error ? error.message : "Device storage is unavailable. Basics have not been saved.", true);
         }
         if ("serviceWorker" in navigator && isSecureContext) {
             try { await navigator.serviceWorker.register("/service-worker.js", { scope: "/" }); }
@@ -107,13 +107,18 @@ class ConnectionBridge {
         await this.refresh();
     }
     get connected() { return navigator.onLine && circuitConnected && !this.#cleared && !this.#events.signal.aborted; }
-    status(value) { this.#root.querySelector("[data-snapshot]").textContent = this.#clearFailure ?? value; }
+    status(value, failed = false) {
+        this.#root.querySelector("[data-snapshot]").textContent = this.#clearFailure ?? value;
+        if (failed && document.querySelector('[data-requires-session="true"]'))
+            this.#root.querySelector("[data-device-tools]").open = true;
+    }
     gate() {
         for (const element of document.querySelectorAll("[data-online-actions]"))
             element.inert = !this.connected || !this.#reauthorized;
         if (this.#cleared)
             for (const element of document.querySelectorAll("[data-protected-experience]")) element.hidden = true;
         this.#root.querySelector("[data-refresh]").disabled = !this.connected || this.#pending;
+        this.#root.querySelector("[data-connection]").hidden = this.connected && this.#reauthorized;
     }
     clearVisible(message = "Account changed or signed out. Refresh stopped; reload online. If clearing failed, use browser site-data settings.") {
         this.#cleared = true;
@@ -160,7 +165,7 @@ class ConnectionBridge {
                         else if (!checkedEpoch) throw new Error("The device generation could not be verified.");
                     } catch {
                         this.#clearFailure = "Current access was lost and device clearing could not be verified. Close other Sidequest tabs and clear this site's data before sharing the device.";
-                        this.status(this.#clearFailure);
+                        this.status(this.#clearFailure, true);
                     }
                     throw new Error("Current HTTP session was rejected.");
                 }
@@ -198,7 +203,7 @@ class ConnectionBridge {
         } catch (error) {
             this.status(error?.name === "AbortError" ? "Refresh interrupted. Saved freshness is unchanged." :
                 error instanceof TypeError ? "Network refresh failed. Saved freshness is unchanged." :
-                error instanceof Error ? error.message : "Device refresh failed. Saved freshness is unchanged.");
+                error instanceof Error ? error.message : "Device refresh failed. Saved freshness is unchanged.", true);
         } finally { this.#pending = false; this.gate(); }
         if (this.#queuedRefresh && !this.#events.signal.aborted) {
             this.#queuedRefresh = false;

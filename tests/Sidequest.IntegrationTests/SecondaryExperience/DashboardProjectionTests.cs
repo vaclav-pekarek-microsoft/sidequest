@@ -14,6 +14,121 @@ namespace Sidequest.IntegrationTests.SecondaryExperience;
 /// <param name="database">Fixture owning only a unique GUID-named SidequestTests catalog.</param>
 public sealed class DashboardProjectionTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
+    /// <summary>Joined Quests precede other accessible Quests, and each partition uses Event-local civil time before paging, not UTC order.</summary>
+    /// <returns>Completion after exact cross-zone pages, totals, inherited zones and pre-page date filtering are verified.</returns>
+    [Fact]
+    public async Task BoardOrdersJoinedFirstThenEventLocalTimeBeforePaging()
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        var seed = scenario.Seed;
+        var west = FoundationSeed.NewEvent(seed.User.Id);
+        west.TimeZoneId = "America/Los_Angeles";
+        await FoundationSeed.PersistAsync(database, west,
+            new EventMembership { EventId = west.Id, UserId = seed.User.Id, ChangedById = seed.User.Id, Status = MembershipStatus.Active });
+        var westJoined = FoundationSeed.NewQuest(west.Id, seed.User.Id);
+        westJoined.StartUtc = FoundationSeed.Now.AddHours(11); // 14:00 in Los Angeles.
+        westJoined.EndUtc = westJoined.StartUtc.AddHours(1);
+        var pragueJoined = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        pragueJoined.StartUtc = FoundationSeed.Now.AddHours(5); // 17:00 in Prague.
+        pragueJoined.EndUtc = pragueJoined.StartUtc.AddHours(1);
+        var westAvailable = FoundationSeed.NewQuest(west.Id, seed.User.Id);
+        westAvailable.StartUtc = FoundationSeed.Now.AddHours(6); // 09:00, before the seed's 12:00 in Prague.
+        westAvailable.EndUtc = westAvailable.StartUtc.AddHours(1);
+        await FoundationSeed.PersistAsync(database, westJoined, pragueJoined, westAvailable);
+        await FoundationSeed.PersistAsync(database,
+            new QuestParticipation { QuestId = westJoined.Id, UserId = seed.User.Id, Status = ParticipationStatus.Joined },
+            new QuestParticipation { QuestId = pragueJoined.Id, UserId = seed.User.Id, Status = ParticipationStatus.Joined });
+        var service = Service(scenario, seed.User);
+        var first = await service.ListAsync(QuestListKind.Board, null, new(1, 2), new());
+        var second = await service.ListAsync(QuestListKind.Board, null, new(2, 2), new());
+        Assert.Equal(4, first.Quests.TotalCount);
+        Assert.Equal(4, second.Quests.TotalCount);
+        Assert.Equal(new[] { westJoined.Id, pragueJoined.Id }, first.Quests.Items.Select(item => item.Id));
+        Assert.Equal(new[] { westAvailable.Id, seed.Quest.Id }, second.Quests.Items.Select(item => item.Id));
+        Assert.All(first.Quests.Items, item => Assert.Equal(ParticipationStatus.Joined, item.Participation));
+        Assert.Equal(new[] { "America/Los_Angeles", "Europe/Prague" }, first.Quests.Items.Select(item => item.TimeZoneId));
+        var filtered = await service.ListAsync(QuestListKind.Board, west.Id, new(1, 1),
+            new(westAvailable.StartUtc, westJoined.EndUtc));
+        Assert.Equal(2, filtered.Quests.TotalCount);
+        Assert.Equal(westJoined.Id, Assert.Single(filtered.Quests.Items).Id);
+    }
+
+    /// <summary>A repeated Event-local time during daylight-saving fallback is ordered by actual instant, then a deterministic identifier.</summary>
+    /// <returns>Completion after both offset occurrences and exact-timestamp identifier ties are ordered consistently.</returns>
+    [Fact]
+    public async Task BoardDisambiguatesRepeatedLocalTimesAndStableIdentifierTies()
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        var firstInstant = TimeRules.ToUtc(new DateTime(2026, 10, 25, 2, 30, 0), "Europe/Prague", TimeSpan.FromHours(2));
+        var secondInstant = TimeRules.ToUtc(new DateTime(2026, 10, 25, 2, 30, 0), "Europe/Prague", TimeSpan.FromHours(1));
+        await using (var db = database.CreateContext())
+        {
+            var quest = await db.Quests.SingleAsync(item => item.Id == scenario.Seed.Quest.Id);
+            quest.StartUtc = firstInstant;
+            quest.EndUtc = firstInstant.AddHours(2);
+            var parent = await db.Events.SingleAsync(item => item.Id == scenario.Seed.Event.Id);
+            parent.StartDate = new(2026, 10, 25);
+            parent.EndDate = new(2026, 10, 26);
+            await db.SaveChangesAsync();
+        }
+        var second = FoundationSeed.NewQuest(scenario.Seed.Event.Id, scenario.Seed.User.Id);
+        second.StartUtc = secondInstant;
+        second.EndUtc = secondInstant.AddHours(1);
+        var tied = FoundationSeed.NewQuest(scenario.Seed.Event.Id, scenario.Seed.User.Id);
+        tied.StartUtc = secondInstant;
+        tied.EndUtc = second.EndUtc;
+        await FoundationSeed.PersistAsync(database, second, tied);
+        var result = await Service(scenario, scenario.Seed.User).ListAsync(QuestListKind.Board, scenario.Seed.Event.Id, new(), new());
+        var expected = new[] { scenario.Seed.Quest.Id }.Concat(new[] { second.Id, tied.Id }.Order());
+        Assert.Equal(expected, result.Quests.Items.Select(item => item.Id));
+        Assert.Equal(new[] { firstInstant, secondInstant, secondInstant }, result.Quests.Items.Select(item => item.StartUtc));
+    }
+
+    /// <summary>The all-Quest board includes visible history and owned drafts but never bypasses membership, invitations or draft privacy.</summary>
+    /// <returns>Completion after exact authorized IDs, lifecycle states and complete removal on membership revocation.</returns>
+    [Fact]
+    public async Task BoardIncludesAccessibleLifecycleStatesWithoutLeakingPrivateOrNonmemberQuests()
+    {
+        var scenario = await QuestScenario.CreateAsync(database, privateQuest: true);
+        var seed = scenario.Seed;
+        var available = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        var invited = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        invited.Visibility = QuestVisibility.Private;
+        var ownDraft = FoundationSeed.NewQuest(seed.Event.Id, seed.Other.Id);
+        ownDraft.Status = QuestStatus.Draft;
+        var hiddenDraft = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        hiddenDraft.Status = QuestStatus.Draft;
+        var completed = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        completed.Status = QuestStatus.Completed;
+        completed.StartUtc = FoundationSeed.Now.AddHours(-4);
+        completed.EndUtc = FoundationSeed.Now.AddHours(-2);
+        var cancelled = FoundationSeed.NewQuest(seed.Event.Id, seed.User.Id);
+        cancelled.Status = QuestStatus.Cancelled;
+        var outside = FoundationSeed.NewEvent(seed.User.Id);
+        await FoundationSeed.PersistAsync(database, outside, available, invited, ownDraft, hiddenDraft, completed, cancelled);
+        var outsideQuest = FoundationSeed.NewQuest(outside.Id, seed.User.Id);
+        await FoundationSeed.PersistAsync(database, outsideQuest,
+            Invitation(invited.Id, seed.Other.Id, seed.User.Id),
+            Invitation(outsideQuest.Id, seed.Other.Id, seed.User.Id),
+            new QuestOwner { QuestId = ownDraft.Id, UserId = seed.Other.Id });
+        var service = Service(scenario, seed.Other);
+        var result = await service.ListAsync(QuestListKind.Board, null, new(), new());
+        Assert.Equal(5, result.Quests.TotalCount);
+        Assert.Equal(new[] { available.Id, invited.Id, ownDraft.Id, completed.Id, cancelled.Id }.Order(),
+            result.Quests.Items.Select(item => item.Id).Order());
+        Assert.Equal(QuestStatus.Completed, result.Quests.Items.Single(item => item.Id == completed.Id).Status);
+        Assert.Equal(QuestStatus.Cancelled, result.Quests.Items.Single(item => item.Id == cancelled.Id).Status);
+        await using (var db = database.CreateContext())
+        {
+            var membership = await db.EventMemberships.SingleAsync(item => item.EventId == seed.Event.Id && item.UserId == seed.Other.Id);
+            membership.Status = MembershipStatus.Removed;
+            await db.SaveChangesAsync();
+        }
+        var revoked = await service.ListAsync(QuestListKind.Board, null, new(), new());
+        Assert.Empty(revoked.Quests.Items);
+        Assert.Equal(0, revoked.Quests.TotalCount);
+    }
+
     /// <summary>Private owner totals count only active invitations to eligible active members, without exposing private totals to an ordinary invited viewer.</summary>
     /// <returns>Completion after exact owner/viewer count-map assertions and membership revocation.</returns>
     [Fact]

@@ -7,9 +7,14 @@
 
 <PageTitle>Bulk membership progress · Sidequest</PageTitle>
 <h1>Bulk membership progress</h1>
-<a href="/events">Events</a>
+<nav class="page-actions" aria-label="Bulk progress actions">
+    <a href="/events">Back to Events</a>
+    @if (Error is not null || progress?.Status is BulkStatus.Expanding or BulkStatus.Applying)
+    {
+        <FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
+    }
+</nav>
 <EventFeedback Busy="Busy" Error="@Error" />
-<FluentButton Disabled="@Busy" OnClick="LoadAsync">Refresh progress and recheck access</FluentButton>
 @if (progress is not null)
 {
     <p role="status">@progress.Mode · @progress.Status</p>
@@ -36,7 +41,7 @@
         <ul>
             @foreach (var recipient in recipients.Items)
             {
-                <li @key="recipient.User.Id">@recipient.User.DisplayName · @recipient.Status · @recipient.Detail</li>
+                <li @key="recipient.User.Id">@recipient.User.Label · @recipient.Status · @recipient.Detail</li>
             }
         </ul>
         <EventPager Page="page" TotalCount="recipients.TotalCount" Busy="Busy" Changed="PageAsync" />

@@ -1,7 +1,8 @@
 @namespace Sidequest.Web.Components.Media
 @using Microsoft.AspNetCore.Components.Forms
 
-<section class="cover-editor" aria-label="Quest cover">
+<section class="cover-editor section-box" aria-label="Quest cover">
+    <h2 class="section-heading">Quest cover</h2>
     @if (!unavailable)
     {
         <QuestCover AssetId="AssetId" QuestTitle="@QuestTitle" />
@@ -15,19 +16,21 @@
     {
         <label>
             Upload cover
-            <InputFile OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp"
+            <InputFile name="quest-cover" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp"
                        disabled="@Disabled" aria-describedby="@helpId" />
         </label>
     }
     else
     {
-        <label>Upload cover <input type="file" disabled aria-describedby="@helpId" /></label>
+        <label>Upload cover <input name="quest-cover" type="file" disabled aria-describedby="@helpId" /></label>
         @if (!RendererInfo.IsInteractive)
         {
             <p>Connecting to enable cover changes…</p>
         }
     }
-    <button type="button" disabled="@(Disabled || AssetId is null)" @onclick="RemoveAsync">Remove cover</button>
+    <div class="page-actions">
+        <button type="button" disabled="@(Disabled || AssetId is null)" @onclick="RemoveAsync">Remove cover</button>
+    </div>
     @if (busy)
     {
         <p role="status">Processing cover… The previous cover remains until this succeeds.</p>

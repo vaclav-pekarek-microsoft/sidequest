@@ -96,9 +96,19 @@ export async function beforeWebStart() {
     if (!completion) return;
     try {
         if (!completion.dataset.authenticationCompletion) throw new Error("No successful sign-in generation is available.");
+        const proof = completion.dataset.authenticationBinding;
+        if (!proof) throw new Error("No protected sign-in session is available.");
+        const response = await fetch("/experience/session", {
+            credentials: "same-origin", cache: "no-store", redirect: "manual",
+            headers: { "X-Sidequest-Circuit-Binding": proof },
+            signal: AbortSignal.timeout(10_000)
+        });
+        if (response.status !== 204) throw new Error("The completed sign-in is no longer the current session.");
         await afterAuthenticationSuccess(completion.dataset.authenticationCompletion);
         location.replace(completion.querySelector("[data-authentication-continue]").href);
     } catch {
+        completion.querySelector("[data-authentication-loader]").hidden = true;
+        completion.querySelector("[data-authentication-continue]").hidden = false;
         completion.querySelector("[data-authentication-result]").textContent =
             "Sign-in succeeded, but device saving could not be activated or this sign-in was superseded. Nothing was refreshed. Continue uses the current online account; saving still requires a successful authorized refresh. If clearing failed, clear this site's data before sharing the device.";
     }

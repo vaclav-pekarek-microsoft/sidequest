@@ -10,7 +10,9 @@ namespace Sidequest.Infrastructure.Directory;
 /// <summary>Real Graph user/group selection and complete nested-group expansion under an explicit workforce policy.</summary>
 /// <remarks>Only security and Microsoft 365 groups are supported. Transitive user pages are completely enumerated
 /// and deduplicated before returning; unsupported, permission-limited, malformed, or incomplete data fails explicitly.
-/// Member userType is an additional guest-exclusion check, never the workforce eligibility proof.</remarks>
+/// Member userType is an additional guest-exclusion check, never the workforce eligibility proof.
+/// An explicitly constructed non-production Entra participant policy instead requires an enabled Member or Guest
+/// in the owner-maintained allowlist shared with authentication; it does not claim workforce status.</remarks>
 /// <param name="http">Host-owned dedicated HTTP client; automatic redirects should be disabled.</param>
 /// <param name="tokens">Trusted same-tenant application-token acquisition.</param>
 /// <param name="options">Explicit tenant-approved workforce extension and operational limits.</param>
@@ -18,7 +20,8 @@ namespace Sidequest.Infrastructure.Directory;
 public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProvider tokens,
     GraphDirectoryOptions options, TimeProvider clock) : IDirectoryGateway
 {
-    private string UserSelect => $"id,displayName,mail,userPrincipalName,userType,accountEnabled,{options.WorkforceExtension}";
+    private string UserSelect => "id,displayName,mail,userPrincipalName,userType,accountEnabled" +
+        (options.IsHackathon ? "" : $",{options.WorkforceExtension}");
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DirectoryUser>> SearchUsersAsync(string query, CancellationToken cancellationToken = default)
@@ -159,7 +162,8 @@ public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProv
         if (!user.TryGetProperty("accountEnabled", out var enabled) ||
             enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             throw Failure("Directory user details are incomplete; approved user-read permissions are required.");
-        var approved = user.TryGetProperty(options.WorkforceExtension, out var eligibility) &&
+        var approved = options.IsHackathon ? options.HackathonParticipants.Contains(id) :
+            user.TryGetProperty(options.WorkforceExtension, out var eligibility) &&
             eligibility.ValueKind is JsonValueKind.String or JsonValueKind.True or JsonValueKind.False &&
             string.Equals(eligibility.ValueKind == JsonValueKind.String ? eligibility.GetString() : eligibility.GetRawText(),
                 options.WorkforceValue, StringComparison.Ordinal);
@@ -167,7 +171,7 @@ public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProv
             ? mail.GetString() ?? "" : "";
         // A UPN is not necessarily a routable mailbox. Missing mail remains explicit downstream delivery failure.
         return new(options.TenantId, id, displayName, email,
-            approved && enabled.GetBoolean() && userType == "Member");
+            approved && enabled.GetBoolean() && (userType == "Member" || (options.IsHackathon && userType == "Guest")));
     }
 
     private static bool SupportedGroup(JsonElement group)

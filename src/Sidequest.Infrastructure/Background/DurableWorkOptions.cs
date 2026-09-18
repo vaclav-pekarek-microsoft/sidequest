@@ -3,6 +3,9 @@ namespace Sidequest.Infrastructure.Background;
 /// <summary>Bounded polling and lease settings; invalid values fail worker construction conspicuously.</summary>
 public sealed class DurableWorkOptions
 {
+    /// <summary>Whether this host polls durable work; disable on a development web host sharing a database with an active deployed worker.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Healthy idle poll period, from one through thirty seconds.</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(10);
     /// <summary>Lease duration, from thirty seconds through two minutes.</summary>

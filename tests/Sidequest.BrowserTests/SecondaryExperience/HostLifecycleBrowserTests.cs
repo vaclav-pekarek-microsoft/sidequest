@@ -168,7 +168,7 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
             await page.GotoAsync("/events/create");
             var name = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });
             await Expect(name).ToBeEditableAsync();
-            await name.FillAsync("Unsaved reconnect input");
+            await name.FillWhenActionableAsync("Unsaved reconnect input");
             await Expect(page.Locator("[data-connection]")).ToHaveCountAsync(1);
             await Expect(page.Locator("[data-connection]")).ToHaveTextAsync("Connected — actions still require current server authorization.");
             var initialChecks = Volatile.Read(ref checks);
@@ -273,9 +273,12 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
     }
 
     /// <summary>A real successful second sign-in response delayed until after logout cannot unblock device storage or restore another account's snapshot.</summary>
+    /// <param name="nativeLogout">Whether the logout precedes initializer installation and therefore carries no client-clearing generation.</param>
     /// <returns>Completion after actual cookie issuance, antiforgery logout, delayed completion HTML and atomic-generation assertions.</returns>
-    [Fact]
-    public async Task DelayedSuccessfulSignInCompletionCannotUndoLaterLogout()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DelayedSuccessfulSignInCompletionCannotUndoLaterLogout(bool nativeLogout)
     {
         await using var context = await fixture.CreateContextAsync();
         var old = await ExperienceBrowserSupport.SignInAsync(context);
@@ -311,19 +314,77 @@ public sealed class HostLifecycleBrowserTests(FoundationBrowserFixture fixture) 
         });
         // Playwright cannot route a redirect's subsequent URL; navigate to the real protected completion independently.
         var completion = signingIn.GotoAsync(completionUrl);
+        var initializerCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitializer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var initializerCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var initializerRequests = 0;
+        var initializerRoute = AuthenticationStartupBrowserTests.InitializerRoute(fixture.Settings);
+        var signingOut = nativeLogout ? await context.NewPageAsync() : old;
+        async Task HoldInitializerAsync(IRoute route)
+        {
+            if (Interlocked.Increment(ref initializerRequests) != 1)
+            {
+                await route.FallbackAsync();
+                return;
+            }
+            initializerCaptured.TrySetResult(route.Request.Url);
+            try
+            {
+                await releaseInitializer.Task;
+                await route.FallbackAsync();
+                initializerCompleted.TrySetResult();
+            }
+            catch (Exception error) { initializerCompleted.TrySetException(error); }
+        }
         try
         {
             await captured.Task.WaitAsync(TimeSpan.FromSeconds(30));
             // The cookie is now Bob's: obtain his real antiforgery form before the later native logout.
-            await old.GotoAsync("/");
-            await old.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync();
-            await Expect(old.GetByRole(AriaRole.Link, new() { Name = "View sign-in options", Exact = true })).ToBeVisibleAsync();
+            if (nativeLogout)
+            {
+                await context.RouteAsync(initializerRoute, HoldInitializerAsync);
+                var response = await signingOut.GotoAsync("/", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+                Assert.NotNull(response);
+                Assert.Equal(200, response.Status);
+                Assert.Equal("/", new Uri(signingOut.Url).AbsolutePath);
+                var mapped = await signingOut.EvaluateAsync<string>(AuthenticationStartupBrowserTests.InitializerImportScript);
+                var intercepted = await initializerCaptured.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.Equal(mapped, intercepted);
+                await Expect(signingOut.Locator("[data-connection]")).ToContainTextAsync("Connecting");
+            }
+            else
+            {
+                await signingOut.GotoAsync("/");
+                await SyntheticSignInSupport.WaitForInterceptorAsync(signingOut);
+            }
+            var logout = await signingOut.RunAndWaitForRequestAsync(
+                () => signingOut.GetByRole(AriaRole.Button, new() { Name = "Sign out", Exact = true }).ClickAsync(),
+                request =>
+                {
+                    var isLogout = request.IsNavigationRequest && request.Method == "POST" &&
+                        new Uri(request.Url).AbsolutePath == "/auth/logout";
+                    // Release at the POST, before ClickAsync can await the destination's module load.
+                    if (isLogout) releaseInitializer.TrySetResult();
+                    return isLogout;
+                });
+            var fields = (logout.PostData ?? "").Split('&');
+            Assert.Contains(fields, field => field.StartsWith("__RequestVerificationToken=", StringComparison.Ordinal) &&
+                field.Length > "__RequestVerificationToken=".Length);
+            Assert.Equal(!nativeLogout, fields.Any(field => field.StartsWith("experienceEpoch=", StringComparison.Ordinal) &&
+                field.Length > "experienceEpoch=".Length));
+            await Expect(signingOut.Locator("main").GetByRole(AriaRole.Link, new() { Name = "Sign in", Exact = true })).ToBeVisibleAsync();
+            Assert.Equal(401, await signingOut.EvaluateAsync<int>("async () => (await fetch('/experience/session', {redirect:'manual'})).status"));
         }
         finally
         {
+            releaseInitializer.TrySetResult();
             release.TrySetResult();
-            await completion;
+            if (initializerCaptured.Task.IsCompletedSuccessfully)
+                await initializerCompleted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            if (nativeLogout)
+                await context.UnrouteAsync(initializerRoute, HoldInitializerAsync);
         }
+        await completion;
         await Expect(signingIn.Locator("[data-authentication-result]")).ToContainTextAsync("superseded");
         Assert.True(await signingIn.EvaluateAsync<bool>("""
             async () => {

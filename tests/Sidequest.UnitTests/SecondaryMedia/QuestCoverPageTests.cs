@@ -231,13 +231,14 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         Assert.Equal((quests.Detail.Summary.Id, ParticipationCommand.Join), Assert.Single(quests.Participations));
         Assert.Equal(1, refreshed);
         Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+        var change = control.Instance.Change;
         await experience.ReportConnectionAsync(false, null);
-        Assert.True(control.Instance.Busy);
-        await page.InvokeAsync(() => control.Instance.Change.InvokeAsync(ParticipationCommand.Leave));
+        Assert.Empty(page.FindComponents<QuestParticipationControls>());
+        await page.InvokeAsync(() => change.InvokeAsync(ParticipationCommand.Leave));
         Assert.Single(quests.Participations);
         await experience.ReportConnectionAsync(true, null);
         Assert.Single(quests.Participations);
-        Assert.Equal(ParticipationStatus.Joined, control.Instance.Summary.Participation);
+        Assert.Equal(ParticipationStatus.Joined, page.FindComponent<QuestParticipationControls>().Instance.Summary.Participation);
     }
 
     /// <summary>A detail query finishing after disposal cannot request history, publish protected state, or report a disposed cancellation source as a failure.</summary>
@@ -282,7 +283,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
     {
         SetRendererInfo(new("Server", true));
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/create?eventId={EventStub.Id}");
-        var page = Render<QuestEdit>();
+        var page = Render<QuestEditRoute>();
         Assert.Equal(Guid.Empty, page.FindComponent<CoverEditor>().Instance.QuestId);
         Assert.True(page.Find("input[type=file]").HasAttribute("disabled"));
         Assert.Contains("Save your draft before adding a cover.", page.Markup);
@@ -308,7 +309,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         };
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/{quests.Detail.Summary.Id}?moderation={moderation}");
         var card = Render<QuestCard>(p => p.Add(x => x.Item, quests.Detail.Summary).Add(x => x.Moderation, moderation));
-        var detail = Render<QuestDetails>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
+        var detail = Render<QuestDetailsRoute>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
         foreach (var image in new[] { card.FindComponent<QuestCover>().Instance, detail.FindComponent<QuestCover>().Instance })
         {
             Assert.Equal(quests.Detail.Summary.CoverAssetId, image.AssetId);

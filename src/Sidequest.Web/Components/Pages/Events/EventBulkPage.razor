@@ -10,21 +10,28 @@
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (authorized)
 {
-    <p>This operation expands the full group before changing any memberships. Supported nested groups are included.
-        Source groups never grant ongoing access. Group changes after expansion do not change Event membership.</p>
-    <DirectoryPicker Groups="true" GroupSelected="SelectGroup" RecheckAccess="LoadAsync" />
-    @if (selected is not null)
-    {
-        <p>Selected group: @selected.DisplayName</p>
-        <label>Action
-            <InputSelect @bind-Value="mode">
-                <option value="@BulkMode.Add">Add individual memberships (never restore removed users)</option>
-                <option value="@BulkMode.Invite">Invite individuals to accept membership</option>
-            </InputSelect>
-        </label>
-        <FluentCheckbox @bind-Value="confirmed">I confirm this one-time expansion. Application may finish with explicit skips or partial failures; later removals take precedence.</FluentCheckbox>
-        <FluentButton Disabled="@(Busy || !confirmed)" OnClick="StartAsync">Start background expansion</FluentButton>
-    }
+    <section class="section-box" aria-label="Group expansion">
+        <h2 class="section-heading">Choose a group</h2>
+        <p>This operation expands the full group before changing any memberships. Supported nested groups are included.
+            Source groups never grant ongoing access. Group changes after expansion do not change Event membership.</p>
+        <DirectoryPicker Groups="true" GroupSelected="SelectGroup" RecheckAccess="LoadAsync" />
+        @if (selected is not null)
+        {
+            <p>Selected group: @selected.DisplayName</p>
+            <div class="field-grid">
+                <label>Action
+                    <InputSelect name="event-bulk-mode" @bind-Value="mode" disabled="@Busy">
+                        <option value="@BulkMode.Add">Add individual memberships (never restore removed users)</option>
+                        <option value="@BulkMode.Invite">Invite individuals to accept membership</option>
+                    </InputSelect>
+                </label>
+            </div>
+            <FluentCheckbox Name="event-bulk-confirmation" @bind-Value="confirmed" Disabled="@Busy">I confirm this one-time expansion. Application may finish with explicit skips or partial failures; later removals take precedence.</FluentCheckbox>
+            <div class="page-actions">
+                <FluentButton Disabled="@(Busy || !confirmed)" OnClick="StartAsync">Start background expansion</FluentButton>
+            </div>
+        }
+    </section>
 }
 
 @code {

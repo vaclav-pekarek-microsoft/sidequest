@@ -43,10 +43,53 @@ jobs:
           fi
       - run: dotnet restore Sidequest.slnx
       - run: dotnet build Sidequest.slnx --no-restore --configuration Release
+      - name: Verify SCSS assets and local configuration boundaries
+        run: npm run styles:test
       - name: Check offline and authentication lifecycle JavaScript
-        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs
-      - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx"
+        run: node --test tests/Sidequest.BrowserTests/SecondaryExperience/snapshot-validation.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/worker-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/host-lifecycle.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/offline-rendering.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/session-binding.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/browser-helper-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/foundation-login-diagnostics.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/startup-initializer-routing.test.mjs tests/Sidequest.BrowserTests/SecondaryExperience/moderation-diagnostics.test.mjs
+      - run: dotnet test tests/Sidequest.UnitTests/Sidequest.UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=unit.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none
       - run: dotnet test tests/Sidequest.IntegrationTests/Sidequest.IntegrationTests.csproj --no-build --configuration Release --logger "trx;LogFileName=integration.trx"
+      - name: Verify read-only self-contained package startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="${RUNNER_TEMP:?}/sidequest-readonly-package"
+          dotnet publish src/Sidequest.Web/Sidequest.Web.csproj --configuration Release \
+            --runtime linux-x64 --self-contained true --output "$package"
+          test ! -e "$package/appsettings.Development.json"
+          test ! -e "$package/appsettings.Development.example.json"
+          app_pid=
+          cleanup() {
+            if [ -n "$app_pid" ] && kill -0 "$app_pid" 2>/dev/null; then
+              kill "$app_pid"
+              wait "$app_pid" || true
+            fi
+            chmod -R u+w "$package"
+          }
+          trap cleanup EXIT
+          chmod -R a-w "$package"
+          (
+            cd "$package"
+            export ASPNETCORE_ENVIRONMENT=Development
+            export Authentication__Mode=Development
+            export Delivery__Work__Enabled=false
+            export ConnectionStrings__Sidequest="$SIDEQUEST_TEST_SQL;Database=SidequestReadonlyStartup"
+            exec dotnet Sidequest.Web.dll --urls http://127.0.0.1:5079
+          ) > "$RUNNER_TEMP/sidequest-readonly.log" 2>&1 &
+          app_pid=$!
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5079/health/live >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo "The read-only published application did not start."
+            cat "$RUNNER_TEMP/sidequest-readonly.log"
+            exit 1
+          fi
       - name: Install browser test runtime
         shell: pwsh
         run: tests/Sidequest.BrowserTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
@@ -58,6 +101,7 @@ jobs:
           export ASPNETCORE_ENVIRONMENT=Development
           export Authentication__Mode=Development
           export DevelopmentData__Seed=false
+          export Operations__Monitoring__Enabled=true
           export Delivery__Email__SenderAddress=calendar@sidequest.example.test
           dotnet tool restore
           dotnet ef database update --project src/Sidequest.Infrastructure --startup-project src/Sidequest.Infrastructure --configuration Release --no-build
@@ -88,7 +132,7 @@ jobs:
         env:
           SIDEQUEST_BASE_URL: http://127.0.0.1:5078
         run: |
-          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx"
+          dotnet test tests/Sidequest.BrowserTests/Sidequest.BrowserTests.csproj --no-build --configuration Release --logger "trx;LogFileName=browser.trx" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 5min --blame-hang-dump-type none
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Require executed foundation scenarios
         shell: pwsh
@@ -107,7 +151,7 @@ jobs:
             }
           }
       - name: Capture isolated browser database deadlocks
-        if: failure() && steps.browser_diagnostics.outcome == 'success'
+        if: (failure() || cancelled()) && steps.browser_diagnostics.outcome == 'success'
         shell: bash
         run: |
           docker exec -i sidequest-test-sql bash -c '
@@ -121,6 +165,7 @@ jobs:
           name: test-results
           path: |
             **/TestResults/*.trx
+            **/TestResults/**/Sequence*.xml
             ${{ runner.temp }}/sidequest-web.log
             ${{ runner.temp }}/sidequest-deadlocks.xml
           if-no-files-found: warn
