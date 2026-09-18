@@ -175,7 +175,7 @@ resource web 'Microsoft.Web/sites@2024-04-01' = {
     clientAffinityEnabled: true
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|10.0'
-      appCommandLine: 'chmod +x /home/site/wwwroot/Sidequest.Web && /home/site/wwwroot/Sidequest.Web'
+      appCommandLine: 'dotnet /home/site/wwwroot/Sidequest.Web.dll'
       alwaysOn: true
       webSocketsEnabled: true
       healthCheckPath: '/health/ready'
@@ -237,6 +237,7 @@ resource settings 'Microsoft.Web/sites/config@2024-04-01' = {
     ASPNETCORE_ENVIRONMENT: 'Staging'
     ASPNETCORE_URLS: 'http://0.0.0.0:8080'
     SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
+    WEBSITE_RUN_FROM_PACKAGE: '1'
     Authentication__Mode: 'Entra'
     Authentication__AdmissionPolicy: 'hackathon-assigned-users'
     Authentication__HackathonRole: participantRole

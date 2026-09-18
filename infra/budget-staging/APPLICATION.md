@@ -17,6 +17,10 @@ actual template output before registering or publishing.
 
 - One Linux **B1**, always-on App Service with HTTPS, WebSockets, affinity,
   TLS 1.2 minimum, disabled FTP/SCM basic authentication, and readiness probing.
+  `WEBSITE_RUN_FROM_PACKAGE=1` mounts a complete ZIP as read-only application
+  content. In-place ZIP extraction can overwrite assemblies still mapped by the
+  running CLR, causing `BadImageFormatException` even after upload succeeds.
+  Mutable data stays in SQL/Blob; no application-content writes are required.
   The template **always leaves the app disabled**; rerunning Apply disables it.
   `Hosting:Azure:AppServiceProxyEnabled=true` is an explicit Staging-only
   opt-in that restores the external HTTPS scheme before redirects/authentication.
@@ -244,9 +248,10 @@ Set-SidequestApplicationFirewall -Mode Apply -SourceCommit $acceptedSha `
 
 Build the **accepted revision**, including the accepted UI assets, as Linux x64
 self-contained .NET 10. No server runtime download/build or schema migration
-runs during publish. The app startup command marks the bundled executable
-executable before launching it; the .NET 10 App Service image supplies the
-native OS dependencies. Verify availability of that Linux runtime image in the
+runs during publish. The platform `dotnet` host launches `Sidequest.Web.dll`
+with its bundled runtime, without chmod or writes to the mounted package.
+The .NET 10 App Service image supplies the native OS dependencies.
+Verify availability of that Linux runtime image in the
 subscription before Apply rather than silently substituting another runtime.
 
 ```powershell
@@ -267,7 +272,8 @@ Publish-SidequestApplication -SourceCommit $acceptedSha -ApplicationName $app `
     -ZipPath $zip -ManifestPath $manifest -IdentityAndProviderGatesVerified
 ```
 
-Publish checks the source/artifact hash and resolved Key Vault references,
+Publish checks the source/artifact hash, immutable local-package setting,
+read-only-compatible startup command and resolved Key Vault references,
 using the live GET `config/configreferences/appsettings` collection contract
 (`2022-03-01`); missing, duplicate, unresolved or paginated required-reference
 evidence blocks deployment before activation.
@@ -279,6 +285,8 @@ restart API, then owns the bounded SQL-backed readiness probe itself. A complete
 upload alone can leave the prior process serving healthy responses; the explicit
 restart is required before checking the new application. Upload, activation or readiness failure stops
 the host; the initial infrastructure deployment still leaves it disabled.
+See [App Service run from package](https://learn.microsoft.com/azure/app-service/deploy-run-package)
+for the atomic content-mount contract.
 The manifest proves only the owner's asserted source-to-artifact association;
 use the clean accepted build command and retain its successful output.
 Do not call the acknowledgement “CI attestation”.

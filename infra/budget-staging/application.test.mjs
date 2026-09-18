@@ -30,6 +30,7 @@ test("Compiled application is disabled B1 Linux with two identities and protecte
     assert.equal(site.properties.siteConfig.webSocketsEnabled, true);
     assert.equal(site.properties.siteConfig.minTlsVersion, "1.2");
     assert.equal(site.properties.siteConfig.ftpsState, "Disabled");
+    assert.equal(site.properties.siteConfig.appCommandLine, "dotnet /home/site/wwwroot/Sidequest.Web.dll");
     assert.equal(resources.some(r => r.type.startsWith("Microsoft.Sql/") || r.type.startsWith("Microsoft.Network/")), false);
     assert.ok(resources.filter(r => r.type.endsWith("/basicPublishingCredentialsPolicies")).every(r => r.properties.allow === false));
 });
@@ -38,6 +39,8 @@ test("Compiled settings require single-tenant owner-only Entra and SQL client-ID
     const settings = one("Microsoft.Web/sites/config").properties;
     assert.equal(settings.ASPNETCORE_ENVIRONMENT, "Staging");
     assert.equal(settings.Authentication__Mode, "Entra");
+    assert.equal(settings.WEBSITE_RUN_FROM_PACKAGE, "1");
+    assert.equal(settings.SCM_DO_BUILD_DURING_DEPLOYMENT, "false");
     assert.equal(settings.Authentication__AdmissionPolicy, "hackathon-assigned-users");
     assert.equal(settings.Authentication__HackathonParticipants__0, "[parameters('ownerObjectId')]");
     assert.deepEqual(template.parameters.ownerObjectId.allowedValues, ["1250fe10-b814-4735-801f-ea5a0a4c1219"]);
@@ -208,6 +211,8 @@ const publishHarness = `
     $script:lifecycle = [Collections.Generic.List[string]]::new()
     $script:deploymentFails = $false
     $script:restartFails = $false
+    $script:packageMode = '1'
+    $script:startupCommand = 'dotnet /home/site/wwwroot/Sidequest.Web.dll'
     $script:referenceResponse = [pscustomobject]@{
         nextLink = $null
         value = @(
@@ -218,6 +223,12 @@ const publishHarness = `
     function Start-Sleep { $script:sleeps++ }
     function Invoke-SidequestStagingAzure {
         param([string[]] $Arguments)
+        if ($Arguments -contains 'appsettings') {
+            return @(@{ name = 'WEBSITE_RUN_FROM_PACKAGE'; value = $script:packageMode })
+        }
+        if ($Arguments -contains 'show') {
+            return @{ appCommandLine = $script:startupCommand }
+        }
         if ($Arguments -contains 'stop') { $script:lifecycle.Add('stop'); $script:stops++; return }
         if ($Arguments -contains 'properties.enabled=true') { $script:lifecycle.Add('enable'); return }
         if ($Arguments -contains 'start') { $script:lifecycle.Add('start'); return }
@@ -248,6 +259,28 @@ const publishHarness = `
     }
 `;
 const publishInvocation = "Publish-SidequestApplication -SourceCommit accepted-source -ApplicationName sidequest-hackathon-b7ljjkoqcaedc -ZipPath unused -ManifestPath unused -IdentityAndProviderGatesVerified";
+
+for (const [name, mutation] of [
+    ["mutable content", "$script:packageMode = '0'"],
+    ["remote package", "$script:packageMode = 'https://example.invalid/package.zip'"],
+    ["write-dependent startup", "$script:startupCommand = 'chmod +x /home/site/wwwroot/Sidequest.Web'"]
+]) {
+    test(`Publishing rejects ${name} before activation or upload`, () => {
+        const result = ps(`${publishHarness}
+            ${mutation}
+            $caught = $false
+            try { $null = ${publishInvocation} }
+            catch {
+                if ($_.Exception.Message -notmatch 'Immutable local-package hosting') { throw }
+                $caught = $true
+            }
+            if (-not $caught -or $script:lifecycle.Count -ne 0) {
+                throw 'Mutable or incompatible hosting reached deployment'
+            }
+        `);
+        assert.equal(result.status, 0, result.stderr);
+    });
+}
 
 test("Publishing enables SCM before upload and restarts only the validated artifact", () => {
     const result = ps(`${publishHarness}
