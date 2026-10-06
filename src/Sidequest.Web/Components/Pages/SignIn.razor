@@ -4,6 +4,7 @@
 @inject FoundationAuthenticationSettings Authentication
 
 <PageTitle>Sign in · Sidequest</PageTitle>
+<div class="signin-page">
 @if (Authentication.IsDevelopment)
 {
     <h1>Sign in to Sidequest</h1>
@@ -41,7 +42,8 @@ else
             <input type="hidden" name="experienceEpoch" value="@ExperienceEpoch" />
             <label for="alias">Microsoft alias</label>
             <div class="alias-input">
-                <input id="alias" name="alias" autocomplete="username" inputmode="email" required maxlength="64" />
+                <input id="alias" name="alias" autocomplete="username" inputmode="email"
+                       placeholder="alias" required maxlength="64" />
                 <span>@@microsoft.com</span>
             </div>
             <button type="submit">Send magic code</button>
@@ -68,6 +70,7 @@ else
         <p><a href="@NewCodeUrl" data-enhance-nav="false">Request a new code</a></p>
     }
 }
+</div>
 
 @code {
     private string NewCodeUrl =>
