@@ -13,10 +13,11 @@ public sealed class MigrationSchemaTests(SqlTestDatabase database) : IClassFixtu
 {
     private const string Initial = "20260914130053_InitialSidequest";
     private const string MembershipHistory = "20260916112116_ReserveMembershipRequestHistory";
-    private static readonly string[] CurrentMigrations = [Initial, MembershipHistory];
+    private const string MagicSignIn = "20261006080313_AddMagicSignInChallenges";
+    private static readonly string[] CurrentMigrations = [Initial, MembershipHistory, MagicSignIn];
     private static readonly Type[] BaselineTypes =
     [
-        typeof(UserAccount), typeof(Administrator), typeof(Event), typeof(EventOwner),
+        typeof(UserAccount), typeof(MagicSignInChallenge), typeof(Administrator), typeof(Event), typeof(EventOwner),
         typeof(EventMembership), typeof(EventMembershipRequest), typeof(EventInvitation), typeof(Quest),
         typeof(QuestOwner), typeof(QuestInvitation), typeof(QuestParticipation), typeof(AuditEntry),
         typeof(EventStatusHistory), typeof(QuestStatusHistory), typeof(Notification), typeof(OutboxMessage)

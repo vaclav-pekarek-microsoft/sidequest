@@ -44,7 +44,7 @@ public sealed class FoundationBrowserFixture : IAsyncLifetime
     internal async Task<IBrowserContext> CreateContextAsync(int width = 1280, bool allowServiceWorkers = false)
     {
         var context = await browser!.NewContextAsync(CreateOptions(Settings, width, allowServiceWorkers));
-        // No off-origin HTTP request (including Entra redirects/CDN assets) may leave this test.
+        // No off-origin HTTP request (including identity-provider redirects or CDN assets) may leave this test.
         await context.RouteAsync("**/*", route =>
             Settings.IsSameOrigin(route.Request.Url) ? route.ContinueAsync() : route.AbortAsync());
         context.Page += (_, page) =>

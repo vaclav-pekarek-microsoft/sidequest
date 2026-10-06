@@ -321,7 +321,7 @@ function Publish-SidequestApplication {
     $references = Invoke-SidequestStagingAzure @('rest', '--method', 'get', '--url',
         "$path/config/configreferences/appsettings?api-version=2022-03-01")
     if ($references.nextLink) { throw 'Credential reference status is incomplete.' }
-    foreach ($name in @('AzureAd__ClientSecret', 'Directory__Credentials__ClientSecret')) {
+    foreach ($name in @('Directory__Credentials__ClientSecret')) {
         $matching = @($references.value | Where-Object { $_.name -ceq $name })
         if ($matching.Count -ne 1 -or $matching[0].properties.status -cne 'Resolved') {
             throw 'Required Key Vault credential reference is not uniquely resolved.'

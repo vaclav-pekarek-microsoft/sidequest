@@ -3,7 +3,7 @@
     <div>
         <p class="eyebrow">Make room for a shared experience</p>
         <h1>Quests</h1>
-        <p>Everything happening in your Events. Your joined Quests come first; find something new to share.</p>
+        <p>Everything happening in your Events. Join to attend; follow without attending.</p>
     </div>
 </header>
 <nav class="page-actions dashboard-shortcuts" aria-label="Quest actions" data-online-actions>
@@ -13,10 +13,27 @@
     <a href="/quests?view=History">Quest history</a>
     <a href="/quests?view=Invited">Private invitations</a>
 </nav>
-<DashboardFilters Events="events" EventPage="eventPage" EventTotal="eventTotal" EventPageChanged="EventPageAsync"
+<nav class="quest-view-navigation" aria-label="Quest views">
+    @foreach (var option in ViewOptions)
+    {
+        <button type="button" class="@(filter.Kind == option.Kind ? "selected" : null)"
+                aria-pressed="@(filter.Kind == option.Kind ? "true" : "false")"
+                disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)"
+                @onclick="() => SelectKindAsync(option.Kind)">@option.Label</button>
+    }
+</nav>
+<DashboardFilters Kind="filter.Kind" Events="events" EventPage="eventPage" EventTotal="eventTotal" EventPageChanged="EventPageAsync"
                   Disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)" Changed="FilterAsync" />
 <section class="dashboard-results" data-protected-experience data-online-actions aria-label="Authorized Quest results" aria-busy="@loading">
-    <h2>@Heading</h2>
+    <header class="results-header">
+        <h2>@Heading</h2>
+        <div class="layout-switcher" role="group" aria-label="Quest layout">
+            <button type="button" class="@(layout == QuestLayout.Board ? "selected" : null)"
+                    aria-pressed="@(layout == QuestLayout.Board ? "true" : "false")" @onclick="() => layout = QuestLayout.Board">Board</button>
+            <button type="button" class="@(layout == QuestLayout.List ? "selected" : null)"
+                    aria-pressed="@(layout == QuestLayout.List ? "true" : "false")" @onclick="() => layout = QuestLayout.List">List</button>
+        </div>
+    </header>
     @if (loading)
     {
         <p class="state-panel" role="status">Loading authorized Quests…</p>
@@ -40,7 +57,7 @@
             @(filter.Kind == Sidequest.Application.Quests.QuestListKind.Board
                 ? "Joined first, then start date and time in each Event's time zone. Past and cancelled Quests keep their status."
                 : "Ordered by start time, then identifier.")</p>
-        <div class="quest-board">
+        <div class="@(layout == QuestLayout.Board ? "quest-board" : "quest-list")">
             @foreach (var item in result.Quests.Items)
             {
                 <DashboardQuestCard @key="item.Id" Item="item" InvitedCount="@(result.InvitedCounts.TryGetValue(item.Id, out var count) ? count : null)" />

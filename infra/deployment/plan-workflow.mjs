@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, chmod, mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildArmParameters, parseRequestJson } from "./parameter-validation.mjs";
+import { buildArmParameters, parseRequestJson, validateIdentityGuid } from "./parameter-validation.mjs";
 import { atStage, getJson, parseJson, PlanError, readResponse, requirePlan, runCaptured } from "./plan-io.mjs";
 
 export const REPOSITORY = "vaclav-pekarek-microsoft/sidequest";
@@ -150,8 +150,7 @@ export function validateSettings(settings, context) {
         const request = parseRequestJson(`{"parameters":${settings.parametersJson},"accountContext":${JSON.stringify(accountContext)}}`);
         requirePlan(request.parameters.environmentName === context.environment, "settings");
         buildArmParameters(request.parameters, accountContext);
-        // Apply the existing GUID and synthetic-ID checks to the deployment client too.
-        buildArmParameters({ ...request.parameters, workforceClientId: settings.clientId }, accountContext);
+        validateIdentityGuid(settings.clientId);
         return { ...settings, parameters: request.parameters };
     });
 }

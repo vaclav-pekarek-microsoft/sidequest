@@ -3,24 +3,16 @@
 @using Sidequest.Web.Experience
 <fieldset class="dashboard-filters compact-filters" disabled="@Disabled" data-online-actions>
     <legend>Find your Quests</legend>
-    <label>View
-        <select name="dashboard-view" @bind="kind" @bind:after="NotifyAsync">
-            <option value="Board">All Quests</option>
-            <option value="Joined">Upcoming Joined</option>
-            <option value="Following">Following</option>
-            <option value="Organizing">Organizing</option>
-            <option value="Discover">Discover</option>
-            <option value="Invited">Invited</option>
-            <option value="History">History</option>
-        </select>
-    </label>
     @if (EventTotal > 100)
     {
-        <p>Event choices page @EventPage (100 per page)</p>
-        <button type="button" disabled="@(Disabled || EventPage == 1)" @onclick="() => EventPageChanged.InvokeAsync(EventPage - 1)">Previous Event choices</button>
-        <button type="button" disabled="@(Disabled || (long)EventPage * 100 >= EventTotal)" @onclick="() => EventPageChanged.InvokeAsync(EventPage + 1)">Next Event choices</button>
+        <div class="event-choice-pager">
+            <span>Events @EventPage</span>
+            <button type="button" disabled="@(Disabled || EventPage == 1)" @onclick="() => EventPageChanged.InvokeAsync(EventPage - 1)">Previous</button>
+            <button type="button" disabled="@(Disabled || (long)EventPage * 100 >= EventTotal)" @onclick="() => EventPageChanged.InvokeAsync(EventPage + 1)">Next</button>
+        </div>
     }
-    <label>Event
+    <label>
+        <span>Event</span>
         <select name="dashboard-event" @bind="eventId" @bind:after="NotifyAsync">
             <option value="">All my Events</option>
             @foreach (var item in Events)
@@ -29,9 +21,16 @@
             }
         </select>
     </label>
-    <label>From date <input name="dashboard-from" type="date" @bind="from" @bind:after="NotifyAsync" /></label>
-    <label>Through date <input name="dashboard-through" type="date" @bind="through" @bind:after="NotifyAsync" /></label>
-    <label>Quests per page
+    <label>
+        <span>From</span>
+        <input name="dashboard-from" type="date" title="@DateSemantics" @bind="from" @bind:after="NotifyAsync" />
+    </label>
+    <label>
+        <span>Through</span>
+        <input name="dashboard-through" type="date" title="@DateSemantics" @bind="through" @bind:after="NotifyAsync" />
+    </label>
+    <label>
+        <span>Per page</span>
         <select name="dashboard-page-size" @bind="size" @bind:after="NotifyAsync">
             <option value="25">25</option><option value="50">50</option><option value="100">100</option>
         </select>
@@ -40,12 +39,14 @@
 </fieldset>
 
 @code {
-    private QuestListKind kind = QuestListKind.Board;
     private Guid? eventId;
     private DateOnly? from;
     private DateOnly? through;
     private int size = 25;
     private string SelectedZone => Events.FirstOrDefault(e => e.Id == eventId)?.TimeZoneId ?? "UTC (across Events)";
+    private string DateSemantics => $"Inclusive start dates in {SelectedZone}; filtering occurs before paging.";
+    /// <summary>Quest category selected by the parent navigation rather than presented as a result filter.</summary>
+    [Parameter] public QuestListKind Kind { get; set; }
     /// <summary>Authorized Event choices provided by the dashboard, never fetched per card.</summary>
     [Parameter] public IReadOnlyList<EventSummary> Events { get; set; } = [];
     /// <summary>Disables all controls during prerendering, pending loads and known disconnection.</summary>
@@ -58,5 +59,5 @@
     [Parameter] public int EventTotal { get; set; }
     /// <summary>Asks the parent to load another bounded page of Event choices.</summary>
     [Parameter] public EventCallback<int> EventPageChanged { get; set; }
-    private Task NotifyAsync() => Changed.InvokeAsync(new DashboardFilter(kind, eventId, from, through, size));
+    private Task NotifyAsync() => Changed.InvokeAsync(new DashboardFilter(Kind, eventId, from, through, size));
 }

@@ -290,7 +290,7 @@ public sealed class AzureHostingTests
     private static Dictionary<string, string?> Values() => new()
     {
         ["Hosting:Azure:Enabled"] = "true",
-        ["Authentication:Mode"] = "Entra",
+        ["Authentication:Mode"] = "MagicCode",
         ["Hosting:DataProtection:ApplicationName"] = "Sidequest:synthetic-hosting",
         ["Hosting:DataProtection:BlobUri"] = "https://account.blob.core.windows.net/data-protection/keys.xml",
         ["Hosting:DataProtection:KeyUri"] = TestWrappingKeys.KeyUri,

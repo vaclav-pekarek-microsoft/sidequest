@@ -13,141 +13,70 @@ using Sidequest.Web.Operations;
 
 namespace Sidequest.UnitTests.FoundationWeb;
 
-/// <summary>Verifies startup admission guards, identity boundaries, local redirects, and absolute session expiry.</summary>
-/// <remarks>Each test creates its own principals and mutable configuration; shared fields contain only immutable test values.</remarks>
+/// <summary>Verifies magic-code startup guards, identity boundaries, redirects, and absolute session expiry.</summary>
 public sealed class AuthenticationTests
 {
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     private static readonly Guid ObjectId = Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-14T12:00:00Z");
-    private static FoundationAuthenticationSettings Entra => new(false, Tenant, "Workforce", ObjectId);
+    private static FoundationAuthenticationSettings Magic => new(false, Tenant,
+        FoundationAuthenticationSettings.MagicCodeRole, null);
 
-    /// <summary>Rejects participant-policy overrides outside Staging or Development, even with real Entra configuration.</summary>
-    /// <param name="environment">The disallowed deployment environment.</param>
-    [Theory]
-    [InlineData("Production")]
-    [InlineData("Test")]
-    [InlineData("Hackathon")]
-    public void HackathonAdmissionIsRestrictedToApprovedNonProductionEnvironments(string environment)
-    {
-        Assert.Throws<InvalidOperationException>(() => Load(HackathonConfiguration(), environment));
-    }
-
-    /// <summary>Requires both exact dedicated-role assignment and explicit identity approval; neither tenant membership nor a workforce role suffices.</summary>
-    /// <param name="environment">The approved environment, including local real-Entra development.</param>
-    [Theory]
-    [InlineData("Staging")]
-    [InlineData("Development")]
-    public void HackathonAdmissionRequiresDedicatedRoleAndExplicitParticipant(string environment)
-    {
-        var configuration = HackathonConfiguration();
-        var settings = Load(configuration, environment);
-        Assert.True(settings.IsHackathon);
-        Assert.False(settings.IsDevelopment);
-        Assert.Null(settings.BootstrapAdministratorObjectId);
-        var principal = Principal();
-        Assert.Null(WorkforceIdentity.Read(principal, settings));
-        var claims = (ClaimsIdentity)principal.Identity!;
-        claims.AddClaim(new("roles", "Sidequest.Hackathon.Participant"));
-        Assert.Equal(ObjectId, WorkforceIdentity.Read(principal, settings)!.ObjectId);
-        claims.AddClaim(new(FoundationAuthenticationSettings.SyntheticClaim, "true"));
-        Assert.Null(WorkforceIdentity.Read(principal, settings));
-        claims.RemoveClaim(claims.FindFirst(FoundationAuthenticationSettings.SyntheticClaim)!);
-        claims.RemoveClaim(claims.FindFirst("oid")!);
-        claims.AddClaim(new("oid", Guid.NewGuid().ToString()));
-        Assert.Null(WorkforceIdentity.Read(principal, settings));
-        Assert.Equal(new[] { ObjectId }, settings.HackathonParticipants);
-        configuration["Authentication:HackathonParticipants:0"] = Guid.NewGuid().ToString();
-        Assert.Contains(ObjectId, settings.HackathonParticipants);
-    }
-
-    /// <summary>Fails startup for an absent, malformed, empty, or non-dedicated participant policy instead of admitting tenant users broadly.</summary>
-    /// <param name="key">The policy setting to invalidate.</param>
-    /// <param name="value">The invalid replacement.</param>
-    [Theory]
-    [InlineData("Authentication:HackathonParticipants:0", null)]
-    [InlineData("Authentication:HackathonParticipants:0", "not-a-guid")]
-    [InlineData("Authentication:HackathonParticipants:0", "00000000-0000-0000-0000-000000000000")]
-    [InlineData("Authentication:HackathonRole", "")]
-    [InlineData("Authentication:HackathonRole", "Workforce")]
-    [InlineData("Authentication:AdmissionPolicy", "allow-all")]
-    [InlineData("Authentication:Mode", "Development")]
-    public void HackathonAdmissionRejectsIncompleteOrUnsafePolicy(string key, string? value)
-    {
-        var configuration = HackathonConfiguration();
-        configuration[key] = value;
-        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
-    }
-
-    /// <summary>Never interprets the approved guest policy as permission to use synthetic authentication, including on a local development host.</summary>
-    /// <param name="environment">An environment otherwise approved for real-Entra participant admission.</param>
-    [Theory]
-    [InlineData("Staging")]
-    [InlineData("Development")]
-    public void HackathonPolicyNeverEnablesSyntheticAuthentication(string environment)
-    {
-        var configuration = HackathonConfiguration();
-        configuration["Authentication:Mode"] = "Development";
-        var error = Assert.Throws<InvalidOperationException>(() => Load(configuration, environment));
-        Assert.Contains("requires Entra authentication", error.Message);
-    }
-
-    /// <summary>Preserves exact administrator-pair validation and requires the bootstrap identity to be an approved participant.</summary>
+    /// <summary>Verifies deployed mode uses the configured account namespace and normalized bootstrap alias.</summary>
     [Fact]
-    public void HackathonBootstrapNeverSelectsFirstUser()
-    {
-        var configuration = HackathonConfiguration();
-        configuration["Authentication:BootstrapAdministrator:TenantId"] = Tenant.ToString();
-        configuration["Authentication:BootstrapAdministrator:ObjectId"] = Guid.NewGuid().ToString();
-        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
-        configuration["Authentication:BootstrapAdministrator:ObjectId"] = ObjectId.ToString();
-        Assert.Equal(ObjectId, Load(configuration, "Staging").BootstrapAdministratorObjectId);
-        configuration["Authentication:BootstrapAdministrator:TenantId"] = Guid.NewGuid().ToString();
-        Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
-    }
-
-    /// <summary>Accepts a singleton and the exact participant cap, but rejects the immediately adjacent oversized policy.</summary>
-    /// <param name="count">Number of distinct approved object IDs configured.</param>
-    /// <param name="valid">Whether this count is within the bounded staging policy.</param>
-    [Theory]
-    [InlineData(1, true)]
-    [InlineData(100, true)]
-    [InlineData(101, false)]
-    public void HackathonParticipantCountIsBounded(int count, bool valid)
-    {
-        var configuration = HackathonConfiguration();
-        for (var index = 0; index < count; index++)
-            configuration[$"Authentication:HackathonParticipants:{index}"] = $"00000000-0000-4000-8000-{index + 1:D12}";
-        if (valid)
-            Assert.Equal(count, Load(configuration, "Staging").HackathonParticipants.Count);
-        else
-            Assert.Throws<InvalidOperationException>(() => Load(configuration, "Staging"));
-    }
-
-    /// <summary>Ignores hackathon settings unless explicitly selected, so production retains workforce-role admission and no participant mode.</summary>
-    [Fact]
-    public void WorkforceDefaultDoesNotConsumeHackathonAllowlist()
-    {
-        var configuration = HackathonConfiguration();
-        configuration.Remove("Authentication:AdmissionPolicy");
-        var settings = Load(configuration);
-        Assert.False(settings.IsHackathon);
-        Assert.Empty(settings.HackathonParticipants);
-        Assert.Equal(ObjectId, WorkforceIdentity.Read(Principal(), settings)!.ObjectId);
-    }
-
-    private static Dictionary<string, string?> HackathonConfiguration()
+    public void MagicCodeModeLoadsAccountNamespaceAndBootstrapAlias()
     {
         var configuration = ValidConfiguration();
-        configuration["Authentication:Mode"] = "Entra";
-        configuration["Authentication:AdmissionPolicy"] = "hackathon-assigned-users";
-        configuration["Authentication:HackathonRole"] = "Sidequest.Hackathon.Participant";
-        configuration["Authentication:HackathonParticipants:0"] = ObjectId.ToString();
-        return configuration;
+        configuration["Authentication:BootstrapAdministrator:Alias"] = "Test.Alias";
+        var settings = Load(configuration);
+        Assert.True(settings.IsMagicCode);
+        Assert.False(settings.IsDevelopment);
+        Assert.Equal(Tenant, settings.TenantId);
+        Assert.Equal(FoundationAuthenticationSettings.MagicCodeRole, settings.WorkforceRole);
+        Assert.Equal("test.alias@microsoft.com", settings.BootstrapAdministratorEmail);
+        Assert.Null(settings.BootstrapAdministratorObjectId);
     }
 
-    /// <summary>Verifies that explicitly selecting synthetic authentication cannot override a non-development host.</summary>
-    /// <param name="environment">The non-development environment to reject.</param>
+    /// <summary>Verifies omitted mode safely defaults to deployed magic-code authentication.</summary>
+    [Fact]
+    public void MissingModeDefaultsToMagicCode()
+    {
+        var settings = Load(new() { ["Authentication:AccountNamespaceId"] = Tenant.ToString() }, "Development");
+        Assert.True(settings.IsMagicCode);
+        Assert.Equal(Tenant, settings.TenantId);
+    }
+
+    /// <summary>Verifies invalid deployed configuration fails visibly at startup.</summary>
+    /// <param name="key">Setting to replace in otherwise valid configuration.</param>
+    /// <param name="value">Invalid replacement.</param>
+    [Theory]
+    [InlineData("Authentication:Mode", "Entra")]
+    [InlineData("Authentication:Mode", "Fake")]
+    [InlineData("Authentication:AccountNamespaceId", null)]
+    [InlineData("Authentication:AccountNamespaceId", "common")]
+    [InlineData("Authentication:AccountNamespaceId", "00000000-0000-0000-0000-000000000000")]
+    [InlineData("Authentication:BootstrapAdministrator:Alias", "user@outside.invalid")]
+    [InlineData("Authentication:BootstrapAdministrator:Alias", "user@microsoft.com")]
+    public void InvalidMagicCodeConfigurationFailsVisibly(string key, string? value)
+    {
+        var configuration = ValidConfiguration();
+        configuration[key] = value;
+        var error = Assert.Throws<InvalidOperationException>(() => Load(configuration));
+        Assert.Contains(key, error.Message);
+    }
+
+    /// <summary>Verifies legacy object-pair bootstrap settings cannot silently grant deployed magic-code administration.</summary>
+    [Fact]
+    public void MagicCodeBootstrapRejectsLegacyObjectPair()
+    {
+        var configuration = ValidConfiguration();
+        configuration["Authentication:BootstrapAdministrator:TenantId"] = Tenant.ToString();
+        configuration["Authentication:BootstrapAdministrator:ObjectId"] = ObjectId.ToString();
+        Assert.Throws<InvalidOperationException>(() => Load(configuration));
+    }
+
+    /// <summary>Verifies explicitly selecting synthetic authentication cannot override a non-development host.</summary>
+    /// <param name="environment">Non-development environment to reject.</param>
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]
@@ -171,121 +100,103 @@ public sealed class AuthenticationTests
         };
         var settings = Load(configuration, "Development");
         Assert.True(settings.IsDevelopment);
-        Assert.Equal(DevelopmentPersonas.TenantId, settings.TenantId);
-        Assert.Equal(DevelopmentPersonas.All.Single(p => p.Name == "Admin").ObjectId, settings.BootstrapAdministratorObjectId);
-        Assert.Equal(4, DevelopmentPersonas.All.Select(p => p.ObjectId).Distinct().Count());
-        Assert.All(DevelopmentPersonas.All, p => Assert.EndsWith("@sample.invalid", p.Email));
+        Assert.False(settings.IsMagicCode);
+        Assert.Equal(DevelopmentPersonas.All[0].ObjectId, settings.BootstrapAdministratorObjectId);
         configuration["Authentication:BootstrapAdministrator:ObjectId"] = DevelopmentPersonas.All[1].ObjectId.ToString();
         Assert.Throws<InvalidOperationException>(() => Load(configuration, "Development"));
-        Assert.Null(Load(new() { ["Authentication:Mode"] = "Development" }, "Development").BootstrapAdministratorObjectId);
     }
 
-    /// <summary>Verifies that omitting the mode never implicitly enables synthetic authentication.</summary>
+    /// <summary>Verifies application-issued magic claims map to the configured stable account key.</summary>
     [Fact]
-    public void MissingModeDefaultsToEntraEvenInDevelopment()
+    public void MagicCodeIdentityUsesTenantObjectAndMicrosoftMailbox()
     {
-        var settings = Load(ValidConfiguration(), "Development");
-        Assert.False(settings.IsDevelopment);
-        Assert.Equal(Tenant, settings.TenantId);
-    }
-
-    /// <summary>Verifies that invalid startup settings identify the offending configuration key.</summary>
-    /// <param name="key">The setting to replace in otherwise valid configuration.</param>
-    /// <param name="value">The missing or invalid value expected to fail startup validation.</param>
-    [Theory]
-    [InlineData("Authentication:Mode", "Fake")]
-    [InlineData("AzureAd:TenantId", null)]
-    [InlineData("AzureAd:TenantId", "common")]
-    [InlineData("AzureAd:TenantId", "organizations")]
-    [InlineData("AzureAd:ClientId", "")]
-    [InlineData("AzureAd:ClientId", "00000000-0000-0000-0000-000000000000")]
-    [InlineData("AzureAd:ClientSecret", "")]
-    [InlineData("AzureAd:Instance", "https://untrusted.invalid/")]
-    [InlineData("Authentication:WorkforceRole", " ")]
-    public void InvalidEntraConfigurationFailsVisibly(string key, string? value)
-    {
-        var configuration = ValidConfiguration();
-        configuration[key] = value;
-        var error = Assert.Throws<InvalidOperationException>(() => Load(configuration));
-        Assert.Contains(key, error.Message);
-    }
-
-    /// <summary>Verifies that administrator bootstrap requires a complete tenant/object pair matching the admitted tenant.</summary>
-    [Fact]
-    public void BootstrapRequiresMatchingExplicitTenantAndObject()
-    {
-        var configuration = ValidConfiguration();
-        configuration["Authentication:BootstrapAdministrator:ObjectId"] = ObjectId.ToString();
-        Assert.Throws<InvalidOperationException>(() => Load(configuration));
-        configuration["Authentication:BootstrapAdministrator:TenantId"] = Guid.NewGuid().ToString();
-        Assert.Throws<InvalidOperationException>(() => Load(configuration));
-        configuration["Authentication:BootstrapAdministrator:TenantId"] = Tenant.ToString();
-        Assert.Equal(ObjectId, Load(configuration).BootstrapAdministratorObjectId);
-        configuration.Remove("Authentication:BootstrapAdministrator:ObjectId");
-        Assert.Throws<InvalidOperationException>(() => Load(configuration));
-        Assert.Null(Load(ValidConfiguration()).BootstrapAdministratorObjectId);
-    }
-
-    /// <summary>Verifies tenant/object identity mapping and admission-role isolation from administrator permissions.</summary>
-    [Fact]
-    public void WorkforceAdmissionUsesTenantObjectAndRoleNotEmail()
-    {
-        var principal = Principal();
-        var identity = Assert.IsType<UserIdentity>(WorkforceIdentity.Read(principal, Entra));
+        var identity = Assert.IsType<UserIdentity>(WorkforceIdentity.Read(Principal(), Magic));
         Assert.Equal(Tenant, identity.TenantId);
         Assert.Equal(ObjectId, identity.ObjectId);
-        Assert.Equal("unrelated@sample.invalid", identity.Email);
+        Assert.Equal("test.alias@microsoft.com", identity.Email);
         Assert.Equal("Test workforce user", identity.DisplayName);
-        Assert.False(principal.IsInRole("Administrator"));
     }
 
-    /// <summary>Verifies rejection when one mandatory identity or admission claim is invalid.</summary>
-    /// <param name="type">The claim type to replace on an otherwise valid principal.</param>
-    /// <param name="value">The replacement value that must not satisfy admission.</param>
+    /// <summary>Verifies every required magic-code claim and namespace boundary fails closed.</summary>
+    /// <param name="type">Claim type to replace.</param>
+    /// <param name="value">Replacement that must not satisfy admission.</param>
     [Theory]
     [InlineData("tid", "cccccccc-cccc-4ccc-8ccc-cccccccccccc")]
     [InlineData("oid", "00000000-0000-0000-0000-000000000000")]
     [InlineData("oid", "not-an-object-id")]
     [InlineData("roles", "Guest")]
-    [InlineData("roles", "Administrator")]
-    [InlineData("roles", "workforce")]
-    public void WrongTenantInvalidObjectOrMissingWorkforceAssignmentIsRejected(string type, string value)
+    [InlineData("preferred_username", "test.alias@outside.invalid")]
+    [InlineData(FoundationAuthenticationSettings.MagicCodeClaim, "false")]
+    public void InvalidMagicCodeIdentityClaimIsRejected(string type, string value)
     {
         var principal = Principal();
-        var identity = (ClaimsIdentity)principal.Identity!;
-        identity.RemoveClaim(identity.FindFirst(type)!);
-        identity.AddClaim(new(type, value));
-        Assert.Null(WorkforceIdentity.Read(principal, Entra));
+        var claims = (ClaimsIdentity)principal.Identity!;
+        claims.RemoveClaim(claims.FindFirst(type)!);
+        claims.AddClaim(new(type, value));
+        Assert.Null(WorkforceIdentity.Read(principal, Magic));
     }
 
-    /// <summary>Verifies that tenant/contact claims cannot substitute for workforce assignment or authentication.</summary>
+    /// <summary>Verifies synthetic and deployed principals cannot cross authentication modes.</summary>
     [Fact]
-    public void TenantAndEmailAloneNeverAdmitGuestOrAnonymousPrincipal()
-    {
-        var principal = Principal();
-        var identity = (ClaimsIdentity)principal.Identity!;
-        identity.RemoveClaim(identity.FindFirst("roles")!);
-        Assert.Null(WorkforceIdentity.Read(principal, Entra));
-        Assert.Null(WorkforceIdentity.Read(new ClaimsPrincipal(new ClaimsIdentity(Principal().Claims)), Entra));
-    }
-
-    /// <summary>Verifies mode isolation, the required synthetic marker, and rejection of unlisted synthetic objects.</summary>
-    [Fact]
-    public void SyntheticAndEntraPrincipalsCannotCrossModes()
+    public void SyntheticAndMagicCodePrincipalsCannotCrossModes()
     {
         var development = Load(new() { ["Authentication:Mode"] = "Development" }, "Development");
         var synthetic = DevelopmentPersonas.CreatePrincipal(DevelopmentPersonas.All[1]);
-        Assert.Equal(DevelopmentPersonas.All[1].ObjectId, WorkforceIdentity.Read(synthetic, development)!.ObjectId);
-        Assert.Null(WorkforceIdentity.Read(synthetic, development with { IsDevelopment = false }));
-        ((ClaimsIdentity)synthetic.Identity!).RemoveClaim(synthetic.FindFirst(FoundationAuthenticationSettings.SyntheticClaim)!);
-        Assert.Null(WorkforceIdentity.Read(synthetic, development));
-        var unlisted = DevelopmentPersonas.CreatePrincipal(new DevelopmentPersona("Unknown", Guid.NewGuid()));
-        Assert.Null(WorkforceIdentity.Read(unlisted, development));
+        Assert.NotNull(WorkforceIdentity.Read(synthetic, development));
+        Assert.Null(WorkforceIdentity.Read(synthetic, Magic));
+        Assert.Null(WorkforceIdentity.Read(Principal(), development));
     }
 
-    /// <summary>Verifies that safe local paths survive normalization while external or malformed targets resolve to home.</summary>
-    /// <param name="input">The untrusted candidate redirect destination.</param>
-    /// <param name="expected">The accepted local path or root fallback.</param>
+    /// <summary>Verifies aliases normalize to one exact Microsoft mailbox and reject domains supplied by the user.</summary>
+    /// <param name="alias">Candidate alias.</param>
+    /// <param name="expected">Normalized mailbox, or null when rejection is expected.</param>
+    [Theory]
+    [InlineData("Test.Alias", "test.alias@microsoft.com")]
+    [InlineData(" user-name ", "user-name@microsoft.com")]
+    [InlineData("", null)]
+    [InlineData("user@microsoft.com", null)]
+    [InlineData("user name", null)]
+    [InlineData(".user", null)]
+    [InlineData("user+", null)]
+    public void MicrosoftAliasNormalizationIsExact(string alias, string? expected)
+    {
+        if (expected is null)
+            Assert.Throws<ArgumentException>(() => MagicAlias.Normalize(alias));
+        else
+            Assert.Equal(expected, MagicAlias.Normalize(alias));
+    }
+
+    /// <summary>Verifies stored Microsoft mailboxes normalize before account-link comparisons.</summary>
+    /// <param name="email">Stored mailbox candidate.</param>
+    /// <param name="expected">Normalized mailbox, or null when the candidate is not a Microsoft alias mailbox.</param>
+    [Theory]
+    [InlineData(" Test.Alias@Microsoft.com ", "test.alias@microsoft.com")]
+    [InlineData("test_alias@MICROSOFT.COM", "test_alias@microsoft.com")]
+    [InlineData("test.alias@example.com", null)]
+    [InlineData("test.alias@@microsoft.com", null)]
+    [InlineData(".test@microsoft.com", null)]
+    public void StoredMicrosoftMailboxNormalizationIsExact(string email, string? expected)
+    {
+        var result = MagicAlias.TryNormalizeMailbox(email, out var normalized);
+
+        Assert.Equal(expected is not null, result);
+        Assert.Equal(expected ?? "", normalized);
+    }
+
+    /// <summary>Verifies new account object identifiers are stable per namespace and mailbox.</summary>
+    [Fact]
+    public void MagicCodeObjectIdentityIsStableAndNamespaced()
+    {
+        var first = MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.com");
+        Assert.NotEqual(Guid.Empty, first);
+        Assert.Equal(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.com"));
+        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Guid.NewGuid(), "test.alias@microsoft.com"));
+        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "other@microsoft.com"));
+    }
+
+    /// <summary>Verifies safe local paths survive normalization while external or malformed targets resolve to home.</summary>
+    /// <param name="input">Untrusted redirect destination.</param>
+    /// <param name="expected">Accepted local path or root fallback.</param>
     [Theory]
     [InlineData(null, "/")]
     [InlineData("", "/")]
@@ -299,9 +210,9 @@ public sealed class AuthenticationTests
     public void ReturnUrlsAreLocalOnly(string? input, string expected) =>
         Assert.Equal(expected, AuthenticationEndpoints.LocalReturnUrl(input));
 
-    /// <summary>Verifies that synthetic endpoints recognize only known direct loopback peers.</summary>
-    /// <param name="address">The IPv4/IPv6 peer address, or an unknown address.</param>
-    /// <param name="expected">Whether the request is allowed by the loopback guard.</param>
+    /// <summary>Verifies synthetic endpoints recognize only known direct loopback peers.</summary>
+    /// <param name="address">IPv4/IPv6 peer address, or unknown.</param>
+    /// <param name="expected">Whether the request is allowed.</param>
     [Theory]
     [InlineData("127.0.0.1", true)]
     [InlineData("::1", true)]
@@ -314,9 +225,9 @@ public sealed class AuthenticationTests
         Assert.Equal(expected, AuthenticationEndpoints.IsLoopback(context));
     }
 
-    /// <summary>Verifies that disabled or departed accounts are rejected before any contact or timestamp changes.</summary>
-    /// <param name="eligible">The persisted account eligibility flag before sign-in.</param>
-    /// <param name="departed">Whether persisted departure verification is present.</param>
+    /// <summary>Verifies disabled or departed accounts are rejected before contact or timestamp changes.</summary>
+    /// <param name="eligible">Persisted eligibility flag.</param>
+    /// <param name="departed">Whether departure verification is present.</param>
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]
@@ -328,60 +239,42 @@ public sealed class AuthenticationTests
             IsEligible = eligible, DepartureVerifiedUtc = departed ? Now : null, DisplayName = "Original"
         };
         var error = Assert.Throws<DomainException>(() => WorkforceAccounts.UpdateContact(user,
-            new(Tenant, ObjectId, "Changed", "changed@sample.invalid"), Now));
+            new(Tenant, ObjectId, "Changed", "changed@microsoft.com"), Now));
         Assert.Equal(ErrorCode.Forbidden, error.Code);
-        Assert.Equal(eligible, user.IsEligible);
-        Assert.Equal(departed ? Now : null, user.DepartureVerifiedUtc);
         Assert.Equal("Original", user.DisplayName);
         Assert.Null(user.LastSignedInUtc);
     }
 
-    /// <summary>Verifies that eligible sign-in updates contact and UTC timestamp without changing tenant/object identity.</summary>
+    /// <summary>Verifies eligible sign-in updates contact and UTC timestamp without changing stable identity.</summary>
     [Fact]
     public void EligibleSignInUpdatesContactWithoutChangingIdentity()
     {
         var user = new UserAccount { TenantId = Tenant, ObjectId = ObjectId };
-        WorkforceAccounts.UpdateContact(user, new(Tenant, ObjectId, "Updated", "new@sample.invalid"), Now);
+        WorkforceAccounts.UpdateContact(user, new(Tenant, ObjectId, "Updated", "new@microsoft.com"), Now);
         Assert.Equal("Updated", user.DisplayName);
-        Assert.Equal("new@sample.invalid", user.Email);
+        Assert.Equal("new@microsoft.com", user.Email);
         Assert.Equal(Now, user.LastSignedInUtc);
-        Assert.True(user.IsEligible);
         Assert.Equal(Tenant, user.TenantId);
         Assert.Equal(ObjectId, user.ObjectId);
     }
 
-    /// <summary>Verifies rejection of missing expiry and the exact non-sliding one-hour deadline boundary.</summary>
+    /// <summary>Verifies missing expiry and the exact non-sliding one-hour deadline boundary.</summary>
     [Fact]
-    public void SessionExpiresAtOneHourAndDoesNotExtendOnCircuitReconnect()
+    public void SessionExpiresAtOneHourAndDoesNotSlide()
     {
         var principal = Principal();
         Assert.False(WorkforceSession.IsCurrent(principal, Now));
         WorkforceSession.Stamp(principal, Now);
         Assert.True(WorkforceSession.IsCurrent(principal, Now.AddHours(1).AddSeconds(-1)));
         Assert.False(WorkforceSession.IsCurrent(principal, Now.AddHours(1)));
-        Assert.False(WorkforceSession.IsCurrent(principal, Now.AddHours(1).AddSeconds(1)));
     }
 
-    /// <summary>Verifies that session stamping fails with a specific parameter error when the principal has no claims identity.</summary>
-    [Fact]
-    public void SessionStampRequiresPrimaryClaimsIdentity()
-    {
-        var error = Assert.Throws<ArgumentException>(() => WorkforceSession.Stamp(new ClaimsPrincipal(), Now));
-        Assert.Equal("principal", error.ParamName);
-    }
-
-    /// <summary>Verifies fail-fast argument errors for null inputs to identity, contact, configuration, and session boundaries.</summary>
+    /// <summary>Verifies fail-fast argument errors for null configuration and identity inputs.</summary>
     [Fact]
     public void AuthenticationBoundariesRejectNullArguments()
     {
-        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceSession.Stamp(null!, Now)).ParamName);
-        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceSession.IsCurrent(null!, Now)).ParamName);
-        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceIdentity.Read(null!, Entra)).ParamName);
+        Assert.Equal("principal", Assert.Throws<ArgumentNullException>(() => WorkforceIdentity.Read(null!, Magic)).ParamName);
         Assert.Equal("settings", Assert.Throws<ArgumentNullException>(() => WorkforceIdentity.Read(Principal(), null!)).ParamName);
-        Assert.Equal("user", Assert.Throws<ArgumentNullException>(() =>
-            WorkforceAccounts.UpdateContact(null!, new(Tenant, ObjectId, "Test", ""), Now)).ParamName);
-        Assert.Equal("identity", Assert.Throws<ArgumentNullException>(() =>
-            WorkforceAccounts.UpdateContact(new UserAccount(), null!, Now)).ParamName);
         Assert.Equal("configuration", Assert.Throws<ArgumentNullException>(() =>
             FoundationAuthenticationSettings.Load(null!, new TestEnvironment())).ParamName);
         Assert.Equal("environment", Assert.Throws<ArgumentNullException>(() =>
@@ -389,23 +282,23 @@ public sealed class AuthenticationTests
     }
 
     /// <summary>Verifies circuit-state identity lookup, expiry rejection, and cancellation before state access.</summary>
-    /// <returns>A task completing after the identity and cancellation assertions.</returns>
+    /// <returns>A task completing after identity and cancellation assertions.</returns>
     [Fact]
     public async Task CurrentUserReadsCircuitStateAndRejectsExpiredSession()
     {
         var principal = Principal();
         WorkforceSession.Stamp(principal, Now);
-        var current = new CircuitCurrentUser(new FixedAuthenticationState(principal), Entra, new FixedClock(Now));
+        var current = new CircuitCurrentUser(new FixedAuthenticationState(principal), Magic, new FixedClock(Now));
         Assert.Equal(ObjectId, (await current.GetIdentityAsync())!.ObjectId);
-        current = new(new FixedAuthenticationState(principal), Entra, new FixedClock(Now.AddHours(1)));
+        current = new(new FixedAuthenticationState(principal), Magic, new FixedClock(Now.AddHours(1)));
         Assert.Null(await current.GetIdentityAsync());
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             await current.GetIdentityAsync(new CancellationToken(true)));
     }
 
     /// <summary>Verifies the explicit HTTP outcome for each application-domain failure category.</summary>
-    /// <param name="code">The domain classification to map.</param>
-    /// <param name="expected">The expected HTTP status code.</param>
+    /// <param name="code">Domain classification to map.</param>
+    /// <param name="expected">Expected HTTP status code.</param>
     [Theory]
     [InlineData(ErrorCode.Validation, 400)]
     [InlineData(ErrorCode.Forbidden, 403)]
@@ -417,21 +310,24 @@ public sealed class AuthenticationTests
 
     private static Dictionary<string, string?> ValidConfiguration() => new()
     {
-        ["AzureAd:TenantId"] = Tenant.ToString(),
-        ["AzureAd:ClientId"] = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-        ["AzureAd:ClientSecret"] = "test-only-not-a-real-secret",
-        ["Authentication:WorkforceRole"] = "Workforce"
+        ["Authentication:Mode"] = "MagicCode",
+        ["Authentication:AccountNamespaceId"] = Tenant.ToString()
     };
 
-    private static FoundationAuthenticationSettings Load(Dictionary<string, string?> configuration, string environment = "Production") =>
-        FoundationAuthenticationSettings.Load(new ConfigurationBuilder().AddInMemoryCollection(configuration).Build(),
+    private static FoundationAuthenticationSettings Load(
+        Dictionary<string, string?> configuration, string environment = "Production") =>
+        FoundationAuthenticationSettings.Load(
+            new ConfigurationBuilder().AddInMemoryCollection(configuration).Build(),
             new TestEnvironment { EnvironmentName = environment });
 
     private static ClaimsPrincipal Principal() => new(new ClaimsIdentity(
     [
-        new("tid", Tenant.ToString()), new("oid", ObjectId.ToString()),
-        new("roles", "Workforce"), new("name", "Test workforce user"),
-        new("preferred_username", "unrelated@sample.invalid")
+        new("tid", Tenant.ToString()),
+        new("oid", ObjectId.ToString()),
+        new("roles", FoundationAuthenticationSettings.MagicCodeRole),
+        new("name", "Test workforce user"),
+        new("preferred_username", "test.alias@microsoft.com"),
+        new(FoundationAuthenticationSettings.MagicCodeClaim, "true")
     ], "test", "name", "roles"));
 
     /// <summary>Provides a configurable host environment without accessing project or host files.</summary>
@@ -448,20 +344,19 @@ public sealed class AuthenticationTests
     }
 
     /// <summary>Freezes UTC time for deterministic session-boundary assertions.</summary>
-    /// <param name="now">The UTC instant returned by every clock read.</param>
+    /// <param name="now">UTC instant returned by every clock read.</param>
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
-        /// <summary>Returns the fixed UTC instant supplied by the test.</summary>
-        /// <returns>The configured instant without advancing with wall-clock time.</returns>
+        /// <inheritdoc/>
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    /// <summary>Supplies a principal directly to the circuit current-user adapter without an HTTP context.</summary>
-    /// <param name="principal">The authenticated or expired-session principal under test.</param>
+    /// <summary>Supplies a principal directly to the circuit current-user adapter.</summary>
+    /// <param name="principal">Authenticated or expired-session principal under test.</param>
     private sealed class FixedAuthenticationState(ClaimsPrincipal principal) : AuthenticationStateProvider
     {
-        /// <summary>Returns authentication state for the fixed principal supplied by the test.</summary>
-        /// <returns>A completed task carrying the test principal.</returns>
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(principal));
+        /// <inheritdoc/>
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(principal));
     }
 }

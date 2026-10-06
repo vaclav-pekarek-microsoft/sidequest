@@ -145,7 +145,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         {
             releaseStartup?.Invoke();
         }
-        await Expect(eventOwner.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToBeEnabledAsync();
+        await Expect(eventOwner.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToBeEnabledAsync();
         await OpenModerationQuestAsync(eventOwner, eventId, title);
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Attendees", Exact = true })).ToHaveCountAsync(0);
@@ -466,7 +466,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(page.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Private media configuration is missing or invalid.");
         await Expect(title).ToHaveValueAsync(unsaved);
         await Expect(page.GetByText("Cover updated.", new() { Exact = true })).ToHaveCountAsync(0);
-        await Expect(page.Locator(".cover-editor img")).ToHaveCountAsync(0);
+        await Expect(page.Locator(".cover-editor img[src^='media/covers/']")).ToHaveCountAsync(0);
         await NoOverflowAsync(page);
         await page.GetByRole(AriaRole.Button, new() { Name = "Save changes", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(fixture.Settings.At($"/quests/{questId}").AbsoluteUri);
@@ -677,7 +677,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     {
         try
         {
-            await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true })).ToHaveValueAsync("Moderation");
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
             await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "Event", Exact = true })).ToHaveValueAsync(eventId.ToString());
             await page.GetByRole(AriaRole.Link, new() { Name = title, Exact = true }).ClickAsync();
         }

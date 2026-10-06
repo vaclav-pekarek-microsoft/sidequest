@@ -1,18 +1,12 @@
 @page "/signin"
 @attribute [AllowAnonymous]
+@layout Layout.AuthenticationBoundaryLayout
 @inject FoundationAuthenticationSettings Authentication
 
 <PageTitle>Sign in · Sidequest</PageTitle>
-<h1>Sign in to Sidequest</h1>
-@if (Failed)
-{
-    <div role="alert" class="error-message">
-        Sign-in could not be completed. Check your workforce app-role assignment with your tenant administrator.
-        If you are assigned, ask support to check local account eligibility and SQL availability.
-    </div>
-}
 @if (Authentication.IsDevelopment)
 {
+    <h1>Sign in to Sidequest</h1>
     <h2>Synthetic development personas</h2>
     <p>Loopback only. These are not real employees. Local SQL and the foundation schema must be available.</p>
     <form class="section-box" method="post" action="/auth/development" data-enhance="false" data-authentication-change>
@@ -28,19 +22,72 @@
         <button type="submit">Sign in with synthetic identity</button>
     </form>
     <p>Admin is the only explicit bootstrap administrator. Alice, Bob and Carol have no administrative grant.</p>
+    <p>Application roles and equal resource ownership are stored in Sidequest, not inferred from authentication.</p>
 }
 else
 {
-    <p>Use the Microsoft account assigned access by your organization.</p>
-    <a href="@($"/auth/login?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}")" data-enhance-nav="false" data-authentication-change>
-        Continue with Microsoft Entra
-    </a>
+    <h1>Sign in to Sidequest</h1>
+    @if (!Sent)
+    {
+        <p>Enter your Microsoft alias. We will send a one-time code to <strong>alias@microsoft.com</strong>.</p>
+        @if (InvalidAlias)
+        {
+            <p class="validation-message" role="alert">Enter a valid Microsoft alias without @@microsoft.com.</p>
+        }
+        <form class="section-box magic-code-form" method="post" action="/auth/magic/request"
+              data-enhance="false">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
+            <input type="hidden" name="experienceEpoch" value="@ExperienceEpoch" />
+            <label for="alias">Microsoft alias</label>
+            <div class="alias-input">
+                <input id="alias" name="alias" autocomplete="username" inputmode="email" required maxlength="64" />
+                <span>@@microsoft.com</span>
+            </div>
+            <button type="submit">Send magic code</button>
+        </form>
+    }
+    else
+    {
+        <p>If the Microsoft mailbox can receive Sidequest email, a six-digit code is on its way.</p>
+        @if (InvalidCode)
+        {
+            <p class="validation-message" role="alert">The code is invalid or expired. Request a new code and try again.</p>
+        }
+        <form class="section-box magic-code-form" method="post" action="/auth/magic/verify"
+              data-enhance="false" data-authentication-change>
+            <AntiforgeryToken />
+            <input type="hidden" name="challenge" value="@Challenge" />
+            <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
+            <input type="hidden" name="experienceEpoch" value="@ExperienceEpoch" />
+            <label for="code">Magic code</label>
+            <input id="code" name="code" autocomplete="one-time-code" inputmode="numeric"
+                   pattern="[0-9]{6}" minlength="6" maxlength="6" required />
+            <button type="submit">Sign in</button>
+        </form>
+        <p><a href="@NewCodeUrl" data-enhance-nav="false">Request a new code</a></p>
+    }
 }
-<p>Application roles and equal resource ownership are stored in Sidequest, not inferred from Entra roles.</p>
 
 @code {
+    private string NewCodeUrl =>
+        $"/signin?returnUrl={Uri.EscapeDataString(AuthenticationEndpoints.LocalReturnUrl(ReturnUrl))}&experienceEpoch={Uri.EscapeDataString(ExperienceEpoch ?? "")}";
+
     /// <summary>Gets or sets the untrusted requested destination, normalized to a local path before use.</summary>
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
-    /// <summary>Gets or sets whether a failed remote sign-in should display generic recovery guidance.</summary>
-    [SupplyParameterFromQuery] public bool Failed { get; set; }
+
+    /// <summary>Gets or sets the browser authentication-generation value preserved through native form submissions.</summary>
+    [SupplyParameterFromQuery] public string? ExperienceEpoch { get; set; }
+
+    /// <summary>Gets or sets whether the browser should display the code-verification step.</summary>
+    [SupplyParameterFromQuery] public bool Sent { get; set; }
+
+    /// <summary>Gets or sets the random challenge identifier retained by the requesting browser.</summary>
+    [SupplyParameterFromQuery] public Guid Challenge { get; set; }
+
+    /// <summary>Gets or sets whether alias-format validation failed.</summary>
+    [SupplyParameterFromQuery] public bool InvalidAlias { get; set; }
+
+    /// <summary>Gets or sets whether verification failed without disclosing the underlying reason.</summary>
+    [SupplyParameterFromQuery] public bool InvalidCode { get; set; }
 }

@@ -1,33 +1,38 @@
-using System.Collections.Frozen;
-
 namespace Sidequest.Web.Authentication;
 
-/// <summary>Holds the validated, immutable admission and one-time administrator bootstrap settings.</summary>
+/// <summary>Holds validated magic-code or synthetic admission and one-time administrator bootstrap settings.</summary>
 /// <param name="IsDevelopment">Whether explicitly enabled synthetic development authentication is selected.</param>
-/// <param name="TenantId">The only tenant permitted to supply identities.</param>
-/// <param name="WorkforceRole">The exact admission app-role claim value; it grants no database application role.</param>
-/// <param name="BootstrapAdministratorObjectId">The explicitly configured object to bootstrap on first provisioning, or no bootstrap.</param>
+/// <param name="TenantId">The stable account namespace shared by authentication and directory integrations.</param>
+/// <param name="WorkforceRole">The exact application-issued admission claim; it grants no database application role.</param>
+/// <param name="BootstrapAdministratorObjectId">The explicit synthetic object to bootstrap, or no object-based bootstrap.</param>
 /// <remarks>Validated instances are immutable and safe to share across requests and circuits.</remarks>
 public sealed record FoundationAuthenticationSettings(
     bool IsDevelopment, Guid TenantId, string WorkforceRole, Guid? BootstrapAdministratorObjectId)
 {
-    /// <summary>Explicit non-production participants; empty for the unchanged workforce admission policy.</summary>
-    public IReadOnlySet<Guid> HackathonParticipants { get; private init; } = Array.Empty<Guid>().ToFrozenSet();
+    /// <summary>The normalized Microsoft mailbox that may receive a one-time administrator grant when first created.</summary>
+    public string? BootstrapAdministratorEmail { get; private init; }
 
-    /// <summary>Whether validated Staging or local Development Entra configuration selected assigned-participant rather than workforce admission.</summary>
-    public bool IsHackathon => HackathonParticipants.Count != 0;
+    /// <summary>Whether deployed Microsoft-alias magic-code authentication is selected.</summary>
+    public bool IsMagicCode => !IsDevelopment;
 
-    /// <summary>The claim type that distinguishes synthetic identities from Entra identities.</summary>
+    /// <summary>The claim type that distinguishes synthetic identities from deployed identities.</summary>
     public const string SyntheticClaim = "sidequest:synthetic";
+
+    /// <summary>The claim type proving that the application issued the identity after successful code verification.</summary>
+    public const string MagicCodeClaim = "sidequest:magic-code";
+
+    /// <summary>The fixed application admission role issued only after successful Microsoft-mailbox verification.</summary>
+    public const string MagicCodeRole = "Sidequest.MagicCodeWorkforce";
+
     /// <summary>The authentication scheme used for the application session cookie in either mode.</summary>
     public const string CookieScheme = "Cookies";
 
-    /// <summary>Loads startup settings, defaulting to Entra and rejecting unsafe or incomplete configuration.</summary>
-    /// <param name="configuration">The merged configuration, including secret-store values for Entra.</param>
-    /// <param name="environment">The host environment restricting synthetic authentication to Development and Entra assigned-participant admission to Staging or Development.</param>
-    /// <returns>Validated settings for one authentication mode and tenant.</returns>
+    /// <summary>Loads startup settings, defaulting to deployed magic-code authentication and rejecting unsafe configuration.</summary>
+    /// <param name="configuration">The merged configuration containing the stable account namespace and optional bootstrap alias.</param>
+    /// <param name="environment">The host environment restricting synthetic authentication to Development.</param>
+    /// <returns>Validated settings for exactly one authentication mode.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="environment"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The mode, tenant/client credentials, admission policy/role, participant list, or bootstrap identity is invalid.</exception>
+    /// <exception cref="InvalidOperationException">The mode, account namespace, or bootstrap identity is invalid.</exception>
     /// <example>
     /// <code>
     /// var settings = FoundationAuthenticationSettings.Load(builder.Configuration, builder.Environment);
@@ -38,15 +43,9 @@ public sealed record FoundationAuthenticationSettings(
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
-        var mode = configuration["Authentication:Mode"] ?? "Entra";
-        var policy = configuration["Authentication:AdmissionPolicy"] ?? "workforce";
-        if (policy is not ("workforce" or "hackathon-assigned-users"))
-            throw new InvalidOperationException("Authentication:AdmissionPolicy must be workforce or hackathon-assigned-users.");
-        if (policy == "hackathon-assigned-users" &&
-            ((!environment.IsStaging() && !environment.IsDevelopment()) || mode != "Entra"))
-            throw new InvalidOperationException("Hackathon admission requires Entra authentication in Staging or local Development.");
-        if (mode is not ("Entra" or "Development"))
-            throw new InvalidOperationException("Authentication:Mode must be Entra or Development.");
+        var mode = configuration["Authentication:Mode"] ?? "MagicCode";
+        if (mode is not ("MagicCode" or "Development"))
+            throw new InvalidOperationException("Authentication:Mode must be MagicCode or Development.");
         if (mode == "Development")
         {
             if (!environment.IsDevelopment())
@@ -54,35 +53,28 @@ public sealed record FoundationAuthenticationSettings(
             var bootstrap = BootstrapAdministrator(configuration, DevelopmentPersonas.TenantId);
             if (bootstrap is not null && bootstrap != DevelopmentPersonas.All[0].ObjectId)
                 throw new InvalidOperationException("Development bootstrap administrator must be the documented Admin object.");
-            return new(true, DevelopmentPersonas.TenantId, DevelopmentPersonas.WorkforceRole,
-                bootstrap);
+            return new(true, DevelopmentPersonas.TenantId, DevelopmentPersonas.WorkforceRole, bootstrap);
         }
 
-        var tenant = RequiredGuid(configuration["AzureAd:TenantId"], "AzureAd:TenantId");
-        _ = RequiredGuid(configuration["AzureAd:ClientId"], "AzureAd:ClientId");
-        if (string.IsNullOrWhiteSpace(configuration["AzureAd:ClientSecret"]))
-            throw new InvalidOperationException("Configure AzureAd:ClientSecret using user secrets or the deployment secret store.");
-        if (configuration["AzureAd:Instance"] is { } instance &&
-            instance != "https://login.microsoftonline.com/")
-            throw new InvalidOperationException("AzureAd:Instance must be https://login.microsoftonline.com/.");
-        var hackathon = policy == "hackathon-assigned-users";
-        var role = configuration[hackathon ? "Authentication:HackathonRole" : "Authentication:WorkforceRole"];
-        if (string.IsNullOrWhiteSpace(role))
-            throw new InvalidOperationException(hackathon
-                ? "Authentication:HackathonRole must name the dedicated assigned-participant app role."
-                : "Authentication:WorkforceRole must name the approved workforce-only app role.");
-        if (hackathon && role == configuration["Authentication:WorkforceRole"])
-            throw new InvalidOperationException("The hackathon role must be distinct from the workforce role.");
-        var participants = hackathon
-            ? (configuration.GetSection("Authentication:HackathonParticipants").Get<string[]>() ?? [])
-                .Select(value => RequiredGuid(value, "Authentication:HackathonParticipants")).ToFrozenSet()
-            : Array.Empty<Guid>().ToFrozenSet();
-        if (hackathon && participants.Count is < 1 or > 100)
-            throw new InvalidOperationException("Authentication:HackathonParticipants requires 1 to 100 explicitly approved object IDs.");
-        var administrator = BootstrapAdministrator(configuration, tenant);
-        if (hackathon && administrator is { } id && !participants.Contains(id))
-            throw new InvalidOperationException("The hackathon bootstrap administrator must be an explicitly approved participant.");
-        return new(false, tenant, role, administrator) { HackathonParticipants = participants };
+        var tenant = RequiredGuid(configuration["Authentication:AccountNamespaceId"], "Authentication:AccountNamespaceId");
+        string? bootstrapEmail = null;
+        if (configuration["Authentication:BootstrapAdministrator:Alias"] is { Length: > 0 } alias)
+        {
+            try
+            {
+                bootstrapEmail = MagicAlias.Normalize(alias);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException(
+                    "Authentication:BootstrapAdministrator:Alias must be a valid Microsoft alias without a domain.", exception);
+            }
+        }
+        if (!string.IsNullOrEmpty(configuration["Authentication:BootstrapAdministrator:TenantId"]) ||
+            !string.IsNullOrEmpty(configuration["Authentication:BootstrapAdministrator:ObjectId"]))
+            throw new InvalidOperationException(
+                "MagicCode authentication bootstraps administrators by Authentication:BootstrapAdministrator:Alias.");
+        return new(false, tenant, MagicCodeRole, null) { BootstrapAdministratorEmail = bootstrapEmail };
     }
 
     private static Guid? BootstrapAdministrator(IConfiguration configuration, Guid tenant)
@@ -104,5 +96,5 @@ public sealed record FoundationAuthenticationSettings(
     private static Guid RequiredGuid(string? value, string name) =>
         Guid.TryParse(value, out var id) && id != Guid.Empty
             ? id
-            : throw new InvalidOperationException($"{name} must be a nonempty tenant-specific GUID.");
+            : throw new InvalidOperationException($"{name} must be a nonempty GUID.");
 }

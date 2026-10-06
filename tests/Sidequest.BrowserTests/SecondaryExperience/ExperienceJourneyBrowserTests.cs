@@ -139,7 +139,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         Assert.True(status is null or 4, "Cancellation is absent or explicitly marked Cancelled, never cached as active.");
         await page.GotoAsync("/");
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Your Quest board", Exact = true })).ToBeVisibleAsync();
-        await page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true }).SelectOptionAsync("Joined");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Upcoming Joined", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Upcoming Joined", Exact = true })).ToBeVisibleAsync();
         await Expect(page.Locator($"[data-protected-experience] a[href='/quests/{quest}']")).ToHaveCountAsync(0);
     }
@@ -175,10 +175,9 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         var page = await ExperienceBrowserSupport.SignInAsync(context);
         await page.GotoAsync("/");
         await Expect(page.Locator("[data-connection]")).ToContainTextAsync("Connected");
-        var view = page.GetByRole(AriaRole.Combobox, new() { Name = "View", Exact = true });
+        var view = page.GetByRole(AriaRole.Button, new() { Name = "Following", Exact = true });
         await Expect(view).ToBeEnabledAsync();
         await view.FocusAsync();
-        await page.Keyboard.PressAsync("f");
         await page.Keyboard.PressAsync("Enter");
         Assert.False(await page.EvaluateAsync<bool>("()=>document.documentElement.scrollWidth>document.documentElement.clientWidth"));
         await page.EvaluateAsync("async()=> (await import('/Components/Experience/ConnectionStatus.razor.js')).reportCircuitConnection(false)");

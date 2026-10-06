@@ -1,5 +1,5 @@
 @using Sidequest.Web.Components.Media
-<article>
+<article class="quest-card">
     <h2><a href="@($"/quests/{Item.Id}{(Moderation ? "?moderation=true" : "")}")">@Item.Title</a></h2>
     <QuestCover AssetId="Item.CoverAssetId" QuestTitle="@Item.Title" Moderation="Moderation" />
     <p>@Item.EventName · @Item.Status · @Item.Visibility</p>

@@ -33,42 +33,35 @@ namespace Sidequest.UnitTests.CoreComposition;
 public sealed class CoreWorkflowRegistrationTests
 {
     internal static readonly Guid Tenant = new("66de072a-19dc-43ba-92a0-22459eb0a0f7");
-    internal static FoundationAuthenticationSettings Authentication => new(false, Tenant, "Workforce", null);
+    internal static FoundationAuthenticationSettings Authentication =>
+        new(false, Tenant, FoundationAuthenticationSettings.MagicCodeRole, null);
 
-    /// <summary>Derives directory participant eligibility only from validated non-production Entra admission and ignores attempted directory-side overrides.</summary>
-    /// <param name="environment">The approved deployed or local real-Entra environment.</param>
-    [Theory]
-    [InlineData("Staging")]
-    [InlineData("Development")]
-    public void HackathonDirectoryCompositionUsesOnlyValidatedAuthenticationParticipants(string environment)
+    /// <summary>Retains an approved workforce directory policy only when it shares the magic-code account namespace.</summary>
+    [Fact]
+    public void DirectoryCompositionUsesMagicCodeAccountNamespace()
     {
-        var participant = Guid.NewGuid();
         var values = new Dictionary<string, string?>
         {
-            ["Authentication:Mode"] = "Entra",
-            ["Authentication:AdmissionPolicy"] = "hackathon-assigned-users",
-            ["Authentication:HackathonRole"] = "Hackathon.Participant",
-            ["Authentication:HackathonParticipants:0"] = participant.ToString(),
-            ["AzureAd:TenantId"] = Tenant.ToString(),
-            ["AzureAd:ClientId"] = Guid.NewGuid().ToString(),
-            ["AzureAd:ClientSecret"] = "synthetic-unit-test-only",
-            ["Directory:Graph:IsHackathon"] = "false",
-            ["Directory:Graph:HackathonParticipants:0"] = Guid.NewGuid().ToString(),
+            ["Authentication:Mode"] = "MagicCode",
+            ["Authentication:AccountNamespaceId"] = Tenant.ToString(),
+            ["Directory:Graph:TenantId"] = Tenant.ToString(),
+            ["Directory:Graph:WorkforcePolicyApproved"] = "true",
+            ["Directory:Graph:WorkforceExtension"] = "extension_attribute",
             ["Directory:Graph:MaximumPages"] = "9"
         };
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
         var authentication = FoundationAuthenticationSettings.Load(configuration,
-            new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = environment });
+            new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = Environments.Staging });
         var services = new ServiceCollection();
         services.AddSidequestCoreWorkflows(configuration, authentication);
         using var provider = services.BuildServiceProvider();
         var directory = provider.GetRequiredService<GraphDirectoryOptions>();
-        Assert.True(directory.IsHackathon);
+        Assert.False(directory.IsHackathon);
         Assert.Equal(Tenant, directory.TenantId);
-        Assert.Equal(participant, Assert.Single(directory.HackathonParticipants));
+        Assert.Empty(directory.HackathonParticipants);
         Assert.Equal(9, directory.MaximumPages);
-        Assert.False(directory.WorkforcePolicyApproved);
-        Assert.Empty(directory.WorkforceExtension);
+        Assert.True(directory.WorkforcePolicyApproved);
+        Assert.Equal("extension_attribute", directory.WorkforceExtension);
     }
 
     /// <summary>Refuses to manufacture a guest-capable directory policy from raw production configuration.</summary>

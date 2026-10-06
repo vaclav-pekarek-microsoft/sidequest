@@ -1,0 +1,16 @@
+@namespace Sidequest.Web.Components.Media
+
+<img class="placeholder-cover" src="@Source" alt="@($"Cover for {Name}")" loading="lazy" />
+
+@code {
+    /// <summary>Name displayed by the placeholder image service.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>Requested image width in pixels.</summary>
+    [Parameter] public int Width { get; set; } = 600;
+
+    /// <summary>Requested image height in pixels.</summary>
+    [Parameter] public int Height { get; set; } = 400;
+
+    private string Source => $"https://placehold.co/{Width}x{Height}?text={Uri.EscapeDataString(Name)}";
+}
