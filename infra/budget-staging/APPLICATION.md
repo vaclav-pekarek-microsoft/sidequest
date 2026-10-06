@@ -28,9 +28,9 @@ actual template output before registering or publishing.
   App Service proxy address (RFC1918, IPv4 link-local or loopback), never forwarded host or a public/
   unknown peer. Do not enable a trust-all forwarded-header environment switch.
   App Service Linux can use the `169.254.0.0/16` link-local transport; excluding
-  it leaves real Entra callbacks incorrectly using HTTP despite external HTTPS.
-  Verify the actual `/auth/login` challenge's HTTPS callback after deployment,
-  without logging its state, nonce or correlation cookies.
+  it leaves generated HTTPS links using HTTP despite external HTTPS.
+  Verify the actual `/signin` and magic-code form actions remain HTTPS after
+  deployment without logging aliases, codes or challenge identifiers.
 - A system-assigned identity for Blob, Key Vault, metrics and ACS; the existing
   `sidequest-app` user-assigned identity is attached for SQL only. SQL uses the
   actual identity **client ID** in `User Id`, managed-identity authentication,
@@ -62,32 +62,26 @@ B1 + SQL retail guidance remains approximately USD 18/month before
 usage-dependent storage, Key Vault, email, telemetry and transfers. No hard
 USD 30 ceiling or production capacity/recovery claim is made.
 
-## Isolated assigned-participant admission
+## Microsoft-alias magic-code admission
 
-The owner explicitly approved `hackathon-assigned-users`, including the owner's
-tenant **Guest** account. This is not proof of employment and does not modify
-the default workforce policy:
+Deployed sign-in proves control of one `@microsoft.com` mailbox by a short-lived
+code delivered through the configured ACS sender:
 
 | Setting | Required value |
 | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | `Staging` |
-| `Authentication:Mode` | `Entra` |
-| `Authentication:AdmissionPolicy` | `hackathon-assigned-users` |
-| `Authentication:HackathonRole` | `Sidequest.Hackathon.Participant` |
-| `Authentication:HackathonParticipants:0` | `1250fe10-b814-4735-801f-ea5a0a4c1219` |
-| `AzureAd:TenantId` | `99e674a6-6773-4f53-90a3-e3ab8c37c856` |
-| `AzureAd:ClientId` | The newly verified single-tenant registration |
-| `AzureAd:ClientSecret` | Key Vault reference to `entra-client-secret` |
-| `Authentication:BootstrapAdministrator:TenantId` | Same approved tenant |
-| `Authentication:BootstrapAdministrator:ObjectId` | Same explicitly approved owner |
+| `Authentication:Mode` | `MagicCode` |
+| `Authentication:AccountNamespaceId` | `99e674a6-6773-4f53-90a3-e3ab8c37c856` |
+| `Authentication:BootstrapAdministrator:Alias` | `vaclav.pekarek` |
+| `Delivery:Email:Endpoint` | ACS resource HTTPS endpoint |
+| `Delivery:Email:SenderAddress` | Verified ACS sender |
 
-Each sign-in requires validated issuer/audience, exact tenant/object,
-the **dedicated role claim**, and membership of the immutable configured
-participant list. Tenant membership, email, a workforce role, Global
-Administrator or subscription Owner is not enough. Synthetic Development
-authentication is never enabled publicly. A missing/empty/invalid list fails
-startup. Only Staging and explicitly configured real-Entra Development accept
-this policy; Production and other environments reject it. Omission defaults to workforce,
+The account namespace preserves existing tenant/object-backed ownership. Stored
+Microsoft addresses are normalized to aliases before comparison. A verified address
+links only one eligible normalized-alias match; otherwise Sidequest creates a stable
+new object ID in that namespace. Ambiguous, disabled or departed matches fail closed.
+Mailbox control grants no content permission or administrator role. Synthetic
+Development authentication is never enabled publicly.
 which still requires its approved extension and rejects directory Guests.
 The bootstrap remains the exact pair, only on first provisioning; there is no
 first-user-wins or restoration of a removed administrator.
@@ -131,21 +125,10 @@ subscription checks apply to every entry point.
    Microsoft Graph service principal and explicitly grants those two roles.
    Operator directory-admin rights to create registrations/consent are separate
    from these runtime permissions.
-2. Create one `AzureADMyOrg` registration, `Sidequest Hackathon`, with the
-   dedicated User app role. Its enterprise application sets
-   `appRoleAssignmentRequired=true` and assigns only the approved owner object.
-   Register both `/signin-oidc` and `/signout-callback-oidc` HTTPS redirect URIs;
-   front-channel logout is `/signout-oidc`. Existing same-name registrations
-   cause a stop; independently verify any partial creation before continuing.
-   The helper also reads the accepted `Properties\launchSettings.json` HTTPS
-   profile and registers `https://localhost:7193/signin-oidc` and
-   `https://localhost:7193/signout-callback-oidc`. No HTTP callback or arbitrary
-   development hostname is added.
-   The existing Microsoft.Identity.Web sign-in flow uses `response_type=id_token`
-   and `response_mode=form_post`. Enable web ID-token issuance explicitly;
-   leave implicit access-token issuance disabled. Issuer, audience, nonce,
-   role and participant checks remain mandatory. Missing ID-token issuance
-   produces Entra `AADSTS700054` before local account provisioning.
+2. Create or retain one tenant application registration used only for approved
+   Microsoft Graph application permissions. Interactive redirect URIs, ID-token
+   issuance, app roles and enterprise-application user assignment are not part of
+   Sidequest authentication.
 3. After infrastructure exists, an operator with explicitly approved **secret-set
    access on the dedicated staging vault** calls `Set-SidequestHackathonCredential`.
    It creates one 90-day credential, immediately sends it to the vault using
@@ -154,21 +137,16 @@ subscription checks apply to every entry point.
    Do not run these steps under a PowerShell transcript or HTTP-body tracing.
    Renew before expiry; remove the exact unused credential if vault writing
    fails. The helper does not grant itself vault access.
-4. The two Key Vault references supply the same credential to `AzureAd` and
+4. The Key Vault reference supplies the credential only to
    `Directory:Credentials`. `Directory:Graph:TenantId` and
-   `Directory:Credentials:TenantId` match authentication. No workforce extension
-   or `WorkforcePolicyApproved` setting is needed or fabricated.
+   `Directory:Credentials:TenantId` match the Sidequest account namespace.
 
 ### Local development against the staging database
 
-The same approved participant policy may be explicitly selected in the local
-**Development** environment only with `Authentication:Mode=Entra`. It still
-requires the dedicated role, real tenant/client credential, exact participant
-allowlist and approved bootstrap pair. This does **not** select synthetic
-authentication, weaken secure cookies, map synthetic endpoints or admit other
-guests. Use the `https` launch profile at `https://localhost:7193`; populate the
-ignored `appsettings.Development.json` only after the registration is known,
-and keep the client credential in user secrets, never that file or tracked source.
+Local development continues to use loopback-only synthetic personas and an isolated
+development database. Do not point automated tests or synthetic sign-in at the shared
+staging database. Graph client credentials, when locally required for directory
+operations, remain in user secrets rather than tracked configuration.
 
 The parent-owned tracked `appsettings.Development.example.json` remains the
 synthetic **isolated LocalDB** example. Never combine synthetic Development
@@ -223,8 +201,8 @@ New-Item -ItemType Directory -Force $artifacts | Out-Null
 $app = 'sidequest-hackathon-b7ljjkoqcaedc'
 
 # Only after the owner separately approves the two read-only Graph grants:
-$identity = New-SidequestHackathonRegistration -SourceCommit $acceptedSha `
-    -ApplicationUrl "https://$app.azurewebsites.net/" -ReadOnlyGraphConsentApproved
+$identity = New-SidequestDirectoryRegistration -SourceCommit $acceptedSha `
+    -ReadOnlyGraphConsentApproved
 
 $review = Join-Path $artifacts 'application-review.json'
 Invoke-SidequestApplicationDeployment -Mode WhatIf -SourceCommit $acceptedSha `
@@ -332,9 +310,10 @@ After activation, **record actual results**, not just resource provisioning:
 1. HTTPS `/health/live` and `/health/ready` return 200; readiness checks SQL and
    the nonempty exact compiled migration history with the application SQL MI.
    This is the first real app-MI SQL check, not evidence from the operator's SQL login.
-2. Owner completes real Entra sign-in, exact bootstrap/persisted eligibility is
-   checked, and an unassigned account is denied. Confirm production-default
-   workforce tests still reject guests.
+2. An approved Microsoft alias receives a magic code through ACS, signs in once,
+   cannot reuse the code, and retains its linked ownership after restart. Verify
+   throttling, expiry, attempt exhaustion, disabled-account denial and generic
+   responses for unknown or undeliverable aliases.
 3. Upload/read a cover through the app; verify no anonymous blob access. Verify
    encrypted key-ring creation and sign-in continuity after an App Service restart.
 4. Exercise directory search/group expansion with the approved owner, and exclude

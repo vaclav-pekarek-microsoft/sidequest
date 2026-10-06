@@ -16,16 +16,18 @@ internal sealed class ProvisioningTestContext(SqlTestDatabase database) : ISideq
     internal Guid BootstrapObjectId { get; } = Guid.NewGuid();
     internal IReadOnlyCollection<string> Warnings => log.Warnings.ToArray();
 
-    internal ClaimsPrincipal Principal(Guid objectId, string name = "First sign-in", string email = "first@sample.invalid") =>
+    internal ClaimsPrincipal Principal(Guid objectId, string name = "First sign-in", string email = "first@microsoft.com") =>
         new(new ClaimsIdentity(
         [
-            new("tid", TenantId.ToString()), new("oid", objectId.ToString()), new("roles", "Workforce"),
-            new("name", name), new("preferred_username", email)
+            new("tid", TenantId.ToString()), new("oid", objectId.ToString()),
+            new("roles", FoundationAuthenticationSettings.MagicCodeRole),
+            new("name", name), new("preferred_username", email),
+            new(FoundationAuthenticationSettings.MagicCodeClaim, "true")
         ], "TestValidated"));
 
     internal WorkforceAccounts Accounts(IInterceptor? observer = null, DateTimeOffset? now = null) =>
         new(observer is null ? this : new ObservedContextFactory(database, observer),
-            new(false, TenantId, "Workforce", BootstrapObjectId),
+            new(false, TenantId, FoundationAuthenticationSettings.MagicCodeRole, BootstrapObjectId),
             new FixedClock(now ?? FoundationSeed.Now), log);
 
     /// <inheritdoc />

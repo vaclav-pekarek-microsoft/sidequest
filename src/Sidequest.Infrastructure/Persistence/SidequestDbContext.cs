@@ -24,6 +24,8 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
     /// <inheritdoc />
     public DbSet<UserAccount> Users => Set<UserAccount>();
     /// <inheritdoc />
+    public DbSet<MagicSignInChallenge> MagicSignInChallenges => Set<MagicSignInChallenge>();
+    /// <inheritdoc />
     public DbSet<Administrator> Administrators => Set<Administrator>();
     /// <inheritdoc />
     public DbSet<Event> Events => Set<Event>();
@@ -92,6 +94,37 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         return Users.FromSqlInterpolated($"""
             SELECT * FROM [Users] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_Users_TenantId_ObjectId]))
             WHERE [TenantId] = {tenantId} AND [ObjectId] = {objectId}
+            """).AsTracking().SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<List<MagicSignInChallenge>> ReadMagicSignInRequestsForUpdateAsync(
+        string email, DateTimeOffset since, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(email) || email.Length > 320)
+            throw new ArgumentException("A normalized email address is required.", nameof(email));
+        RequireSerializableTransaction();
+
+        return MagicSignInChallenges.FromSqlInterpolated($"""
+            SELECT * FROM [MagicSignInChallenges] WITH (UPDLOCK, HOLDLOCK, INDEX([IX_MagicSignInChallenges_Email_CreatedUtc]))
+            WHERE [Email] = {email} AND [CreatedUtc] >= {since}
+            ORDER BY [CreatedUtc] DESC
+            """).AsTracking().ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<MagicSignInChallenge?> FindMagicSignInChallengeForUpdateAsync(
+        Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (id == Guid.Empty)
+            throw new ArgumentException("A challenge identifier is required.", nameof(id));
+        RequireSerializableTransaction();
+
+        return MagicSignInChallenges.FromSqlInterpolated($"""
+            SELECT * FROM [MagicSignInChallenges] WITH (UPDLOCK, HOLDLOCK)
+            WHERE [Id] = {id}
             """).AsTracking().SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -271,6 +304,16 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         modelBuilder.Entity<UserAccount>().HasIndex(x => new { x.TenantId, x.ObjectId }).IsUnique();
         modelBuilder.Entity<UserAccount>().Property(x => x.Email).HasMaxLength(320);
         modelBuilder.Entity<UserAccount>().Property(x => x.DisplayName).HasMaxLength(256);
+        modelBuilder.Entity<MagicSignInChallenge>().Property(x => x.Email).HasMaxLength(320);
+        modelBuilder.Entity<MagicSignInChallenge>().Property(x => x.CodeSalt).HasMaxLength(32);
+        modelBuilder.Entity<MagicSignInChallenge>().Property(x => x.CodeHash).HasMaxLength(64);
+        modelBuilder.Entity<MagicSignInChallenge>().HasIndex(x => new { x.Email, x.CreatedUtc });
+        modelBuilder.Entity<MagicSignInChallenge>().HasIndex(x => x.ExpiresUtc);
+        modelBuilder.Entity<MagicSignInChallenge>().ToTable(table =>
+        {
+            table.HasCheckConstraint("CK_MagicSignInChallenge_Attempts", "[AttemptCount] >= 0 AND [AttemptCount] <= 5");
+            table.HasCheckConstraint("CK_MagicSignInChallenge_Expiry", "[ExpiresUtc] > [CreatedUtc]");
+        });
         modelBuilder.Entity<Administrator>().HasIndex(x => x.UserId).IsUnique();
         modelBuilder.Entity<EventOwner>().HasIndex(x => new { x.EventId, x.UserId }).IsUnique();
         modelBuilder.Entity<EventMembership>().HasIndex(x => new { x.EventId, x.UserId }).IsUnique();
@@ -338,6 +381,12 @@ public sealed class SidequestDbContext(DbContextOptions<SidequestDbContext> opti
         modelBuilder.Entity<ScheduledWork>().Property(x => x.PayloadJson).HasColumnType("nvarchar(max)").Metadata.SetMaxLength(null);
         modelBuilder.Entity<NotificationDelivery>().Property(x => x.PayloadJson).HasColumnType("nvarchar(max)").Metadata.SetMaxLength(null);
         modelBuilder.Entity<CalendarDeliveryState>().Property(x => x.Payload).HasColumnType("nvarchar(max)").Metadata.SetMaxLength(null);
+    }
+
+    private void RequireSerializableTransaction()
+    {
+        if (Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != IsolationLevel.Serializable)
+            throw new InvalidOperationException("An explicit Serializable transaction is required before reserving authentication state.");
     }
 
     /// <summary>Saves tracked changes and accepts their tracked state without permitting audit/history mutation.</summary>

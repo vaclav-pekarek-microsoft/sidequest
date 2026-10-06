@@ -14,7 +14,7 @@ IF @RuntimeObjectId IS NULL OR @RuntimeObjectId = '00000000-0000-0000-0000-00000
 IF @RuntimeClientId IS NULL OR @RuntimeClientId = '00000000-0000-0000-0000-000000000000'
     THROW 51024, 'Missing runtime application identity.', 1;
 
--- The current EF snapshot contains 26 application tables, plus its history table.
+-- The current EF snapshot contains 27 application tables, plus its history table.
 -- A model change must update this reviewed allowlist, not broaden schema access.
 DECLARE @Tables TABLE (Name sysname PRIMARY KEY);
 INSERT @Tables (Name) VALUES
@@ -22,7 +22,7 @@ INSERT @Tables (Name) VALUES
     (N'BulkOperations'), (N'BulkRecipients'), (N'CalendarDeliveryStates'),
     (N'Events'), (N'EventInvitations'), (N'EventMemberships'),
     (N'MembershipRequests'), (N'EventNotificationPreferences'), (N'EventOwners'),
-    (N'EventStatusHistory'), (N'MediaAssets'), (N'Notifications'),
+    (N'EventStatusHistory'), (N'MagicSignInChallenges'), (N'MediaAssets'), (N'Notifications'),
     (N'NotificationDeliveries'), (N'NotificationPreferences'), (N'NotificationTemplates'),
     (N'OutboxMessages'), (N'Quests'), (N'QuestInvitations'), (N'QuestOwners'),
     (N'Participations'), (N'QuestStatusHistory'), (N'ScheduledWork'), (N'Users');
@@ -100,6 +100,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.MembershipRequests TO [sideq
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.EventNotificationPreferences TO [sidequest_runtime];
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.EventOwners TO [sidequest_runtime];
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.EventStatusHistory TO [sidequest_runtime];
+GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.MagicSignInChallenges TO [sidequest_runtime];
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.MediaAssets TO [sidequest_runtime];
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.Notifications TO [sidequest_runtime];
 GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo.NotificationDeliveries TO [sidequest_runtime];

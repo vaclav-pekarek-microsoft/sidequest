@@ -144,8 +144,7 @@ export async function applySettings(env, context) {
             tenantId: settings.tenantId, subscriptionId: settings.subscriptionId,
             clientId: env.APPLY_PLANNING_CLIENT_ID, resourceGroup: settings.resourceGroup, parametersJson: settings.parametersJson,
         }, context);
-        check(!same(settings.clientId, env.APPLY_PLANNING_CLIENT_ID)
-            && !same(settings.clientId, settings.parameters.workforceClientId), "settings");
+        check(!same(settings.clientId, env.APPLY_PLANNING_CLIENT_ID), "settings");
         return { ...settings, planningClientId: env.APPLY_PLANNING_CLIENT_ID };
     });
 }

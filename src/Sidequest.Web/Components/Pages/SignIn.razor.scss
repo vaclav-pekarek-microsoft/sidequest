@@ -1,0 +1,31 @@
+.magic-code-form {
+    display: grid;
+    gap: .75rem;
+}
+
+.alias-input {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.alias-input input {
+    min-width: 0;
+    flex: 1;
+}
+
+.alias-input span {
+    font-weight: 600;
+}
+
+.validation-message {
+    color: var(--sq-danger);
+    font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+    .alias-input {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

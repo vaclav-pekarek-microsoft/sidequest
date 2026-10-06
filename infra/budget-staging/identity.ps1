@@ -2,21 +2,6 @@
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'application.ps1')
 
-function Get-SidequestLocalRedirectUris {
-    $launchPath = Join-Path $PSScriptRoot '..\..\src\Sidequest.Web\Properties\launchSettings.json'
-    $launch = Get-Content -LiteralPath $launchPath -Raw | ConvertFrom-Json
-    $origins = @($launch.profiles.https.applicationUrl.Split(';') | Where-Object {
-        $candidate = $null
-        [uri]::TryCreate($_, [UriKind]::Absolute, [ref] $candidate) -and
-        $candidate.Scheme -ceq 'https' -and $candidate.Host -ceq 'localhost' -and
-        $candidate.IsLoopback -and $candidate.AbsolutePath -ceq '/' -and
-        -not $candidate.UserInfo -and -not $candidate.Query -and -not $candidate.Fragment
-    })
-    if ($origins.Count -ne 1) { throw 'The accepted HTTPS launch profile must identify one unambiguous localhost origin.' }
-    $root = $origins[0].TrimEnd('/')
-    return @("$root/signin-oidc", "$root/signout-callback-oidc")
-}
-
 function Invoke-SidequestPrivateRequest {
     param(
         [Parameter(Mandatory)] [ValidateSet('GET', 'POST', 'PUT', 'PATCH')] [string] $Method,
@@ -63,29 +48,23 @@ function Invoke-SidequestPrivateRequest {
     }
 }
 
-function New-SidequestHackathonRegistration {
+function New-SidequestDirectoryRegistration {
     <#
     .SYNOPSIS
-    Creates the owner-only single-tenant hackathon registration and explicitly consented read-only Graph grants.
+    Creates the single-tenant directory registration and explicitly consented read-only Graph grants.
     .DESCRIPTION
     This is an owner-executed directory mutation in the approved tenant, not a resource-group resource.
     Requires separate approval of User.Read.All and GroupMember.Read.All application permissions.
     Existing same-name registrations cause a stop instead of silent adoption or privilege expansion.
-    No password, workforce policy, first-user administration or subscription role is created.
+    No interactive sign-in configuration, app role, password, workforce policy, first-user administration or subscription role is created.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $SourceCommit,
-        [Parameter(Mandatory)] [uri] $ApplicationUrl,
         [Parameter(Mandatory)] [switch] $ReadOnlyGraphConsentApproved
     )
     $ErrorActionPreference = 'Stop'
     if (-not $ReadOnlyGraphConsentApproved) { throw 'Explicit approval of both read-only Graph application permissions is required.' }
-    if ($ApplicationUrl.Scheme -cne 'https' -or -not $ApplicationUrl.IsDefaultPort -or
-        $ApplicationUrl.Host -cnotmatch '^sidequest-hackathon-[a-z0-9]{13}\.azurewebsites\.net$' -or
-        $ApplicationUrl.AbsolutePath -cne '/' -or $ApplicationUrl.Query -or $ApplicationUrl.Fragment -or $ApplicationUrl.UserInfo) {
-        throw 'Use the exact HTTPS hackathon App Service root URL.'
-    }
     Assert-SidequestApplicationSource $SourceCommit
     $owner = '1250fe10-b814-4735-801f-ea5a0a4c1219'
     $me = Invoke-SidequestPrivateRequest GET 'https://graph.microsoft.com/v1.0/me?$select=id' 'https://graph.microsoft.com/'
@@ -99,35 +78,20 @@ function New-SidequestHackathonRegistration {
         if ($role.Count -ne 1) { throw 'A required read-only Graph application role could not be verified.' }
         @{ id = $role[0].id; type = 'Role' }
     }
-    $roleId = [guid]::NewGuid().ToString()
-    $root = $ApplicationUrl.AbsoluteUri.TrimEnd('/')
     $application = Invoke-SidequestPrivateRequest POST 'https://graph.microsoft.com/v1.0/applications' 'https://graph.microsoft.com/' @{
         displayName = 'Sidequest Hackathon'
         signInAudience = 'AzureADMyOrg'
-        web = @{
-            redirectUris = @("$root/signin-oidc", "$root/signout-callback-oidc") + @(Get-SidequestLocalRedirectUris)
-            logoutUrl = "$root/signout-oidc"
-            implicitGrantSettings = @{ enableIdTokenIssuance = $true; enableAccessTokenIssuance = $false }
-        }
-        appRoles = @(@{
-            id = $roleId; allowedMemberTypes = @('User'); displayName = 'Hackathon participant'
-            description = 'Explicitly assigned approved hackathon participants, including the approved owner guest.'
-            isEnabled = $true; value = 'Sidequest.Hackathon.Participant'
-        })
         requiredResourceAccess = @(@{ resourceAppId = '00000003-0000-0000-c000-000000000000'; resourceAccess = @($permissions) })
     }
     $service = Invoke-SidequestPrivateRequest POST 'https://graph.microsoft.com/v1.0/servicePrincipals' 'https://graph.microsoft.com/' @{
-        appId = $application.appId; appRoleAssignmentRequired = $true
-    }
-    $null = Invoke-SidequestPrivateRequest POST "https://graph.microsoft.com/v1.0/servicePrincipals/$($service.id)/appRoleAssignedTo" 'https://graph.microsoft.com/' @{
-        principalId = $owner; resourceId = $service.id; appRoleId = $roleId
+        appId = $application.appId; appRoleAssignmentRequired = $false
     }
     foreach ($permission in $permissions) {
         $null = Invoke-SidequestPrivateRequest POST "https://graph.microsoft.com/v1.0/servicePrincipals/$($service.id)/appRoleAssignments" 'https://graph.microsoft.com/' @{
             principalId = $service.id; resourceId = $graph.value[0].id; appRoleId = $permission.id
         }
     }
-    return @{ clientId = $application.appId; applicationObjectId = $application.id; servicePrincipalId = $service.id; participantRoleId = $roleId }
+    return @{ clientId = $application.appId; applicationObjectId = $application.id; servicePrincipalId = $service.id }
 }
 
 function Set-SidequestHackathonCredential {

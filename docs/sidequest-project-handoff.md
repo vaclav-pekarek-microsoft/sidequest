@@ -1,7 +1,7 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-09-18.
+**Last revised:** 2026-10-05.
 **Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
@@ -89,18 +89,26 @@ The application should therefore generally be **Quest-first rather than Event-fi
 
 The application is internal.
 
-Authentication will use:
+Authentication uses a one-time **magic code** sent to a user-supplied Microsoft
+alias at `alias@microsoft.com`.
 
-**Microsoft Entra ID**
-
-Only authenticated users from the intended Microsoft organization/tenant should have access.
+Only a user who proves current control of that Microsoft mailbox may sign in.
+Codes are short-lived, single-use, attempt-limited, and request-throttled. Sidequest
+stores only a salted code hash and challenge metadata, never the plaintext code.
 
 Application-specific permissions should not depend directly on Microsoft Entra roles.
 
 Instead:
 
-- Entra ID = authentication / identity
+- verified `@microsoft.com` mailbox control = authentication
+- a stable Sidequest tenant/object identity = identity and account continuity
 - Sidequest database = application roles and ownership
+
+The deployed magic-code flow replaces interactive Entra sign-in. Local Development
+retains the loopback-only synthetic persona flow. Existing accounts may be linked
+only when exactly one eligible account has the verified Microsoft address; ambiguous,
+disabled, or departed matches fail closed. Microsoft Graph remains a separate,
+optional directory integration and is not an authentication dependency.
 
 ---
 
@@ -1144,7 +1152,7 @@ The scope below is accepted through D34, incorporating the refinements in D01–
 
 | Area | V1 requirement |
 |------|----------------|
-| Identity | Single-tenant Entra sign-in, stable user identity, database-managed administrators |
+| Identity | Microsoft-alias magic-code sign-in, stable tenant/object account identity, database-managed administrators |
 | Events | Draft/publish, listed discovery for all Active Events, duplicate warning, membership requests, direct adds, invitations, individual membership with background group-to-user bulk add/invite, ownership, automatic completion, cancellation and archive |
 | Quests | Draft/publish, Public/Private visibility, invitations, ownership, advisory capacity, follow/join/leave, moderation, history |
 | Experience | Quest-first dashboard, Event overview, responsive accessible forms, explicit local times, installable web app with read-only offline basics for joined Quests |
@@ -1168,11 +1176,14 @@ V1 UI and templates are English; dates and times respect user locale.
 
 ## 49. Authorization and Privacy Contract
 
-**Identity:** use Entra `(tenant ID, object ID)` as the unique external key. Email,
-UPN, and display name are mutable contact/display data, never authorization keys.
-Only configured-tenant workforce accounts are eligible; tenant membership alone
-does not establish employee eligibility. Guest/external exclusion must be enforced
-through an approved Entra assignment/eligibility policy, not an email-domain check.
+**Identity:** retain `(tenant ID, object ID)` as the stable external account key.
+For a verified alias, normalize stored valid `@microsoft.com` addresses before
+comparison and link an existing eligible account only when one normalized alias
+matches unambiguously; otherwise create a stable
+application-issued object ID in the configured account namespace. Email and display
+name remain mutable contact/display data after linking and never grant application
+roles or resource access. Authentication proves control of the addressed Microsoft
+mailbox at sign-in time; persisted eligibility and departure checks still fail closed.
 
 **Roles:** Event manager means any Event owner; Quest manager means any Quest owner.
 All owners of a resource have equal permissions. Roles are additive, but lifecycle restrictions still apply. An Administrator
@@ -1553,9 +1564,13 @@ Use authorized email/display-name labels, never visible user identifiers. This
 does not broaden roster/contact authorization: retain display-name-only attendee
 rosters and owner-only follower/invitation rosters.
 
-Anonymous Home and navigation start Entra sign-in directly, with a centered Home
-button; the explicitly synthetic development profile retains its persona picker.
-Normal authentication completion shows a loader and short progress text. Missing,
+Anonymous Home and navigation open the Microsoft-alias sign-in page, with a centered
+Home button; the explicitly synthetic development profile retains its persona picker.
+The deployed flow requests an alias, reports the same generic result for every validly
+formed request, and then accepts the emailed code. Missing, expired, consumed,
+attempt-exhausted, ambiguous-account, and provider-failure cases fail closed without
+revealing whether an alias or account exists. Normal authentication completion shows
+a loader and short progress text. Missing,
 superseded or unverifiable device/session bindings must still stop automatic
 activation and reveal explicit recovery/continuation. Sign-out semantics are
 unchanged. Installation/privacy guidance and collapsed device tools live in the
@@ -1571,13 +1586,14 @@ Primary flows must work at 360 CSS pixels without horizontal page scrolling.
 
 ## 53. Data and Application Contracts
 
-Use application-generated GUID identifiers and UTC audit timestamps. Entra identity
-is an alternate key, never the internal primary key. Persist aggregates and their audit,
+Use application-generated GUID identifiers and UTC audit timestamps. The stable
+authentication identity is an alternate key, never the internal primary key. Persist aggregates and their audit,
 outbox, and schedule changes transactionally in Azure SQL through EF Core.
 
 | Records | Required contents / constraints |
 |---------|--------------------------------|
-| User, Administrator | Unique tenant/object pair; contact data, first sign-in and last resolution times; unique administrator user ID |
+| User, Administrator | Unique tenant/object pair; verified Microsoft contact data, first sign-in and last resolution times; unique administrator user ID |
+| MagicSignInChallenge | Random challenge ID, normalized Microsoft address, salted code hash, creation/expiry/consumption times and bounded attempt count; no plaintext code |
 | Event, EventOwner | Creator ID for audit only, dates, zone, discovery summary, status, rowversion; unique Event/owner pair in owner relation; no primary-owner or discovery-mode field |
 | EventMembership | Unique Event/user pair, Active/Removed status, concurrency version, activation/removal timestamps and actor; no group-based access |
 | BulkMembershipOperation, BulkMembershipRecipient | Event, actor, add/invite mode, operational source group ID, expansion state, frozen recipient IDs, per-recipient outcome/idempotency key, progress/failure details; no authorization role |
@@ -1758,7 +1774,7 @@ Previously downloaded or emailed content cannot be remotely erased when access i
 | Runtime | .NET 10 LTS, ASP.NET Core Blazor Web App; pin the SDK and compatible packages during foundation |
 | UI | Fluent UI Blazor, subject to the compatibility gate in section 40; static SSR plus Interactive Server where needed |
 | Persistence | EF Core with SQL Server/Azure SQL; one database and migration stream |
-| Authentication | Microsoft.Identity.Web / standard Entra OIDC integration; server-held tokens and application authorization |
+| Authentication | ASP.NET Core protected application cookie plus SQL-backed, ACS-delivered Microsoft-alias magic codes; local synthetic development remains isolated |
 | Directory | Graph adapter for user/group selection and background group expansion only; least-privilege approved tenant permissions, no group authorization |
 | Jobs | ASP.NET Core `BackgroundService`, durable SQL outbox/scheduled work and leased claiming |
 | Images | Private Azure Blob Storage, mediated authorized delivery |
@@ -1866,7 +1882,9 @@ and reconnect behavior. Background work must not depend on a browser circuit sta
 Use HTTPS, secure server-side authentication cookies, antiforgery protection for
 state-changing HTTP endpoints, restrictive cross-origin policy, output encoding, and
 server-side validation. Enforce tenant/resource boundaries for every application entry
-point. Rate-limit invitations, requests, directory search, and uploads.
+point. Rate-limit magic-code requests and verification attempts, invitations, requests,
+directory search, and uploads. Magic-code responses must not reveal account or alias
+existence, and authentication logs must not record aliases, codes, or challenge secrets.
 Directory search returns only minimal identity/contact data to authorized users.
 
 Images accept JPEG, PNG, and WebP only, at most 2 MiB (2,097,152 bytes) and 20 megapixels; validate actual
@@ -2299,6 +2317,8 @@ not V1 release requirements.
 | D42 | 2026-09-18 | Polish the Quest-first UI with green/white-S icons, direct Entra entry, a centered Home sign-in button, loader-first authentication completion, footer installation/privacy tools, compact filters, separate action areas and boxed form sections. Use authorized email/display-name labels instead of user IDs without expanding roster privacy. New Event create/update operations require end date strictly after start and a supported timezone selection; keep legacy inclusive date-window reads and containment. Quests inherit the Event zone without numeric UTC-offset entry; repeated local times require a contextual first/second-occurrence choice. Reveal destructive actions and reasons only when needed. Preserve authorization, version/draft/reconnect guards, explicit device-boundary recovery and the confirmed federated sign-out flow. |
 
 | D43 | 2026-09-18 | Hide routine Reload/Refresh actions on healthy pages; retain error/conflict recovery and progress refresh for unfinished bulk operations. Give native form fields explicit identifiers, including Fluent native proxy controls. Present Event timezones as readable CLDR city groups sorted by their UTC offset on the Event start date, preserving stored IANA identifiers and regional daylight-saving rules rather than replacing zones with fixed offsets. |
+| D44 | 2026-10-05 | Replace deployed interactive Entra sign-in with a Microsoft-alias magic-code flow delivered through the existing Azure Communication Services Email adapter. Retain loopback-only synthetic Development sign-in. Codes expire after 10 minutes, are single-use six-digit cryptographic values, allow at most five verification attempts, and use generic request/verification responses with resend/request throttling. Persist only salted code hashes and challenge metadata in SQL. Preserve existing ownership by linking only a single eligible account whose stored address exactly matches the verified `alias@microsoft.com`; ambiguous, disabled, or departed matches fail closed. New aliases receive stable application-issued object IDs in the configured account namespace. Email control authenticates the user but grants no application role, membership, ownership, or administrator permission. |
+| D45 | 2026-10-06 | Select `vaclav.pekarek` as the initial administrator bootstrap alias. Normalize valid stored Microsoft mailboxes to their lower-case aliases before account-link comparison, so casing and surrounding storage whitespace do not create distinct identities. If multiple user records normalize to the verified alias, authentication fails closed rather than selecting an account. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2317,13 +2337,13 @@ implementation in this documentation session.
 
 | Gate | Needed by | Required evidence |
 |------|-----------|-------------------|
-| Entra tenant/app registration, eligible-account policy, administrator bootstrap identity | Live authentication integration | Tenant owner approval; configured IDs and redirect URIs outside source-controlled secrets |
+| Microsoft alias policy and account namespace | Live authentication integration | Approved `@microsoft.com` mailbox-control policy, configured namespace ID and normalized account-link review; initial administrator bootstrap alias is `vaclav.pekarek` |
 | Organizational departure verification | Live last-owner recovery | Approved process/evidence for confirming the last eligible owner left Microsoft; outages or inactivity are not sufficient |
 | Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |
 | Azure subscription, region, budget, deploy identity, operational owner | Infrastructure provisioning | Approved hosting and access configuration |
 | GitHub Azure-planning environment protections and administrator controls | Before enabling any live Azure planning | Deployment-owner verification of required reviewers, self-review prevention, main-only branch restrictions and disabled administrator bypass; explicit owner-controlled acknowledgement under D39, repeated after relevant protection/identity changes |
-| Email provider/domain, organizer mailbox identity, test recipients | Live notification/calendar integration | Verified sender and Outlook delivery/update/cancellation smoke-test results |
+| Email provider/domain, authentication sender, organizer mailbox identity, test recipients | Live authentication and notification/calendar integration | Verified sender plus Outlook magic-code and delivery/update/cancellation smoke-test results |
 | Retention, residency, employee-data/device access and recovery targets | Before production data | Organizational approval including offline joined/private Quest basics, shared-device disclosure, and documented cleanup/restore procedure |
 
 Except for the bounded subscription, budget and staging provisioning authorization

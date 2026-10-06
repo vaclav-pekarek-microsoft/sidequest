@@ -87,6 +87,11 @@ export async function beforeWebStart() {
         await changeAuthentication(link);
     }, true);
     bindReconnect();
+    const provider = document.querySelector("[data-account-provider]");
+    if (provider) {
+        await changeAuthentication({ href: provider.dataset.accountProvider });
+        return;
+    }
     const completion = document.querySelector("[data-authentication-completion]");
     if (!completion) return;
     try {

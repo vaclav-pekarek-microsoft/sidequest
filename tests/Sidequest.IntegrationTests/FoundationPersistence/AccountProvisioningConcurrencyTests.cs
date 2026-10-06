@@ -48,7 +48,7 @@ public sealed class AccountProvisioningConcurrencyTests
             {
                 await firstGate.Read.Task.WaitAsync(deadline.Token);
                 secondSignIn = context.Accounts(secondGate, FoundationSeed.Now.AddMinutes(1))
-                    .ProvisionAsync(context.Principal(secondObject, "Second sign-in", "second@sample.invalid"), deadline.Token);
+                    .ProvisionAsync(context.Principal(secondObject, "Second sign-in", "second@microsoft.com"), deadline.Token);
                 var waiter = await secondGate.Started.Task.WaitAsync(deadline.Token);
                 blocked = SqlBoundaryCoordinator.WaitForBlockAsync(database, waiter, await firstGate.Started.Task, observation.Token);
                 var observed = await Task.WhenAny(blocked, secondGate.Read.Task).WaitAsync(deadline.Token);
@@ -61,7 +61,7 @@ public sealed class AccountProvisioningConcurrencyTests
                     await using var intermediate = database.CreateContext();
                     committedFirst = await intermediate.Users.AsNoTracking().SingleAsync(x => x.ObjectId == firstObject, deadline.Token);
                     Assert.Equal("First sign-in", committedFirst.DisplayName);
-                    Assert.Equal("first@sample.invalid", committedFirst.Email);
+                    Assert.Equal("first@microsoft.com", committedFirst.Email);
                     Assert.Equal(FoundationSeed.Now, committedFirst.LastSignedInUtc);
                     Assert.Equal(existing ? 0 : 1, await intermediate.Administrators.CountAsync(deadline.Token));
                 }
@@ -94,7 +94,7 @@ public sealed class AccountProvisioningConcurrencyTests
             }
             var second = Assert.Single(accounts, x => x.ObjectId == secondObject);
             Assert.Equal("Second sign-in", second.DisplayName);
-            Assert.Equal("second@sample.invalid", second.Email);
+            Assert.Equal("second@microsoft.com", second.Email);
             Assert.Equal(FoundationSeed.Now.AddMinutes(1), second.LastSignedInUtc);
             if (sameIdentity)
                 Assert.NotEqual(committedFirst.Version, second.Version);
@@ -102,7 +102,7 @@ public sealed class AccountProvisioningConcurrencyTests
             {
                 Assert.Equal(committedFirst.Version, first.Version);
                 Assert.Equal("First sign-in", first.DisplayName);
-                Assert.Equal("first@sample.invalid", first.Email);
+                Assert.Equal("first@microsoft.com", first.Email);
                 Assert.Equal(FoundationSeed.Now, first.LastSignedInUtc);
             }
             Assert.All(accounts, account =>

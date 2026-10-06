@@ -1,6 +1,8 @@
 @using Sidequest.Application.Quests
 @using Sidequest.Domain.Model
+@using Sidequest.Web.Components.Media
 <article class="quest-card @(Item.Participation == ParticipationStatus.Joined ? "quest-card-joined" : "")">
+    <QuestCover AssetId="Item.CoverAssetId" QuestTitle="@Item.Title" />
     <div class="card-meta">
         <a class="event-label" href="@($"/events/{Item.EventId}")">@Item.EventName</a>
         <span class="status-badge status-@Item.Status.ToString().ToLowerInvariant()">@Item.Status</span>

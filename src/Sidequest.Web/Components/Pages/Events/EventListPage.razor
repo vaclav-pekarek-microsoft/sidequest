@@ -7,23 +7,24 @@
 <h1>Events</h1>
 <nav class="page-actions" aria-label="Event actions">
     <a href="/events/create">Create Event</a>
-    <FluentButton Disabled="@Busy" OnClick="@(() => SelectAsync(EventListKind.History))">History</FluentButton>
     <a href="/events/requests">My requests</a>
     <a href="/events/invitations">My invitations</a>
 </nav>
-<section class="section-box compact-filters" aria-label="Event filters">
-    <label>Show
-        <InputSelect name="event-list-view" @bind-Value="kind" @bind-Value:after="FilterAsync" disabled="@Busy">
-            <option value="@EventListKind.Mine">My Events</option>
-            <option value="@EventListKind.Available">Available Events</option>
-            <option value="@EventListKind.History">Event history</option>
-        </InputSelect>
-    </label>
-    @if (Error is not null)
-    {
-        <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
-    }
-</section>
+<fieldset class="event-filters" disabled="@Busy">
+    <legend>Find your Events</legend>
+    <div class="event-filter-actions">
+        <button type="button" class="@(kind == EventListKind.Mine ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.Mine)">My Events</button>
+        <button type="button" class="@(kind == EventListKind.Available ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.Available)">Available Events</button>
+        <button type="button" class="@(kind == EventListKind.History ? "selected" : null)"
+                disabled="@Busy" @onclick="() => SelectAsync(EventListKind.History)">History</button>
+        @if (Error is not null)
+        {
+            <FluentButton OnClick="LoadAsync" Disabled="@Busy">Reload</FluentButton>
+        }
+    </div>
+</fieldset>
 <h2>@(kind == EventListKind.Mine ? "My Events" : kind == EventListKind.Available ? "Available Events" : "Event history")</h2>
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (result is not null)
@@ -58,11 +59,6 @@
     private Task SelectAsync(EventListKind selected)
     {
         kind = selected;
-        page = 1;
-        return LoadAsync();
-    }
-    private Task FilterAsync()
-    {
         page = 1;
         return LoadAsync();
     }

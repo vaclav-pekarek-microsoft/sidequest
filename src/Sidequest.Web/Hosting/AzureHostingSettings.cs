@@ -45,8 +45,8 @@ public sealed class AzureHostingSettings
             throw new InvalidOperationException("Hosting:Azure:Enabled must be true or false.");
         if (!enabled)
             return null;
-        if (environment.IsDevelopment() || !string.Equals(configuration["Authentication:Mode"], "Entra", StringComparison.Ordinal))
-            throw new InvalidOperationException("Azure hosting requires a non-Development host with explicit Entra authentication.");
+        if (environment.IsDevelopment() || !string.Equals(configuration["Authentication:Mode"], "MagicCode", StringComparison.Ordinal))
+            throw new InvalidOperationException("Azure hosting requires a non-Development host with explicit MagicCode authentication.");
         var proxyFlag = configuration["Hosting:Azure:AppServiceProxyEnabled"];
         var proxyEnabled = false;
         if (proxyFlag is not null && !bool.TryParse(proxyFlag, out proxyEnabled))

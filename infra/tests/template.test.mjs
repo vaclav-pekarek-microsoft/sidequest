@@ -105,17 +105,19 @@ test("Network wiring separates delegated application traffic from private data e
 test("Deployment identities and approved retention or address ranges have no invented defaults", () => {
     for (const name of [
         "location", "operationalOwner", "virtualNetworkAddressPrefix", "applicationSubnetAddressPrefix",
-        "privateEndpointSubnetAddressPrefix", "workforceTenantId", "workforceClientId", "workforceRole",
-        "bootstrapAdministratorObjectId", "sqlAdministratorGroupName", "sqlAdministratorGroupObjectId",
+        "privateEndpointSubnetAddressPrefix", "workforceTenantId", "bootstrapAdministratorAlias",
+        "sqlAdministratorGroupName", "sqlAdministratorGroupObjectId",
         "blobRestoreDays", "sqlPointInTimeRetentionDays", "logRetentionDays"
     ]) {
         assert.ok(Object.hasOwn(template.parameters, name), `Missing required parameter ${name}.`);
         assert.equal(Object.hasOwn(template.parameters[name], "defaultValue"), false, `${name} must be explicitly approved.`);
     }
     const settings = resource("Microsoft.Web/sites/config").properties;
-    assert.equal(settings.Authentication__Mode, "Entra");
+    assert.equal(settings.Authentication__Mode, "MagicCode");
     assert.equal(settings.ASPNETCORE_ENVIRONMENT, "Production");
-    assert.ok(settings.AzureAd__ClientSecret.includes("@Microsoft.KeyVault(SecretUri="));
+    assert.equal(settings.Authentication__AccountNamespaceId, "[parameters('workforceTenantId')]");
+    assert.equal(settings.Authentication__BootstrapAdministrator__Alias, "[parameters('bootstrapAdministratorAlias')]");
+    assert.equal(Object.keys(settings).some(key => key.startsWith("AzureAd__")), false);
     assert.ok(settings.ConnectionStrings__Sidequest.includes("Authentication=Active Directory Managed Identity;"));
     assert.ok(settings.ConnectionStrings__Sidequest.includes("Encrypt=True;TrustServerCertificate=False;"));
     assert.equal(settings.Media__Storage__ContainerName, "covers");

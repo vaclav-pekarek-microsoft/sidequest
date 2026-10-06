@@ -1,2 +1,15 @@
-article { min-width: 0; overflow-wrap: anywhere; padding-block: 1rem; }
-h2 { font-size: 1.25rem; }
+.quest-card {
+    min-width: 0;
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid var(--sq-line, #748c84);
+    border-radius: .85rem;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    background: var(--neutral-layer-1, #fff);
+    box-shadow: 0 .25rem 1rem rgb(0 0 0 / 7%);
+}
+
+.quest-card h2 {
+    font-size: 1.25rem;
+}
