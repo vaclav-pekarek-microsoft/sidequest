@@ -5,9 +5,9 @@ targetScope = 'resourceGroup'
 @maxLength(36)
 param clientId string
 
-@description('Optional Microsoft alias that receives the one-time administrator grant when its account is first created.')
+@description('Microsoft alias that receives the one-time administrator grant when its account is first created.')
 @maxLength(64)
-param bootstrapAdministratorAlias string = ''
+param bootstrapAdministratorAlias string = 'vaclav.pekarek'
 
 var location = 'westus3'
 var tenantId = '99e674a6-6773-4f53-90a3-e3ab8c37c856'

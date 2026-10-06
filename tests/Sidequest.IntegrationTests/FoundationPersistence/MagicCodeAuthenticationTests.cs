@@ -68,7 +68,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
             TenantId = factory.TenantId,
             ObjectId = Guid.NewGuid(),
             DisplayName = "Existing display name",
-            Email = "Existing@Microsoft.com"
+            Email = " Existing@Microsoft.com "
         };
         await FoundationSeed.PersistAsync(database, existing);
         var service = CreateService(factory, gateway, settings);
@@ -93,6 +93,43 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         Assert.Equal(5, exhausted.AttemptCount);
         Assert.NotNull(exhausted.ConsumedUtc);
         Assert.False(await read.Users.AnyAsync(x => x.Email == "other@microsoft.com"));
+    }
+
+    /// <summary>Duplicate stored addresses that normalize to one alias fail closed without creating another account.</summary>
+    /// <returns>A task completing after the ambiguous normalized-alias match is rejected.</returns>
+    [Fact]
+    public async Task DuplicateNormalizedAliasesAreAmbiguous()
+    {
+        var factory = new ProvisioningTestContext(database);
+        var gateway = new RecordingEmailGateway();
+        var settings = LoadSettings(factory.TenantId);
+        await FoundationSeed.PersistAsync(database,
+            new UserAccount
+            {
+                TenantId = factory.TenantId,
+                ObjectId = Guid.NewGuid(),
+                DisplayName = "First duplicate",
+                Email = "Duplicate@Microsoft.com"
+            },
+            new UserAccount
+            {
+                TenantId = factory.TenantId,
+                ObjectId = Guid.NewGuid(),
+                DisplayName = "Second duplicate",
+                Email = " duplicate@microsoft.com "
+            });
+        var service = CreateService(factory, gateway, settings);
+
+        var challengeId = await service.RequestAsync("DUPLICATE", default);
+        var principal = await service.VerifyAsync(
+            challengeId, AssertCode(Assert.Single(gateway.Messages).TextBody), default);
+
+        Assert.Null(principal);
+        await using var read = database.CreateContext();
+        Assert.Equal(2, await read.Users.CountAsync(user =>
+            user.TenantId == factory.TenantId && user.Email.ToLower().Contains("duplicate")));
+        Assert.NotNull((await read.MagicSignInChallenges.SingleAsync(
+            challenge => challenge.Id == challengeId)).ConsumedUtc);
     }
 
     private static MagicCodeAuthenticationService CreateService(

@@ -166,6 +166,23 @@ public sealed class AuthenticationTests
             Assert.Equal(expected, MagicAlias.Normalize(alias));
     }
 
+    /// <summary>Verifies stored Microsoft mailboxes normalize before account-link comparisons.</summary>
+    /// <param name="email">Stored mailbox candidate.</param>
+    /// <param name="expected">Normalized mailbox, or null when the candidate is not a Microsoft alias mailbox.</param>
+    [Theory]
+    [InlineData(" Test.Alias@Microsoft.com ", "test.alias@microsoft.com")]
+    [InlineData("test_alias@MICROSOFT.COM", "test_alias@microsoft.com")]
+    [InlineData("test.alias@example.com", null)]
+    [InlineData("test.alias@@microsoft.com", null)]
+    [InlineData(".test@microsoft.com", null)]
+    public void StoredMicrosoftMailboxNormalizationIsExact(string email, string? expected)
+    {
+        var result = MagicAlias.TryNormalizeMailbox(email, out var normalized);
+
+        Assert.Equal(expected is not null, result);
+        Assert.Equal(expected ?? "", normalized);
+    }
+
     /// <summary>Verifies new account object identifiers are stable per namespace and mailbox.</summary>
     [Fact]
     public void MagicCodeObjectIdentityIsStableAndNamespaced()

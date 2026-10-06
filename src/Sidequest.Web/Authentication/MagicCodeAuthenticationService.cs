@@ -100,11 +100,15 @@ public sealed class MagicCodeAuthenticationService(
             return null;
         }
 
-        var matches = await db.Users
-            .Where(user => user.TenantId == settings.TenantId && user.Email.ToLower() == challenge.Email)
-            .Take(2)
+        var namespaceUsers = await db.Users
+            .Where(user => user.TenantId == settings.TenantId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var matches = namespaceUsers
+            .Where(user => MagicAlias.TryNormalizeMailbox(user.Email, out var normalizedEmail) &&
+                string.Equals(normalizedEmail, challenge.Email, StringComparison.Ordinal))
+            .Take(2)
+            .ToList();
         if (matches.Count > 1)
         {
             challenge.ConsumedUtc = now;
@@ -120,7 +124,9 @@ public sealed class MagicCodeAuthenticationService(
         {
             var objectId = CreateObjectId(settings.TenantId, challenge.Email);
             user = await db.FindUserForUpdateAsync(settings.TenantId, objectId, cancellationToken).ConfigureAwait(false);
-            if (user is not null && !string.Equals(user.Email, challenge.Email, StringComparison.OrdinalIgnoreCase))
+            if (user is not null &&
+                (!MagicAlias.TryNormalizeMailbox(user.Email, out var normalizedEmail) ||
+                    !string.Equals(normalizedEmail, challenge.Email, StringComparison.Ordinal)))
             {
                 challenge.ConsumedUtc = now;
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

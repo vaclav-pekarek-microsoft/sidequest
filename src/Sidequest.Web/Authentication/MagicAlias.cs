@@ -29,6 +29,33 @@ public static class MagicAlias
         return address;
     }
 
+    /// <summary>Normalizes a stored Microsoft mailbox for alias comparison.</summary>
+    /// <param name="email">Stored mailbox candidate, including its domain.</param>
+    /// <param name="normalizedEmail">The normalized Microsoft mailbox when the candidate is valid; otherwise an empty string.</param>
+    /// <returns><see langword="true"/> when the candidate is one valid Microsoft mailbox; otherwise <see langword="false"/>.</returns>
+    public static bool TryNormalizeMailbox(string? email, out string normalizedEmail)
+    {
+        normalizedEmail = "";
+        var candidate = email?.Trim();
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        var separator = candidate.IndexOf('@');
+        if (separator <= 0 || separator != candidate.LastIndexOf('@') ||
+            !string.Equals(candidate[(separator + 1)..], Domain, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        try
+        {
+            normalizedEmail = Normalize(candidate[..separator]);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Returns the alias portion of a previously normalized Microsoft mailbox.</summary>
     /// <param name="email">Normalized Microsoft mailbox.</param>
     /// <returns>The local alias portion.</returns>
