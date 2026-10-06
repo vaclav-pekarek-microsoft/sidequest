@@ -271,17 +271,17 @@ test("runtime object and client identities remain distinct GUID parameters rathe
     });
 });
 
-test("runtime DML allowlist exactly matches all 26 EF application tables and excludes history writes", () => {
+test("runtime DML allowlist exactly matches all 27 EF application tables and excludes history writes", () => {
     const snapshot = readFileSync(join(directory, "..", "..", "src", "Sidequest.Infrastructure",
         "Persistence", "Migrations", "SidequestDbContextModelSnapshot.cs"), "utf8");
     const tables = [...snapshot.matchAll(/\.ToTable\("([^"]+)"/g)].map(match => match[1]).sort();
     const grants = [...permissions.matchAll(/GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::dbo\.(\w+) TO \[sidequest_runtime\];/g)]
         .map(match => match[1]).sort();
-    assert.equal(tables.length, 26);
+    assert.equal(tables.length, 27);
     assert.deepEqual(grants, tables);
     const allowlist = permissions.slice(permissions.indexOf("INSERT @Tables"), permissions.indexOf("IF EXISTS"));
     assert.deepEqual([...allowlist.matchAll(/\(N'([^']+)'\)/g)].map(match => match[1]).sort(), tables);
-    assert.equal([...permissions.matchAll(/^GRANT /gm)].length, 27);
+    assert.equal([...permissions.matchAll(/^GRANT /gm)].length, 28);
     assert.match(permissions, /GRANT SELECT ON OBJECT::dbo\.__EFMigrationsHistory TO \[sidequest_runtime\];/);
     assert.doesNotMatch(permissions, /GRANT\s+.*SCHEMA::|db_owner|db_datareader|db_datawriter|CREATE LOGIN|CREATE USER.*WITH SID/i);
 });

@@ -35,22 +35,20 @@ test("Compiled application is disabled B1 Linux with two identities and protecte
     assert.ok(resources.filter(r => r.type.endsWith("/basicPublishingCredentialsPolicies")).every(r => r.properties.allow === false));
 });
 
-test("Compiled settings require single-tenant owner-only Entra and SQL client-ID authentication", () => {
+test("Compiled settings require Microsoft-alias magic codes and SQL client-ID authentication", () => {
     const settings = one("Microsoft.Web/sites/config").properties;
     assert.equal(settings.ASPNETCORE_ENVIRONMENT, "Staging");
-    assert.equal(settings.Authentication__Mode, "Entra");
+    assert.equal(settings.Authentication__Mode, "MagicCode");
     assert.equal(settings.WEBSITE_RUN_FROM_PACKAGE, "1");
     assert.equal(settings.SCM_DO_BUILD_DURING_DEPLOYMENT, "false");
-    assert.equal(settings.Authentication__AdmissionPolicy, "hackathon-assigned-users");
-    assert.equal(settings.Authentication__HackathonParticipants__0, "[parameters('ownerObjectId')]");
-    assert.deepEqual(template.parameters.ownerObjectId.allowedValues, ["1250fe10-b814-4735-801f-ea5a0a4c1219"]);
-    assert.equal(settings.AzureAd__TenantId, "[variables('tenantId')]");
+    assert.equal(settings.Authentication__AccountNamespaceId, "[variables('tenantId')]");
+    assert.equal(settings.Authentication__BootstrapAdministrator__Alias, "[parameters('bootstrapAdministratorAlias')]");
     assert.equal(template.variables.tenantId, "99e674a6-6773-4f53-90a3-e3ab8c37c856");
     assert.match(settings.ConnectionStrings__Sidequest, /Authentication=Active Directory Managed Identity;User Id=/);
     assert.match(settings.ConnectionStrings__Sidequest, /reference\(resourceId\('Microsoft.ManagedIdentity\/userAssignedIdentities', 'sidequest-app'\), '2023-01-31'\)\.clientId/);
     assert.match(settings.ConnectionStrings__Sidequest, /Encrypt=True;TrustServerCertificate=False/);
-    assert.match(settings.AzureAd__ClientSecret, /@Microsoft.KeyVault/);
-    assert.equal(settings.AzureAd__ClientSecret, settings.Directory__Credentials__ClientSecret);
+    assert.match(settings.Directory__Credentials__ClientSecret, /@Microsoft.KeyVault/);
+    assert.equal(Object.keys(settings).some(key => key.startsWith("AzureAd__")), false);
     assert.equal(Object.keys(settings).some(key => key.includes("WorkforcePolicyApproved")), false);
 });
 
@@ -116,7 +114,7 @@ for (const value of ["", "0.0.0.0", "10.0.0.1", "127.0.0.1", "172.16.0.1", "192.
 test("Publishing and permission consent cannot omit explicit owner acknowledgements", () => {
     for (const command of [
         "Publish-SidequestApplication -SourceCommit fake -ApplicationName fake -ZipPath absent -ManifestPath absent -IdentityAndProviderGatesVerified:$false",
-        "New-SidequestHackathonRegistration -SourceCommit fake -ApplicationUrl https://example.invalid -ReadOnlyGraphConsentApproved:$false"
+        "New-SidequestDirectoryRegistration -SourceCommit fake -ReadOnlyGraphConsentApproved:$false"
     ]) {
         const result = ps(`function az { throw 'Azure must not be contacted' }; function gh { throw 'GitHub must not be contacted' }; ${command}`);
         assert.notEqual(result.status, 0);
@@ -133,16 +131,7 @@ test("Credential HTTP guard refuses cross-host and insecure targets before token
     }
 });
 
-test("Registration includes only the accepted localhost HTTPS sign-in and sign-out callbacks", () => {
-    const result = ps("Get-SidequestLocalRedirectUris | ConvertTo-Json -Compress");
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout), [
-        "https://localhost:7193/signin-oidc",
-        "https://localhost:7193/signout-callback-oidc"
-    ]);
-});
-
-test("Registration enables the existing ID-token form-post flow without implicit access tokens", () => {
+test("Directory registration grants only approved application Graph reads without interactive sign-in", () => {
     const result = ps(`
         function Assert-SidequestApplicationSource { }
         function az { throw 'Azure must not be contacted' }
@@ -167,7 +156,7 @@ test("Registration enables the existing ID-token form-post flow without implicit
                 return @{ appId = 'client'; id = 'application' }
             }
             if ($Method -ceq 'POST' -and $Uri.AbsolutePath -ceq '/v1.0/servicePrincipals') {
-                if ($Body.appRoleAssignmentRequired -ne $true) { throw 'Assignment is required' }
+                if ($Body.appRoleAssignmentRequired -ne $false) { throw 'Interactive assignment must remain disabled' }
                 return @{ id = 'service' }
             }
             if ($Method -ceq 'POST' -and $Uri.AbsolutePath -match '^/v1.0/servicePrincipals/service/appRoleAssign') {
@@ -175,11 +164,12 @@ test("Registration enables the existing ID-token form-post flow without implicit
             }
             throw 'Unexpected identity operation'
         }
-        $null = New-SidequestHackathonRegistration -SourceCommit accepted-source -ApplicationUrl https://sidequest-hackathon-b7ljjkoqcaedc.azurewebsites.net/ -ReadOnlyGraphConsentApproved
+        $null = New-SidequestDirectoryRegistration -SourceCommit accepted-source -ReadOnlyGraphConsentApproved
+        $propertyNames = @($script:created.PSObject.Properties.Name)
         if ($script:created.signInAudience -cne 'AzureADMyOrg' -or
-            $script:created.web.implicitGrantSettings.enableIdTokenIssuance -ne $true -or
-            $script:created.web.implicitGrantSettings.enableAccessTokenIssuance -ne $false) {
-            throw 'Registration does not match the ID-token-only sign-in contract'
+            $propertyNames -contains 'web' -or $propertyNames -contains 'appRoles' -or
+            @($script:created.requiredResourceAccess[0].resourceAccess).Count -ne 2) {
+            throw 'Registration exceeds the directory-only Graph contract'
         }
     `);
     assert.equal(result.status, 0, result.stderr);
@@ -388,7 +378,6 @@ const publishHarness = `
     $script:referenceResponse = [pscustomobject]@{
         nextLink = $null
         value = @(
-            @{ name = 'AzureAd__ClientSecret'; properties = @{ status = 'Resolved' } }
             @{ name = 'Directory__Credentials__ClientSecret'; properties = @{ status = 'Resolved' } }
         )
     }
@@ -503,9 +492,9 @@ test("Explicit start failure stops the host before readiness can be accepted", (
 });
 
 for (const [name, mutation] of [
-    ["missing", "$script:referenceResponse.value = @($script:referenceResponse.value[0])"],
+    ["missing", "$script:referenceResponse.value = @()"],
     ["duplicate", "$script:referenceResponse.value += $script:referenceResponse.value[0]"],
-    ["unresolved", "$script:referenceResponse.value[1].properties.status = 'AccessToKeyVaultDenied'"],
+    ["unresolved", "$script:referenceResponse.value[0].properties.status = 'AccessToKeyVaultDenied'"],
     ["incomplete", "$script:referenceResponse.nextLink = 'https://management.azure.com/next'"]
 ]) {
     test(`Publishing rejects ${name} credential reference collections before deployment`, () => {

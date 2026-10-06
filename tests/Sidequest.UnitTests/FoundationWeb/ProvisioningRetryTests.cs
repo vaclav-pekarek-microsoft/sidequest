@@ -349,6 +349,16 @@ public sealed class ProvisioningRetryTests
             return users.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.ObjectId == objectId, cancellationToken);
         }
 
+        /// <inheritdoc />
+        public Task<List<MagicSignInChallenge>> ReadMagicSignInRequestsForUpdateAsync(
+            string email, DateTimeOffset since, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not request magic sign-in codes.");
+
+        /// <inheritdoc />
+        public Task<MagicSignInChallenge?> FindMagicSignInChallengeForUpdateAsync(
+            Guid id, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Account provisioning does not verify magic sign-in codes.");
+
         /// <inheritdoc/>
         /// <remarks>Records a save attempt and returns the configured failure or a successful affected-row count.</remarks>
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -411,6 +421,8 @@ public sealed class ProvisioningRetryTests
 
         /// <inheritdoc/>
         public DbSet<Administrator> Administrators => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public DbSet<MagicSignInChallenge> MagicSignInChallenges => throw new NotSupportedException();
         /// <inheritdoc/>
         public DbSet<Event> Events => throw new NotSupportedException();
         /// <inheritdoc/>

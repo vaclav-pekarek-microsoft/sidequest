@@ -53,9 +53,10 @@ secrets in either object; there are no credential parameters.
 
 | Parameters | Validation/default |
 | --- | --- |
-| `location`, `operationalOwner`, `workforceRole`, `sqlAdministratorGroupName` | Required nonblank strings, preserved exactly; independent approval is still required |
+| `location`, `operationalOwner`, `sqlAdministratorGroupName` | Required nonblank strings, preserved exactly; independent approval is still required |
+| `bootstrapAdministratorAlias` | Required 1-64 character Microsoft alias using ASCII letters, digits, `.`, `-`, or `_`, starting and ending with a letter or digit |
 | `environmentName` | Required, exactly `staging` or `production` |
-| `workforceTenantId`, `workforceClientId`, `bootstrapAdministratorObjectId`, `sqlAdministratorGroupObjectId` | Required nonempty GUIDs |
+| `workforceTenantId`, `sqlAdministratorGroupObjectId` | Required nonempty GUIDs; `workforceTenantId` is retained as the stable Sidequest account namespace |
 | `virtualNetworkAddressPrefix`, `applicationSubnetAddressPrefix`, `privateEndpointSubnetAddressPrefix` | Required canonical IPv4 network CIDRs |
 | `blobRestoreDays` | Required integer, **1–364 inclusive** |
 | `sqlPointInTimeRetentionDays` | Required integer, **1–35 inclusive** |

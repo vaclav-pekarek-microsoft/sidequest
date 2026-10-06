@@ -1,7 +1,7 @@
 namespace Sidequest.Application.Abstractions;
 
 /// <summary>Single-recipient provider message; calendar payload and logical idempotency identity remain stable across retries.</summary>
-/// <param name="Recipient">Trusted directory-resolved recipient address, never an arbitrary user-supplied destination.</param>
+/// <param name="Recipient">Policy-validated recipient address, never an unrestricted arbitrary destination.</param>
 /// <param name="Subject">Rendered email subject.</param>
 /// <param name="HtmlBody">Rendered HTML body with user data safely encoded.</param>
 /// <param name="TextBody">Rendered plain-text alternative.</param>

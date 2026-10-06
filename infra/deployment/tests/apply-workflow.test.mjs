@@ -48,8 +48,7 @@ function environment(overrides = {}) {
             location: "fixture-region", environmentName: "staging", operationalOwner: "Fixture owner",
             virtualNetworkAddressPrefix: "192.0.2.0/24", applicationSubnetAddressPrefix: "192.0.2.0/26",
             privateEndpointSubnetAddressPrefix: "192.0.2.64/26", workforceTenantId: tenant,
-            workforceClientId: "a1b91109-bd9c-436d-a517-aac3e6ec7328", workforceRole: "Fixture.Workforce",
-            bootstrapAdministratorObjectId: "35ba91b7-b5b6-442b-9398-95d025e43ca6",
+            bootstrapAdministratorAlias: "fixture.admin",
             sqlAdministratorGroupName: "Fixture administrators", sqlAdministratorGroupObjectId: "cca0fa8b-4110-44c5-9d4f-7dd6b51e4ff2",
             blobRestoreDays: 7, sqlPointInTimeRetentionDays: 14, logRetentionDays: 30,
         }),
@@ -192,10 +191,10 @@ test("apply reuses exact main first-attempt repository CI and protected environm
     await assert.rejects(metadataGate(context, missing.get, sourceSha, APPLY_WORKFLOW), errorStage("environment"));
 });
 
-test("apply settings deny Reader identity reuse workload-client reuse activation and malformed scope", async () => {
+test("apply settings deny Reader identity reuse activation and malformed scope", async () => {
     const { env } = await fixture();
     for (const override of [
-        { APPLY_CLIENT_ID: planningClient }, { APPLY_CLIENT_ID: JSON.parse(env.APPLY_PARAMETERS).workforceClientId },
+        { APPLY_CLIENT_ID: planningClient },
         { APPLY_CLIENT_ID: "" }, { APPLY_PLANNING_CLIENT_ID: "SECRET" }, { APPLY_RESOURCE_GROUP: "--subscription=SECRET" },
         { APPLY_PARAMETERS: JSON.stringify({ ...JSON.parse(env.APPLY_PARAMETERS), enableApplication: true }) },
         { APPLY_PARAMETERS: JSON.stringify({ ...JSON.parse(env.APPLY_PARAMETERS), environmentName: "production" }) },

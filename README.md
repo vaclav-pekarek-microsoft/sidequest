@@ -94,7 +94,8 @@ Quest editors use the Event zone without numeric UTC-offset fields. A repeated
 daylight-saving time asks for its first or second occurrence; nonexistent times
 are rejected rather than shifted.
 
-Entra sign-in starts directly from navigation or the centered Home button.
+Sign-in starts from navigation or the centered Home button and sends a one-time code
+to the entered Microsoft alias at `alias@microsoft.com`.
 Completion normally shows only a progress loader; verified device/session
 binding still precedes automatic navigation. Installation/privacy guidance and
 collapsed device tools are in the footer. Healthy connection details are hidden;

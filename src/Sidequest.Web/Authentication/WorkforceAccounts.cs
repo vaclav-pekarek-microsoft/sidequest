@@ -19,7 +19,7 @@ public sealed class WorkforceAccounts(
     TimeProvider clock, ILogger<WorkforceAccounts> logger)
 {
     /// <summary>Creates or updates an eligible local account before authentication issues its session cookie.</summary>
-    /// <param name="principal">The validated Entra principal or loopback development principal to admit.</param>
+    /// <param name="principal">The application-issued principal to admit; deployed magic-code provisioning is handled by its challenge transaction.</param>
     /// <param name="cancellationToken">Cancels SQL operations or the bounded delay between retry attempts.</param>
     /// <returns>A task completing after the serializable provisioning transaction commits.</returns>
     /// <exception cref="DomainException">Admission is forbidden, the account is disabled/departed, or persistence rejects the operation.</exception>
@@ -83,7 +83,7 @@ public sealed class WorkforceAccounts(
         user.LastSignedInUtc = now;
     }
 
-    /// <summary>Checks session expiry, workforce claims, and current local eligibility without modifying account data.</summary>
+    /// <summary>Checks session expiry, application-issued admission claims, and current local eligibility without modifying account data.</summary>
     /// <param name="principal">The session principal to revalidate.</param>
     /// <param name="cancellationToken">Cancels the database lookup.</param>
     /// <returns>Whether the unexpired admitted identity maps to an eligible, non-departed local account.</returns>

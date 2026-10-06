@@ -1,7 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 
 namespace Sidequest.Web.Authentication;
 
@@ -23,10 +22,10 @@ public static class AuthenticationEndpoints
         (value.Length == 1 || value[1] is not ('/' or '\\')) &&
         !value.Any(c => char.IsControl(c) || c == '\\') ? value : "/";
 
-    /// <summary>Maps either synthetic sign-in or Entra challenge, plus antiforgery-protected sign-out.</summary>
+    /// <summary>Maps synthetic or Microsoft-alias magic-code sign-in plus antiforgery-protected sign-out.</summary>
     /// <param name="app">The application receiving authentication endpoints.</param>
     /// <param name="settings">Validated startup settings selecting the mutually exclusive authentication mode.</param>
-    /// <remarks>Synthetic sign-in provisions SQL accounts before issuing a cookie. Entra provisioning occurs during token validation.</remarks>
+    /// <remarks>Synthetic sign-in provisions SQL accounts before issuing a cookie. Magic-code verification links or creates the account transactionally.</remarks>
     /// <example>
     /// <code>
     /// app.UseAuthentication();
@@ -61,9 +60,52 @@ public static class AuthenticationEndpoints
         }
         else
         {
-            app.MapGet("/auth/login", (string? returnUrl, string? experienceEpoch) => Results.Challenge(
-                ExperienceAuthentication.CreateProperties(returnUrl, experienceEpoch),
-                [OpenIdConnectDefaults.AuthenticationScheme]));
+            app.MapPost("/auth/magic/request", async (
+                HttpContext context,
+                IAntiforgery antiforgery,
+                MagicCodeAuthenticationService magicCodes) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                var form = await context.Request.ReadFormAsync(context.RequestAborted);
+                Guid challenge;
+                try
+                {
+                    challenge = await magicCodes.RequestAsync(form["alias"], context.RequestAborted);
+                }
+                catch (ArgumentException)
+                {
+                    var invalidExperienceEpoch = Uri.EscapeDataString(form["experienceEpoch"].ToString());
+                    return Results.LocalRedirect(
+                        $"/signin?invalidAlias=true&returnUrl={Uri.EscapeDataString(LocalReturnUrl(form["returnUrl"]))}&experienceEpoch={invalidExperienceEpoch}");
+                }
+                var returnUrl = Uri.EscapeDataString(LocalReturnUrl(form["returnUrl"]));
+                var experienceEpoch = Uri.EscapeDataString(form["experienceEpoch"].ToString());
+                return Results.LocalRedirect(
+                    $"/signin?sent=true&challenge={challenge:D}&returnUrl={returnUrl}&experienceEpoch={experienceEpoch}");
+            });
+
+            app.MapPost("/auth/magic/verify", async (
+                HttpContext context,
+                IAntiforgery antiforgery,
+                MagicCodeAuthenticationService magicCodes) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                var form = await context.Request.ReadFormAsync(context.RequestAborted);
+                _ = Guid.TryParse(form["challenge"], out var challenge);
+                var principal = await magicCodes.VerifyAsync(challenge, form["code"], context.RequestAborted);
+                if (principal is null)
+                {
+                    var returnUrl = Uri.EscapeDataString(LocalReturnUrl(form["returnUrl"]));
+                    var experienceEpoch = Uri.EscapeDataString(form["experienceEpoch"].ToString());
+                    return Results.LocalRedirect(
+                        $"/signin?sent=true&invalidCode=true&challenge={challenge:D}&returnUrl={returnUrl}&experienceEpoch={experienceEpoch}");
+                }
+                WorkforceSession.Stamp(principal,
+                    context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow());
+                var properties = ExperienceAuthentication.CreateProperties(form["returnUrl"], form["experienceEpoch"]);
+                await context.SignInAsync(FoundationAuthenticationSettings.CookieScheme, principal, properties);
+                return Results.LocalRedirect(properties.RedirectUri!);
+            });
         }
 
         app.MapPost("/auth/logout", async (HttpContext context, IAntiforgery antiforgery) =>
@@ -71,11 +113,7 @@ public static class AuthenticationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             var form = await context.Request.ReadFormAsync(context.RequestAborted);
             var destination = form["experienceClearFailed"] == "true" ? "/?deviceClearFailed=true" : "/";
-            if (settings.IsDevelopment)
-                await context.SignOutAsync(FoundationAuthenticationSettings.CookieScheme);
-            else
-                return Results.SignOut(new AuthenticationProperties { RedirectUri = destination },
-                    [FoundationAuthenticationSettings.CookieScheme, OpenIdConnectDefaults.AuthenticationScheme]);
+            await context.SignOutAsync(FoundationAuthenticationSettings.CookieScheme);
             return Results.LocalRedirect(destination);
         });
     }

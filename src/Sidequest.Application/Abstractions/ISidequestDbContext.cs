@@ -15,6 +15,8 @@ public interface ISidequestDbContext : IAsyncDisposable
 {
     /// <summary>Local accounts with external tenant/object keys and current eligibility.</summary>
     public DbSet<UserAccount> Users { get; }
+    /// <summary>Short-lived Microsoft-mailbox authentication challenges without plaintext codes.</summary>
+    public DbSet<MagicSignInChallenge> MagicSignInChallenges { get; }
     /// <summary>Explicit global administrator assignments, without implicit content access.</summary>
     public DbSet<Administrator> Administrators { get; }
     /// <summary>Event aggregates supplying local date windows and inherited Quest zones.</summary>
@@ -87,6 +89,27 @@ public interface ISidequestDbContext : IAsyncDisposable
     /// <exception cref="InvalidOperationException">There is no caller-owned explicit Serializable transaction.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<UserAccount?> FindUserForUpdateAsync(Guid tenantId, Guid objectId, CancellationToken cancellationToken = default);
+    /// <summary>Reads recent challenges for one normalized mailbox while reserving its request-rate range.</summary>
+    /// <param name="email">Normalized lower-case Microsoft mailbox.</param>
+    /// <param name="since">Inclusive UTC cutoff for retained request-rate facts.</param>
+    /// <param name="cancellationToken">Cancels the lookup or lock wait.</param>
+    /// <returns>Tracked challenges created at or after the cutoff, newest first.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction. The indexed range remains write-locked until transaction completion.</remarks>
+    /// <exception cref="ArgumentException">The email is empty or exceeds the persisted limit.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<List<MagicSignInChallenge>> ReadMagicSignInRequestsForUpdateAsync(
+        string email, DateTimeOffset since, CancellationToken cancellationToken = default);
+    /// <summary>Finds one challenge while reserving it for an attempt or consumption update.</summary>
+    /// <param name="id">Random challenge identifier supplied by the requesting browser.</param>
+    /// <param name="cancellationToken">Cancels the lookup or lock wait.</param>
+    /// <returns>The tracked challenge, or null for an unknown identifier.</returns>
+    /// <remarks>Requires a caller-owned Serializable transaction and does not validate, consume, save, or commit the challenge.</remarks>
+    /// <exception cref="ArgumentException">The identifier is empty.</exception>
+    /// <exception cref="InvalidOperationException">There is no caller-owned Serializable transaction.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task<MagicSignInChallenge?> FindMagicSignInChallengeForUpdateAsync(
+        Guid id, CancellationToken cancellationToken = default);
     /// <summary>Finds a private Quest invitation while reserving its exact Quest/account key for insertion or reactivation.</summary>
     /// <param name="questId">Nonempty internal Quest identifier whose parent mutation lock has been acquired.</param>
     /// <param name="userId">Nonempty internal invitee identifier, already checked for current eligibility and Event membership.</param>

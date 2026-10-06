@@ -1,33 +1,31 @@
-.sign-in-progress {
+.magic-code-form {
     display: grid;
-    justify-items: center;
-    gap: 1rem;
-    text-align: center;
+    gap: .75rem;
 }
 
-.sign-in-progress p {
-    margin: 0;
-    font-size: 1.1rem;
+.alias-input {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.alias-input input {
+    min-width: 0;
+    flex: 1;
+}
+
+.alias-input span {
     font-weight: 600;
 }
 
-.loading-spinner {
-    width: 3rem;
-    height: 3rem;
-    border: .25rem solid var(--sq-line);
-    border-top-color: var(--sq-accent);
-    border-radius: 50%;
-    animation: signing-in .8s linear infinite;
+.validation-message {
+    color: var(--sq-danger);
+    font-weight: 600;
 }
 
-@keyframes signing-in {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .loading-spinner {
-        animation: none;
+@media (max-width: 30rem) {
+    .alias-input {
+        align-items: stretch;
+        flex-direction: column;
     }
 }
