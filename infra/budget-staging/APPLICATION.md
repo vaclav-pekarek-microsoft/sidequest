@@ -72,12 +72,13 @@ code delivered through the configured ACS sender:
 | `ASPNETCORE_ENVIRONMENT` | `Staging` |
 | `Authentication:Mode` | `MagicCode` |
 | `Authentication:AccountNamespaceId` | `99e674a6-6773-4f53-90a3-e3ab8c37c856` |
-| `Authentication:BootstrapAdministrator:Alias` | Optional approved Microsoft alias without a domain |
+| `Authentication:BootstrapAdministrator:Alias` | `vaclav.pekarek` |
 | `Delivery:Email:Endpoint` | ACS resource HTTPS endpoint |
 | `Delivery:Email:SenderAddress` | Verified ACS sender |
 
-The account namespace preserves existing tenant/object-backed ownership. A verified
-address links only one eligible matching account; otherwise Sidequest creates a stable
+The account namespace preserves existing tenant/object-backed ownership. Stored
+Microsoft addresses are normalized to aliases before comparison. A verified address
+links only one eligible normalized-alias match; otherwise Sidequest creates a stable
 new object ID in that namespace. Ambiguous, disabled or departed matches fail closed.
 Mailbox control grants no content permission or administrator role. Synthetic
 Development authentication is never enabled publicly.

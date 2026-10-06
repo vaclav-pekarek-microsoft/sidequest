@@ -1177,8 +1177,9 @@ V1 UI and templates are English; dates and times respect user locale.
 ## 49. Authorization and Privacy Contract
 
 **Identity:** retain `(tenant ID, object ID)` as the stable external account key.
-For a verified alias, link an existing eligible account only when its stored
-`@microsoft.com` address has one unambiguous match; otherwise create a stable
+For a verified alias, normalize stored valid `@microsoft.com` addresses before
+comparison and link an existing eligible account only when one normalized alias
+matches unambiguously; otherwise create a stable
 application-issued object ID in the configured account namespace. Email and display
 name remain mutable contact/display data after linking and never grant application
 roles or resource access. Authentication proves control of the addressed Microsoft
@@ -2317,6 +2318,7 @@ not V1 release requirements.
 
 | D43 | 2026-09-18 | Hide routine Reload/Refresh actions on healthy pages; retain error/conflict recovery and progress refresh for unfinished bulk operations. Give native form fields explicit identifiers, including Fluent native proxy controls. Present Event timezones as readable CLDR city groups sorted by their UTC offset on the Event start date, preserving stored IANA identifiers and regional daylight-saving rules rather than replacing zones with fixed offsets. |
 | D44 | 2026-10-05 | Replace deployed interactive Entra sign-in with a Microsoft-alias magic-code flow delivered through the existing Azure Communication Services Email adapter. Retain loopback-only synthetic Development sign-in. Codes expire after 10 minutes, are single-use six-digit cryptographic values, allow at most five verification attempts, and use generic request/verification responses with resend/request throttling. Persist only salted code hashes and challenge metadata in SQL. Preserve existing ownership by linking only a single eligible account whose stored address exactly matches the verified `alias@microsoft.com`; ambiguous, disabled, or departed matches fail closed. New aliases receive stable application-issued object IDs in the configured account namespace. Email control authenticates the user but grants no application role, membership, ownership, or administrator permission. |
+| D45 | 2026-10-06 | Select `vaclav.pekarek` as the initial administrator bootstrap alias. Normalize valid stored Microsoft mailboxes to their lower-case aliases before account-link comparison, so casing and surrounding storage whitespace do not create distinct identities. If multiple user records normalize to the verified alias, authentication fails closed rather than selecting an account. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2335,7 +2337,7 @@ implementation in this documentation session.
 
 | Gate | Needed by | Required evidence |
 |------|-----------|-------------------|
-| Microsoft alias policy, account namespace and administrator bootstrap alias | Live authentication integration | Approved `@microsoft.com` mailbox-control policy, configured namespace ID, initial administrator alias and account-link review |
+| Microsoft alias policy and account namespace | Live authentication integration | Approved `@microsoft.com` mailbox-control policy, configured namespace ID and normalized account-link review; initial administrator bootstrap alias is `vaclav.pekarek` |
 | Organizational departure verification | Live last-owner recovery | Approved process/evidence for confirming the last eligible owner left Microsoft; outages or inactivity are not sufficient |
 | Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |

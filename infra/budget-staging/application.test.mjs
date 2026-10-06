@@ -37,6 +37,7 @@ test("Compiled application is disabled B1 Linux with two identities and protecte
 
 test("Compiled settings require Microsoft-alias magic codes and SQL client-ID authentication", () => {
     const settings = one("Microsoft.Web/sites/config").properties;
+    assert.equal(template.parameters.bootstrapAdministratorAlias.defaultValue, "vaclav.pekarek");
     assert.equal(settings.ASPNETCORE_ENVIRONMENT, "Staging");
     assert.equal(settings.Authentication__Mode, "MagicCode");
     assert.equal(settings.WEBSITE_RUN_FROM_PACKAGE, "1");
