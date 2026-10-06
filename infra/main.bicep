@@ -18,18 +18,15 @@ param applicationSubnetAddressPrefix string
 @minLength(1)
 param privateEndpointSubnetAddressPrefix string
 
-@description('Workforce tenant, OIDC app and explicit bootstrap administrator approved by the tenant owner.')
+@description('Stable account namespace retained from the approved workforce tenant.')
 @minLength(36)
 @maxLength(36)
 param workforceTenantId string
-@minLength(36)
-@maxLength(36)
-param workforceClientId string
+
+@description('Microsoft alias that receives the one-time administrator grant only when its account is first created.')
 @minLength(1)
-param workforceRole string
-@minLength(36)
-@maxLength(36)
-param bootstrapAdministratorObjectId string
+@maxLength(64)
+param bootstrapAdministratorAlias string
 
 @description('Approved Entra administrator GROUP for database bootstrap and schema deployment, not the application identity.')
 @minLength(1)
@@ -403,14 +400,9 @@ resource settings 'Microsoft.Web/sites/config@2024-04-01' = {
   properties: {
     ASPNETCORE_ENVIRONMENT: 'Production'
     SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
-    Authentication__Mode: 'Entra'
-    Authentication__WorkforceRole: workforceRole
-    Authentication__BootstrapAdministrator__TenantId: workforceTenantId
-    Authentication__BootstrapAdministrator__ObjectId: bootstrapAdministratorObjectId
-    AzureAd__TenantId: workforceTenantId
-    AzureAd__Instance: environment().authentication.loginEndpoint
-    AzureAd__ClientId: workforceClientId
-    AzureAd__ClientSecret: '@Microsoft.KeyVault(SecretUri=${vault.properties.vaultUri}secrets/entra-client-secret)'
+    Authentication__Mode: 'MagicCode'
+    Authentication__AccountNamespaceId: workforceTenantId
+    Authentication__BootstrapAdministrator__Alias: bootstrapAdministratorAlias
     AllowedHosts: web.properties.defaultHostName
     ConnectionStrings__Sidequest: 'Server=tcp:${sql.properties.fullyQualifiedDomainName},1433;Database=${database.name};Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;'
     Media__Storage__ServiceUri: storage.properties.primaryEndpoints.blob

@@ -5,13 +5,9 @@ targetScope = 'resourceGroup'
 @maxLength(36)
 param clientId string
 
-@description('Dedicated app-role value, never the production workforce role.')
-@allowed(['Sidequest.Hackathon.Participant'])
-param participantRole string = 'Sidequest.Hackathon.Participant'
-
-@description('Initial owner only. Expanding admission requires an explicit reviewed policy/configuration change.')
-@allowed(['1250fe10-b814-4735-801f-ea5a0a4c1219'])
-param ownerObjectId string = '1250fe10-b814-4735-801f-ea5a0a4c1219'
+@description('Optional Microsoft alias that receives the one-time administrator grant when its account is first created.')
+@maxLength(64)
+param bootstrapAdministratorAlias string = ''
 
 var location = 'westus3'
 var tenantId = '99e674a6-6773-4f53-90a3-e3ab8c37c856'
@@ -238,16 +234,9 @@ resource settings 'Microsoft.Web/sites/config@2024-04-01' = {
     ASPNETCORE_URLS: 'http://0.0.0.0:8080'
     SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
     WEBSITE_RUN_FROM_PACKAGE: '1'
-    Authentication__Mode: 'Entra'
-    Authentication__AdmissionPolicy: 'hackathon-assigned-users'
-    Authentication__HackathonRole: participantRole
-    Authentication__HackathonParticipants__0: ownerObjectId
-    Authentication__BootstrapAdministrator__TenantId: tenantId
-    Authentication__BootstrapAdministrator__ObjectId: ownerObjectId
-    AzureAd__TenantId: tenantId
-    AzureAd__Instance: environment().authentication.loginEndpoint
-    AzureAd__ClientId: clientId
-    AzureAd__ClientSecret: '@Microsoft.KeyVault(SecretUri=${vault.properties.vaultUri}secrets/entra-client-secret)'
+    Authentication__Mode: 'MagicCode'
+    Authentication__AccountNamespaceId: tenantId
+    Authentication__BootstrapAdministrator__Alias: bootstrapAdministratorAlias
     AllowedHosts: web.properties.defaultHostName
     ConnectionStrings__Sidequest: 'Server=tcp:sidequest-sql-b7ljjkoqcaedc${environment().suffixes.sqlServerHostname},1433;Database=sidequest;Authentication=Active Directory Managed Identity;User Id=${sqlIdentity.properties.clientId};Encrypt=True;TrustServerCertificate=False;'
     Directory__Graph__TenantId: tenantId

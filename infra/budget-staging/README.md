@@ -65,7 +65,7 @@ meets the production 300-user and recovery targets.
 - Workforce application admission is separate from deployment ownership. A
   subscription Owner or tenant administrator is not automatically an eligible
   Sidequest user; default workforce guest rejection remains unchanged. The
-  separately approved Staging/local real-Entra Development participant exception is documented
+  deployed Microsoft-alias magic-code authentication policy is documented
   in `APPLICATION.md` and never grants admission merely from deployment ownership.
 
 ## Reviewed local deployment

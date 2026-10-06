@@ -109,61 +109,42 @@ the helper implementation and the standalone synthetic negative controls.
   until a persisted draft can accept uploads. Retain cancellation tokens across
   awaits and reject late query results before starting dependent work after disposal.
 
-## Production / real Entra configuration
-Default mode is Entra; invalid or absent configuration fails startup. There is no fallback.
-Set `Authentication:Mode=Entra`, `AzureAd:TenantId` and `AzureAd:ClientId` to real,
-nonempty tenant-specific GUIDs using deployment configuration (not source control).
-Set `AzureAd:ClientSecret` through user secrets locally or a Key Vault-backed deployment
-secret store. Configure `ConnectionStrings:Sidequest` for SQL Server/Azure SQL and
-`AllowedHosts` for the deployment hostname. Use HTTPS and registered `/signin-oidc`
-and `/signout-callback-oidc` redirect URIs. Issuer/audience validation is Microsoft.Identity.Web's.
-When using real Entra in the Development environment, also override both synthetic
-bootstrap administrator settings with the approved real pair, or set both to empty.
+## Production magic-code configuration
+Default mode is `MagicCode`; invalid or absent account namespace configuration fails
+startup. There is no Entra or synthetic fallback. Set `Authentication:Mode=MagicCode`
+and `Authentication:AccountNamespaceId` to the existing tenant GUID retained as the
+stable Sidequest account namespace. Configure `ConnectionStrings:Sidequest`,
+`AllowedHosts`, HTTPS, persisted Data Protection keys and the existing
+`Delivery:Email` Azure Communication Services sender/endpoint.
 
-Create a **single-tenant workforce** Entra app registration and an explicit app role.
-Set `Authentication:WorkforceRole` to its exact role value, emitted as an ID-token
-`roles` claim; `tid` and `oid` claims are required. Require enterprise-application
-assignment and approve a workforce-only assignment process/policy that excludes
-guests/external identities. **A tenant ID, email domain or role name alone does not
-prove employment.** A guest mistakenly assigned this role is a tenant policy failure.
-Entra owners must verify guest exclusion and role issuance with live accounts before release.
-No Graph call, email check or group membership grants application permissions.
-Keep both the OpenID Connect option and its actual configured JSON token handler's
-inbound claim mapping disabled. Microsoft.Identity.Web replaces the framework
-handler; setting only `MapInboundClaims` on the options does not update that
-replacement. Admission requires the validated raw `tid`, `oid` and `roles` names.
-Exercise the configured handler with signed tokens, not only hand-built principals.
+The sign-in page accepts only a mailbox alias and appends `@microsoft.com`. A
+cryptographically generated six-digit code expires after ten minutes, is single-use,
+permits at most five attempts and is request-throttled to one request per minute and
+five per hour for one normalized mailbox. Store only its salted PBKDF2 hash and
+challenge metadata in SQL. Request and verification responses remain generic; logs
+contain only bounded categories, never aliases, addresses, codes or challenge IDs.
+Provider failures return a decoy challenge rather than disclosing mailbox existence.
 
-The explicitly approved D41 hackathon profile selects
-`Authentication:AdmissionPolicy=hackathon-assigned-users` only in Staging or real-Entra
-Development. It requires both the dedicated participant role and immutable configured
-object-ID allowlist. The same list governs enabled Member/Guest directory eligibility.
-Keep enterprise-app assignment and the list synchronized; removal must revoke local
-eligibility, not merely wait for role claims to expire. Production/default workforce
-rules above are unchanged. Follow `infra\budget-staging\APPLICATION.md` for the exact
-initial owner, permissions, credential and deployment gates.
+Verification links an existing account only when exactly one eligible account in the
+configured namespace has the normalized Microsoft address. Ambiguous, disabled and
+verified-departed matches fail closed. Otherwise derive a stable application object ID
+from the namespace and address and create the account transactionally. Email control
+authenticates the mailbox but grants no Event membership, ownership, application role
+or administrator permission.
 
-Optionally configure both `Authentication:BootstrapAdministrator:TenantId` and
-`:ObjectId`. Only that identity receives an administrator row when first provisioned.
-Bootstrap does not confer Event membership or ownership, and never restores a removed
-administrator on later login. For an already-provisioned account, use the separately
-authorized database administration process. No first-user-wins behavior.
+Optionally configure `Authentication:BootstrapAdministrator:Alias`. Only a newly
+created account for that exact normalized Microsoft address receives an administrator
+row. Bootstrap never restores a removed administrator and does not affect an existing
+linked account. Use the separately authorized database administration process for an
+already-provisioned account. No first-user-wins behavior.
 
-Sign-in provisions/updates `(TenantId,ObjectId)` in a serializable transaction, retrying
-duplicate-key/deadlock/concurrency conflicts at most twice with fresh contexts.
-This includes `DomainException(Conflict)` translated by the persistence boundary;
-Forbidden/Validation outcomes and ineligible accounts are not retried.
-After trusted admission, `FindUserForUpdateAsync` performs the first account lookup
-with an Infrastructure-owned `UPDLOCK,HOLDLOCK` reservation using the existing unique
-tenant/object index. It returns current tracked eligibility and rowversion, protecting
-both absent-key inserts and existing-account updates before shared locks can convert.
-Adjacent empty ranges may wait; unrelated existing identities are not globally locked.
-No schema migration is required, and the reservation neither admits users nor grants roles.
-The integration-owned schema must enforce that unique key. Disabled or verified-departed
-users remain disabled. Request cookies revalidate SQL eligibility on every request;
-circuits revalidate every minute and fail closed on errors. Resource commands still
-recheck persisted access independently. Cookies/circuits last at most one hour without
-sliding renewal; Entra assignment changes require fresh sign-in to fetch fresh role claims.
+The `AddMagicSignInChallenges` migration is required before deployed sign-in. Challenge
+creation and verification use serializable SQL reservations. Existing tenant/object
+keys remain stable so linked ownership and membership are preserved. Disabled or
+verified-departed users remain disabled. Request cookies revalidate SQL eligibility
+on every request; circuits revalidate every minute and fail closed on errors. Resource
+commands still recheck persisted access independently. Cookies/circuits last at most
+one hour without sliding renewal.
 Immediate workforce departure enforcement uses the persisted eligibility/departure fields.
 Persist/protect Data Protection keys for hosting; review affinity/shared keys before scale-out.
 `AddSidequestAzureHosting` is explicitly enabled by `Hosting:Azure:Enabled`; it rejects
@@ -182,12 +163,11 @@ No automatic database creation/migration runs on startup.
 and `(localdb)\MSSQLLocalDB`, database `SidequestDevelopment`, integrated authentication.
 The build copies this template to an ignored `appsettings.Development.json` only when
 that local file is absent; existing settings are never overwritten. Neither file
-is published. A real local Entra configuration may instead target the approved
-hackathon staging SQL database with encrypted Azure-credential authentication.
-That shared database is not a test fixture; keep all automated tests isolated.
+is published. The shared staging SQL database is not a test fixture; keep all automated
+tests isolated.
 This mode additionally requires environment **Development** and loopback connections
 (including circuit traffic). Do not proxy it publicly or enable forwarded headers for it.
-No synthetic login endpoint is mapped in Entra/Production. Cookies are mode-isolated.
+No synthetic login endpoint is mapped in MagicCode/Production. Cookies are mode-isolated.
 HTTP localhost is supported for this mode; production cookies always require HTTPS.
 
 Synthetic tenant: `11111111-1111-4111-8111-111111111111`.
@@ -216,9 +196,10 @@ civil start time (UTC instant/ID ties). Reuse existing membership/private/draft
 authorization and reconnect handling. Full cards remain page-bounded.
 Compatibility and Switch account links are intentionally absent from navigation;
 the direct diagnostic route and protected sign-out still exist.
-Keep a single Quests navigation link before Events. Direct Entra links must use
-the shared `SignInLink` and retain the `data-authentication-change` handshake;
-synthetic mode alone uses the persona picker. Completion hides its continuation
+Keep a single Quests navigation link before Events. Sign-in links open the static
+`/signin` page; native magic-code request and verification forms own the
+`data-authentication-change` handshake. Synthetic mode uses the persona picker.
+Completion hides its continuation
 while verification is pending, then reveals it on a missing/failed/superseded
 binding rather than bypassing the device-generation boundary. The one connection
 bridge lives in the footer's collapsed device tools. Hide only healthy connection
@@ -244,8 +225,8 @@ identified too. Repeated local-time controls need distinct instance identifiers.
 
 `/foundation` is an authenticated compatibility screen (not product logic): Fluent
 4.14.4 with .NET 10, text-field binding, EditForm/DataAnnotations errors, modal dialog
-and close feedback. No database writes occur from this screen. Fluent is MIT licensed;
-Microsoft.Identity.Web 4.14.2 and EF Core 10.0.12 are MIT licensed. bUnit verifies
+and close feedback. No database writes occur from this screen. Fluent and EF Core
+10.0.12 are MIT licensed. bUnit verifies
 empty/overlong validation, 1/80-character binding and opening/closing the real Fluent
 components. Live local HTTP verification also exercised SQL-backed Alice sign-in,
 authenticated SSR, antiforgery rejection and logout. Actual Edge keyboard/mobile
@@ -255,7 +236,7 @@ bypass was attempted. Subsequent isolated Linux Chromium CI
 passed all seven M1 browser journeys: four persona sign-ins with exact Fluent dialog
 content, unauthenticated redirect, 360px keyboard/no-overflow interaction, and logout.
 These historical compatibility checks do not establish full release acceptance
-or real-Entra verification.
+or live magic-code email verification.
 `/health/live` is anonymous process liveness; `/health/ready` checks SQL access and
 ordered applied migration history against the nonempty compiled migration set.
 Missing, pending or unknown migrations are unready; this does not detect manual

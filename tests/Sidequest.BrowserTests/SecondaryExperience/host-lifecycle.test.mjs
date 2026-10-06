@@ -157,21 +157,6 @@ test("A storage failure is visible and cannot prevent sign-out or pretend cleari
     assert.match(state.warning.textContent, /clear this site's data/);
 });
 
-test("Entra and account-switch navigation await clearing and carry only the non-secret attempt generation", async () => {
-    const state = await host();
-    await state.module.beforeWebStart();
-    await state.listeners.get("click")({
-        target: { closest() { return { href: "http://localhost/auth/login?returnUrl=%2Fquests" }; } },
-        preventDefault() {}
-    });
-    assert.deepEqual(state.navigation, ["http://localhost/auth/login?returnUrl=%2Fquests&experienceEpoch=attempt-epoch"]);
-    assert.deepEqual(state.completions, []);
-
-    const automatic = await host({ provider: "/auth/login?returnUrl=%2Fquests" });
-    await automatic.module.beforeWebStart();
-    assert.deepEqual(automatic.navigation, ["http://localhost/auth/login?returnUrl=%2Fquests&experienceEpoch=attempt-epoch"]);
-});
-
 test("Ordinary pages and missing completion markers never activate a new authentication epoch", async () => {
     const ordinary = await host();
     await ordinary.module.beforeWebStart();

@@ -1,11 +1,11 @@
 namespace Sidequest.Domain.Model;
 
-/// <summary>Local account keyed externally by the Entra tenant/object pair, with independently checked eligibility.</summary>
+/// <summary>Local account keyed externally by a stable Sidequest namespace/object pair, with independently checked eligibility.</summary>
 public sealed class UserAccount : Entity
 {
-    /// <summary>Entra tenant identifier forming the external identity key with <see cref="ObjectId"/>.</summary>
+    /// <summary>Stable account namespace forming the external identity key with <see cref="ObjectId"/>.</summary>
     public Guid TenantId { get; set; }
-    /// <summary>Entra user object identifier, distinct from the inherited internal identifier.</summary>
+    /// <summary>Stable external object identifier, distinct from the inherited internal identifier.</summary>
     public Guid ObjectId { get; set; }
     /// <summary>Mutable directory display label; never an authorization key.</summary>
     public string DisplayName { get; set; } = "";

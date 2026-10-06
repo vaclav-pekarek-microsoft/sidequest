@@ -6,7 +6,8 @@ const messages = Object.freeze({
     shape: "Provide plain JSON objects with only the documented fields and scalar parameter values.",
     keys: "Remove unexpected fields; use only the documented request, parameter and account-context keys.",
     required: "Supply every required template parameter and both account-context identifiers.",
-    text: "Supply nonblank strings for location, operationalOwner, workforceRole and sqlAdministratorGroupName.",
+    text: "Supply nonblank strings for location, operationalOwner and sqlAdministratorGroupName.",
+    alias: "Supply a Microsoft alias of 1-64 ASCII letters, digits, periods, hyphens or underscores, starting and ending with a letter or digit.",
     guid: "Supply nonempty hyphenated GUIDs for all identity and account-context identifiers.",
     synthetic: "Replace known repository synthetic identifiers with independently verified deployment identifiers.",
     tenant: "Use an authenticated deployment account in the same tenant as workforceTenantId.",
@@ -52,6 +53,11 @@ function text(value) {
     if (typeof value !== "string" || value.trim().length === 0) fail("text");
 }
 
+function alias(value) {
+    if (typeof value !== "string"
+        || !/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/.test(value)) fail("alias");
+}
+
 function enumeration(allowed) {
     return value => {
         if (!allowed.includes(value)) fail("enum");
@@ -86,9 +92,7 @@ const rules = Object.freeze({
     applicationSubnetAddressPrefix: { check: cidr },
     privateEndpointSubnetAddressPrefix: { check: cidr },
     workforceTenantId: { check: guid },
-    workforceClientId: { check: guid },
-    workforceRole: { check: text },
-    bootstrapAdministratorObjectId: { check: guid },
+    bootstrapAdministratorAlias: { check: alias },
     sqlAdministratorGroupName: { check: text },
     sqlAdministratorGroupObjectId: { check: guid },
     blobRestoreDays: { check: retention(364) },
@@ -98,6 +102,11 @@ const rules = Object.freeze({
     appServiceSku: { check: enumeration(["P1v3", "P2v3", "P3v3"]), defaultValue: "P1v3" },
     sqlSku: { check: enumeration(["S0", "S1", "S2", "S3"]), defaultValue: "S1" },
 });
+
+export function validateIdentityGuid(value) {
+    guid(value);
+    return value;
+}
 
 function record(value, allowedKeys, scalar = false) {
     if (value === null || typeof value !== "object"

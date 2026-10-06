@@ -21,9 +21,7 @@ function parameters(overrides = {}) {
         applicationSubnetAddressPrefix: "192.0.2.0/26",
         privateEndpointSubnetAddressPrefix: "192.0.2.64/26",
         workforceTenantId: tenantId,
-        workforceClientId: "621715c8-b2a0-4b0d-bb1a-a2500733b4f9",
-        workforceRole: "Test.Workforce",
-        bootstrapAdministratorObjectId: "35ba91b7-b5b6-442b-9398-95d025e43ca6",
+        bootstrapAdministratorAlias: "test.admin",
         sqlAdministratorGroupName: "Test only administrators",
         sqlAdministratorGroupObjectId: "cca0fa8b-4110-44c5-9d4f-7dd6b51e4ff2",
         blobRestoreDays: 7,
@@ -89,12 +87,22 @@ test("missing required data never receives invented defaults", () => {
 });
 
 test("approved descriptive data must be explicit nonblank strings", () => {
-    for (const key of ["location", "operationalOwner", "workforceRole", "sqlAdministratorGroupName"]) {
+    for (const key of ["location", "operationalOwner", "sqlAdministratorGroupName"]) {
         for (const value of ["", " \t\r\n", 1, false]) {
             rejects(() => buildArmParameters(parameters({ [key]: value }), accountContext), "text");
         }
         const value = "Case-sensitive supplied value";
         assert.equal(buildArmParameters(parameters({ [key]: value }), accountContext).parameters[key].value, value);
+    }
+});
+
+test("bootstrap administrator alias matches the deployed Microsoft mailbox contract", () => {
+    for (const value of ["a", "Alias_1", "a.b-c_d", "A".repeat(64)]) {
+        assert.equal(buildArmParameters(parameters({ bootstrapAdministratorAlias: value }), accountContext)
+            .parameters.bootstrapAdministratorAlias.value, value);
+    }
+    for (const value of ["", ".alias", "alias.", "-alias", "alias-", "alias@microsoft.com", "a b", "équipe", "A".repeat(65), 1, false]) {
+        rejects(() => buildArmParameters(parameters({ bootstrapAdministratorAlias: value }), accountContext), "alias");
     }
 });
 
@@ -148,7 +156,7 @@ test("application activation and truthy or false-like coercion are rejected", ()
 });
 
 const guidFields = [
-    "workforceTenantId", "workforceClientId", "bootstrapAdministratorObjectId", "sqlAdministratorGroupObjectId",
+    "workforceTenantId", "sqlAdministratorGroupObjectId",
 ];
 
 function withIdentifier(key, value) {
@@ -173,14 +181,15 @@ test("all identity and account identifiers require canonical nonempty GUID synta
 test("tenant equality ignores hexadecimal case without rewriting GUID values", () => {
     const input = parameters({
         workforceTenantId: tenantId.toUpperCase(),
-        workforceClientId: parameters().workforceClientId.toUpperCase(),
     });
     const result = buildArmParameters(input, accountContext);
     assert.deepEqual(result, expectedDocument(input));
 });
 
 test("deployment tenant mismatch fails even when all GUIDs have valid syntax", () => {
-    rejects(() => buildArmParameters(parameters(), { ...accountContext, tenantId: parameters().workforceClientId }), "tenant");
+    rejects(() => buildArmParameters(parameters(), {
+        ...accountContext, tenantId: parameters().sqlAdministratorGroupObjectId
+    }), "tenant");
 });
 
 test("known synthetic tenant and every persona ID are rejected in every GUID position", () => {
@@ -380,9 +389,11 @@ test("actual CLI invalid JSON UTF-8 shapes and unknown keys fail without sensiti
 
 test("actual CLI semantic failures emit only actionable errors and exit one", () => {
     cliFailure(JSON.stringify({ parameters: {}, accountContext }), "required");
-    cliFailure(JSON.stringify(request({ workforceClientId: "SECRET" })), "guid");
-    cliFailure(JSON.stringify(request({ bootstrapAdministratorObjectId: "22222222-2222-4222-8222-222222222221" })), "synthetic");
-    cliFailure(JSON.stringify({ ...request(), accountContext: { ...accountContext, tenantId: parameters().workforceClientId } }), "tenant");
+    cliFailure(JSON.stringify(request({ workforceTenantId: "SECRET" })), "guid");
+    cliFailure(JSON.stringify(request({ bootstrapAdministratorAlias: "alias@microsoft.com" })), "alias");
+    cliFailure(JSON.stringify({ ...request(), accountContext: {
+        ...accountContext, tenantId: parameters().sqlAdministratorGroupObjectId
+    } }), "tenant");
     cliFailure(JSON.stringify(request({ enableApplication: true })), "activation");
     cliFailure(JSON.stringify(request({ blobRestoreDays: 365 })), "retention");
     cliFailure(JSON.stringify(request({ sqlSku: "SECRET" })), "enum");
