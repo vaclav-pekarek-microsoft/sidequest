@@ -4,7 +4,7 @@ using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Operations;
 
-/// <summary>Registers feature-owned dashboard and per-circuit experience coordination without changing shared services.</summary>
+/// <summary>Registers feature-owned home projection and per-circuit experience coordination without changing shared services.</summary>
 public static class ExperienceRegistration
 {
     /// <summary>Adds the application projection and mutable circuit-scoped coordinator.</summary>
@@ -12,7 +12,7 @@ public static class ExperienceRegistration
     /// <returns>The same collection for composition.</returns>
     public static IServiceCollection AddSidequestExperience(this IServiceCollection services)
     {
-        services.AddScoped<DashboardService>();
+        services.AddScoped<QuestHomeService>();
         services.AddScoped<ExperienceCoordinator>();
         services.AddScoped<CircuitHandler, ExperienceCircuitHandler>();
         services.AddDataProtection();

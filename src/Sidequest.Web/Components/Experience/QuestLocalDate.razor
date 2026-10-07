@@ -1,0 +1,15 @@
+@using NodaTime
+@using Sidequest.Domain.Rules
+
+<time datetime="@StartUtc.ToString("O")">@LocalDate</time>
+
+@code {
+    /// <summary>UTC Quest start instant converted to the inherited Event time zone.</summary>
+    [Parameter] public DateTimeOffset StartUtc { get; set; }
+
+    /// <summary>IANA time zone inherited from the parent Event.</summary>
+    [Parameter, EditorRequired] public string ZoneId { get; set; } = "Etc/UTC";
+
+    private string LocalDate =>
+        Instant.FromDateTimeOffset(StartUtc).InZone(TimeRules.Zone(ZoneId)).Date.ToString("yyyy-MM-dd", null);
+}

@@ -11,6 +11,7 @@ namespace Sidequest.Web.Components.Pages.Quests;
 /// <summary>Owns authorized, paginated Quest views and clears protected results after failed reauthorization.</summary>
 public partial class QuestList : IAsyncDisposable
 {
+    private const int PageSize = 12;
     private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
     [
         (QuestListKind.Board, "All Quests"),
@@ -99,7 +100,7 @@ public partial class QuestList : IAsyncDisposable
                 nextZone = parent.TimeZoneId;
             }
             var dates = QuestDateFilterFactory.FromDates(fromDate, throughDate, nextZone);
-            var next = await Quests.ListAsync(kind, eventId, new PageRequest(page), dates, lifetime.Token);
+            var next = await Quests.ListAsync(kind, eventId, new PageRequest(page, PageSize), dates, lifetime.Token);
             if (requestVersion != navigationVersion || lifetime.IsCancellationRequested)
                 return;
             events = nextEvents;

@@ -1,0 +1,49 @@
+@using Sidequest.Application.Quests
+
+<section class="quest-home-section" aria-labelledby="quest-invitations-title">
+    <h2 id="quest-invitations-title">Invitations</h2>
+    @if (Items.Count == 0)
+    {
+        <p class="text-muted">No Quest invitations need your response.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="quest-invitation-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Event</th>
+                        <th scope="col">Quest name</th>
+                        <th scope="col">Quest date</th>
+                        <th scope="col"><span class="visually-hidden">Action</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Items)
+                    {
+                        <tr @key="item.Id">
+                            <td>@item.EventName</td>
+                            <td><a href="@($"/quests/{item.Id}")">@item.Title</a></td>
+                            <td><QuestLocalDate StartUtc="item.StartUtc" ZoneId="@item.TimeZoneId" /></td>
+                            <td>
+                                <FluentButton Appearance="Appearance.Accent" Disabled="@Busy"
+                                              OnClick="@(() => JoinRequested.InvokeAsync(item.Id))">Join</FluentButton>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    /// <summary>Active private invitations that the actor has not already joined.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<QuestSummary> Items { get; set; } = [];
+
+    /// <summary>Whether another home-page operation temporarily disables Join actions.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Requests joining the selected invited Quest.</summary>
+    [Parameter] public EventCallback<Guid> JoinRequested { get; set; }
+}

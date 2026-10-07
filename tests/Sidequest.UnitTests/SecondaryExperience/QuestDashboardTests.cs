@@ -1,7 +1,7 @@
 using Bunit;
+using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Sidequest.Application.Abstractions;
-using Sidequest.Application.Events;
 using Sidequest.Application.Experience;
 using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
@@ -11,95 +11,150 @@ using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.SecondaryExperience;
 
-/// <summary>Tests dashboard orchestration at its real application boundary, including asynchronous loading and access loss after reconnect.</summary>
+/// <summary>Tests signed-in home orchestration, reconnect reauthorization, and invitation participation.</summary>
 public sealed class QuestDashboardTests : BunitContext
 {
-    /// <summary>Stubs only the browser bridge; actual dashboard, filters, cards and projection orchestration remain under test.</summary>
+    private static readonly DateTimeOffset Now = new(2026, 7, 15, 10, 0, 0, TimeSpan.Zero);
+
+    /// <summary>Registers the real home projection and per-circuit coordinator for each isolated renderer.</summary>
     public QuestDashboardTests()
     {
-        ComponentFactories.AddStub<ConnectionStatus>();
         Services.AddLogging();
+        Services.AddFluentUIComponents();
         Services.AddScoped<ExperienceCoordinator>();
+        Services.AddSingleton<TimeProvider>(new FixedClock(Now));
     }
 
-    /// <summary>A delayed authorized page shows loading; reconnect reauthorization removes previously displayed protected content on denial.</summary>
-    /// <returns>Completion after loading, exact content, cleared-result and safe-error assertions.</returns>
+    /// <summary>A delayed authorized projection shows loading; reconnect denial removes previously displayed protected content.</summary>
+    /// <returns>Completion after loading, exact content, cleared-result, and failure assertions.</returns>
     [Fact]
-    public async Task ReconnectReauthorizationClearsProtectedCardsAndRendersFailure()
+    public async Task ReconnectReauthorizationClearsProtectedQuestDataOnFailure()
     {
         var pending = new TaskCompletionSource<PageResult<QuestSummary>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var deny = false;
-        var calls = 0;
-        Register(() =>
+        var boardCalls = 0;
+        Register((kind, _) =>
         {
-            calls++;
-            return deny ? Task.FromException<PageResult<QuestSummary>>(new DomainException(ErrorCode.NotFound, "PRIVATE FAILURE")) : pending.Task;
+            if (kind == QuestListKind.Invited)
+                return Task.FromResult(Page());
+            boardCalls++;
+            return deny
+                ? Task.FromException<PageResult<QuestSummary>>(new DomainException(ErrorCode.NotFound, "Quest data is unavailable or access has changed."))
+                : pending.Task;
         });
+
         var component = Render<QuestDashboard>();
-        Assert.Contains("Loading authorized Quests", component.Markup);
-        var quest = new QuestSummary(Guid.NewGuid(), Guid.NewGuid(), "Event", "AUTHORIZED TITLE", "Room",
-            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), "Etc/UTC", QuestStatus.Active,
-            QuestVisibility.Public, 2, 1, null, ParticipationStatus.Joined, false, false, "", null);
-        pending.SetResult(new([quest], 1, 1, 25));
+        Assert.Contains("Loading Quest overview", component.Markup);
+        var quest = Summary("AUTHORIZED TITLE", Now.AddHours(-1), Now.AddHours(1), ParticipationStatus.Joined);
+        pending.SetResult(Page(quest));
         component.WaitForAssertion(() => Assert.Contains("AUTHORIZED TITLE", component.Markup));
+
         deny = true;
-        await component.InvokeAsync(() => Services.GetRequiredService<ExperienceCoordinator>().ReportConnectionAsync(true, "Europe/Prague"));
-        component.WaitForAssertion(() => Assert.Contains("unavailable or access has changed", component.Find("[role=alert]").TextContent));
-        Assert.DoesNotContain("AUTHORIZED TITLE", component.Markup);
-        Assert.DoesNotContain("PRIVATE FAILURE", component.Markup);
-        Assert.Equal(2, calls);
+        await component.InvokeAsync(() => Services.GetRequiredService<ExperienceCoordinator>()
+            .ReportConnectionAsync(true, "Europe/Prague"));
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Contains("unavailable or access has changed", component.Find("[role=alert]").TextContent);
+            Assert.DoesNotContain("AUTHORIZED TITLE", component.Markup);
+        });
+        Assert.Equal(2, boardCalls);
     }
 
-    /// <summary>An authorized empty result is distinct from an error, retains Invited navigation and disables next-page navigation.</summary>
+    /// <summary>The home renders exact statistics, all current Quests, top upcoming categories, and no filter or shortcut controls.</summary>
     [Fact]
-    public void EmptyDashboardShowsUsefulNavigationWithoutFabricatedCards()
+    public void HomeRendersFocusedOverviewWithoutDashboardFilters()
     {
-        Register(() => Task.FromResult(new PageResult<QuestSummary>([], 0, 1, 25)));
-        var component = Render<QuestDashboard>();
-        Assert.Contains("No Quests in this view", component.Markup);
-        Assert.Empty(component.FindAll("[role=alert]"));
-        Assert.Empty(component.FindAll("article"));
-        var eventLink = Assert.Single(component.FindAll("a"),
-            link => link.TextContent.Trim() == "Find and join an Event");
-        Assert.Equal("/events", eventLink.GetAttribute("href"));
-        Assert.Equal("/quests?view=Invited", component.Find("a[href*='Invited']").GetAttribute("href"));
-        Assert.Equal("true", component.FindAll("button").Single(button => button.TextContent == "Board").GetAttribute("aria-pressed"));
-        Assert.Equal("false", component.FindAll("button").Single(button => button.TextContent == "Upcoming Joined").GetAttribute("aria-pressed"));
-        Assert.True(component.FindAll("button").Single(b => b.TextContent == "Next Quests").HasAttribute("disabled"));
-    }
+        var active = Summary("Happening now", Now.AddMinutes(-30), Now.AddMinutes(30), ParticipationStatus.None);
+        var joined = Summary("Joined next", Now.AddHours(1), Now.AddHours(2), ParticipationStatus.Joined);
+        var followed = Summary("Following next", Now.AddHours(2), Now.AddHours(3), ParticipationStatus.Following);
+        var past = Summary("Already done", Now.AddHours(-3), Now.AddHours(-2), ParticipationStatus.Joined) with
+        {
+            Status = QuestStatus.Completed
+        };
+        Register((kind, _) => Task.FromResult(kind == QuestListKind.Board
+            ? Page(active, joined, followed, past)
+            : Page()));
 
-    /// <summary>The signed-in Home view requests the event-scoped board rather than hiding unjoined Quests behind the old Joined default.</summary>
-    [Fact]
-    public void HomeDefaultsToAuthorizedBoardAndRendersJoinedCardClasses()
-    {
-        QuestListKind? requested = null;
-        var quest = new QuestSummary(Guid.NewGuid(), Guid.NewGuid(), "Approved Event", "Shared activity", "Garden",
-            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), "Europe/Prague", QuestStatus.Active,
-            QuestVisibility.Public, 2, 0, null, ParticipationStatus.Joined, false, false, "", null);
-        Register(() => Task.FromResult(new PageResult<QuestSummary>([quest], 1, 1, 25)), kind => requested = kind);
         var component = Render<QuestDashboard>();
-        Assert.Equal(QuestListKind.Board, requested);
-        Assert.Equal("Your Quest board", component.Find(".dashboard-results h2").TextContent);
-        Assert.Single(component.FindAll(".quest-board .quest-card-joined"));
-        Assert.Equal("Shared activity", component.Find(".quest-title").TextContent);
-        Assert.Contains("Joined first", component.Find(".result-caption").TextContent);
+
+        Assert.Equal(new[] { "1 / 2", "1", "1" },
+            component.FindAll(".quest-home-statistics strong").Select(item => item.TextContent.Trim()));
+        Assert.Contains("Happening now", component.Markup);
+        Assert.Contains("Joined next", component.Markup);
+        Assert.Contains("Following next", component.Markup);
+        Assert.DoesNotContain("Find your Quests", component.Markup);
+        Assert.DoesNotContain("Dashboard shortcuts", component.Markup);
+        Assert.Empty(component.FindAll("select"));
         Assert.Empty(component.FindAll("[style]"));
     }
 
-    private void Register(Func<Task<PageResult<QuestSummary>>> list, Action<QuestListKind>? queried = null)
+    /// <summary>Joining an invitation executes the Quest command, reloads the projection, and removes the completed invitation row.</summary>
+    /// <returns>Completion after one Join command and refreshed invitation assertions.</returns>
+    [Fact]
+    public async Task InvitationJoinReloadsHomeAndRemovesInvitation()
+    {
+        var invitation = Summary("Invitation", Now.AddHours(1), Now.AddHours(2), ParticipationStatus.None);
+        var joined = false;
+        Register(
+            (kind, _) => Task.FromResult(kind switch
+            {
+                QuestListKind.Board when joined => Page(invitation with { Participation = ParticipationStatus.Joined }),
+                QuestListKind.Board => Page(invitation),
+                QuestListKind.Invited when !joined => Page(invitation),
+                QuestListKind.Invited => Page(),
+                _ => throw new NotSupportedException()
+            }),
+            questId =>
+            {
+                Assert.Equal(invitation.Id, questId);
+                joined = true;
+                return Task.CompletedTask;
+            });
+        await Services.GetRequiredService<ExperienceCoordinator>().ReportConnectionAsync(true, "Europe/Prague");
+        var component = Render<QuestDashboard>();
+
+        await component.Find("fluent-button").ClickAsync(new());
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.Contains("No Quest invitations need your response.", component.Markup);
+            Assert.DoesNotContain("<tbody>", component.Markup);
+        });
+        Assert.True(joined);
+        Assert.Contains("Invitation", component.Markup);
+    }
+
+    private void Register(
+        Func<QuestListKind, PageRequest, Task<PageResult<QuestSummary>>> list,
+        Func<Guid, Task>? participate = null)
     {
         Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((method, arguments) =>
         {
-            if (method.Name != nameof(IQuestService.ListAsync)) throw new NotSupportedException();
-            queried?.Invoke((QuestListKind)arguments![0]!);
-            return list();
+            if (method.Name == nameof(IQuestService.ListAsync))
+                return list((QuestListKind)arguments![0]!, (PageRequest)arguments[2]!);
+            if (method.Name == nameof(IQuestService.ParticipateAsync) && participate is not null)
+                return participate((Guid)arguments![0]!);
+            throw new NotSupportedException(method.Name);
         }));
-        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, _) =>
-            method.Name == nameof(IEventService.ListAsync) ?
-                Task.FromResult(new PageResult<EventSummary>([], 0, 1, 100)) : throw new NotSupportedException()));
-        Services.AddSingleton(SnapshotServiceProxy.Create<ISidequestDbContextFactory>((_, _) => throw new NotSupportedException("No per-card database query is expected.")));
-        Services.AddSingleton(SnapshotServiceProxy.Create<IResourceAccess>((_, _) => throw new NotSupportedException("No owned private statistics are requested.")));
-        Services.AddScoped<DashboardService>();
+        Services.AddScoped<QuestHomeService>();
         SetRendererInfo(new("Server", true));
+    }
+
+    private static PageResult<QuestSummary> Page(params QuestSummary[] items) =>
+        new(items, items.Length, 1, 100);
+
+    private static QuestSummary Summary(
+        string title,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        ParticipationStatus participation) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), "Parent Event", title, "Room", start, end, "Europe/Prague",
+            QuestStatus.Active, QuestVisibility.Public, 0, 0, null, participation, false, true, "", null);
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        /// <inheritdoc />
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

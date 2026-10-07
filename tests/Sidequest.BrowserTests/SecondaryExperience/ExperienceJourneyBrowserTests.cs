@@ -6,7 +6,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace Sidequest.BrowserTests.SecondaryExperience;
 
-/// <summary>Exercises real synthetic-auth dashboard, installation, full Joined refresh and offline cold launch after parent composition.</summary>
+/// <summary>Exercises real synthetic-auth home, Quest lists, installation, full Joined refresh and offline cold launch after parent composition.</summary>
 /// <param name="fixture">Existing CI-only browser fixture with an explicitly scoped service-worker opt-in.</param>
 public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixture) : IClassFixture<FoundationBrowserFixture>
 {
@@ -113,7 +113,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
     }
 
     /// <summary>Real successful leave and cancellation replace cached state on the next authorized refresh, and cancellation is never presented as actionable Upcoming.</summary>
-    /// <returns>Completion after actual mutation, HTTP refresh, and dashboard assertions.</returns>
+    /// <returns>Completion after actual mutation, HTTP refresh, and home-overview assertions.</returns>
     [Fact]
     public async Task SuccessfulLeaveAndCancellationReplaceJoinedCacheAndUpcoming()
     {
@@ -138,9 +138,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
             """, quest.ToString());
         Assert.True(status is null or 4, "Cancellation is absent or explicitly marked Cancelled, never cached as active.");
         await page.GotoAsync("/");
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Your Quest board", Exact = true })).ToBeVisibleAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = "Upcoming Joined", Exact = true }).ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Upcoming Joined", Exact = true })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Quests at a glance", Exact = true })).ToBeVisibleAsync();
         await Expect(page.Locator($"[data-protected-experience] a[href='/quests/{quest}']")).ToHaveCountAsync(0);
     }
 
@@ -166,14 +164,14 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         Assert.DoesNotContain("PRIOR ACCOUNT", snapshot);
     }
 
-    /// <summary>At 360 CSS pixels, dashboard filters are keyboard reachable; disconnect makes online controls inert without inventing successful reconnection.</summary>
+    /// <summary>At 360 CSS pixels, Quest views are keyboard reachable; disconnect makes online controls inert without inventing successful reconnection.</summary>
     /// <returns>Completion after layout, keyboard, disconnected controls and install-guidance assertions.</returns>
     [Fact]
     public async Task DashboardInstallAndDisconnectedControlsRemainHonestAt360Pixels()
     {
         await using var context = await fixture.CreateContextAsync(width: 360);
         var page = await ExperienceBrowserSupport.SignInAsync(context);
-        await page.GotoAsync("/");
+        await page.GotoAsync("/quests");
         await Expect(page.Locator("[data-connection]")).ToContainTextAsync("Connected");
         var view = page.GetByRole(AriaRole.Button, new() { Name = "Following", Exact = true });
         await Expect(view).ToBeEnabledAsync();
@@ -182,7 +180,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         Assert.False(await page.EvaluateAsync<bool>("()=>document.documentElement.scrollWidth>document.documentElement.clientWidth"));
         await page.EvaluateAsync("async()=> (await import('/Components/Experience/ConnectionStatus.razor.js')).reportCircuitConnection(false)");
         await Expect(page.Locator("[data-connection]")).ToContainTextAsync("Offline or disconnected");
-        Assert.True(await page.Locator("fieldset[data-online-actions]").EvaluateAsync<bool>("element=>element.inert"));
+        Assert.True(await page.Locator("main[data-online-actions]").EvaluateAsync<bool>("element=>element.inert"));
         await Expect(page.Locator("[data-refresh]")).ToBeDisabledAsync();
         await page.GotoAsync("/install");
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Install Sidequest", Exact = true })).ToBeVisibleAsync();
