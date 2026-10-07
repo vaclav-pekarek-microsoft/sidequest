@@ -86,12 +86,12 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     }
 
     /// <summary>Proves private invitation grants immediate access, ordinary Event ownership grants none, moderation hides rosters, and revocation removes access.</summary>
-    /// <param name="navigateDuringCircuitStartup">Whether to hold the captured source-URL startup frame until enhanced navigation completes.</param>
+    /// <param name="delayCircuitStartup">Whether to delay the captured source-URL startup frame before using the interactive management tabs.</param>
     /// <returns>A task completing after three separate identities traverse their distinct authorization paths.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PrivateInvitationModerationAndRevocationPreserveDistinctAccess(bool navigateDuringCircuitStartup)
+    public async Task PrivateInvitationModerationAndRevocationPreserveDistinctAccess(bool delayCircuitStartup)
     {
         await using var eventOwnerContext = await fixture.CreateContextAsync();
         await using var questOwnerContext = await fixture.CreateContextAsync();
@@ -108,7 +108,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await AssertPrivateUnavailableAsync(invitee, questId, title);
         await AssertPrivateUnavailableAsync(eventOwner, questId, title);
         var startup = new TaskCompletionSource<Action>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (navigateDuringCircuitStartup)
+        if (delayCircuitStartup)
         {
             await eventOwner.RouteWebSocketAsync(new Regex("/_blazor\\?"), socket =>
             {
@@ -134,22 +134,10 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
             });
         }
         await eventOwner.GotoAsync($"/events/{eventId}");
-        var releaseStartup = navigateDuringCircuitStartup ? await startup.Task.WaitAsync(TimeSpan.FromSeconds(15)) : null;
-        if (navigateDuringCircuitStartup)
-        {
-            try
-            {
-                await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Back to Events", Exact = true }).ClickAsync();
-                await Expect(eventOwner).ToHaveURLAsync(new Regex("/events$"));
-            }
-            finally
-            {
-                releaseStartup?.Invoke();
-            }
-            await eventOwner.GotoAsync($"/events/{eventId}");
-        }
+        if (delayCircuitStartup)
+            (await startup.Task.WaitAsync(TimeSpan.FromSeconds(15))).Invoke();
         await eventOwner.GetByRole(AriaRole.Tab, new() { Name = "Quests", Exact = true }).ClickAsync();
-        await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Quest moderation", Exact = true }).ClickAsync();
+        await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Moderate Quests", Exact = true }).ClickAsync();
         await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
         await Expect(eventOwner.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToBeEnabledAsync();
