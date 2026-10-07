@@ -1,0 +1,24 @@
+<section class="section-box" aria-labelledby="event-quests-title">
+    <h2 id="event-quests-title" class="section-heading">Event Quests</h2>
+    <p>Joining this Event gives you access to its public Quests and any private Quests specifically shared with you.</p>
+    <div class="page-actions">
+        <a href="@($"/quests?view=Discover&eventId={EventId}")">Browse Event Quests</a>
+        @if (CanCreate)
+        {
+            <a class="button-link" href="@($"/quests/create?eventId={EventId}")">Create Quest</a>
+        }
+        @if (CanModerate)
+        {
+            <a href="@($"/quests?view=Moderation&eventId={EventId}")">Moderate Quests</a>
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>Parent Event used to scope Quest discovery, creation, and moderation links.</summary>
+    [Parameter] public Guid EventId { get; set; }
+    /// <summary>Whether the current member may create a Quest in the Active Event.</summary>
+    [Parameter] public bool CanCreate { get; set; }
+    /// <summary>Whether the current Event owner may open audited Quest moderation.</summary>
+    [Parameter] public bool CanModerate { get; set; }
+}

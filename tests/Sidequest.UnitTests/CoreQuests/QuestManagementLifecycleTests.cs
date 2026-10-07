@@ -284,9 +284,9 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         Assert.Equal(member.Id.ToString(), page.Find("select").GetAttribute("value"));
         Assert.Equal("Remove this invitation with reviewed intent.", page.FindComponent<FluentTextArea>().Instance.Value);
         Assert.Empty(revocations);
-        page.Find("input[type=checkbox]").Change(true);
+        Assert.Empty(page.FindAll("input[type=checkbox]"));
         await page.InvokeAsync(() => page.FindComponents<FluentButton>()
-            .Single(button => button.Markup.Contains("Revoke invitation", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+            .Single(button => button.Markup.Contains("Confirm: Revoke invitation", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
         Assert.Equal((detail.Summary.Id, member.Id, "Remove this invitation with reviewed intent."), Assert.Single(revocations));
         Assert.Empty(page.FindComponent<QuestManagement>().Instance.Detail.Invitees!);
         Assert.Empty(page.FindComponents<FluentTextArea>());

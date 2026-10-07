@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
+using Sidequest.Application.Events.Implementation;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
 using Sidequest.IntegrationTests.FoundationPersistence;
@@ -118,30 +119,72 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(0, change.CalendarRevision);
     }
 
-    /// <summary>Creates a trimmed unpublished aggregate with exactly one creator owner/member and no delivery or scheduled work.</summary>
-    /// <returns>A task completing after independent persisted-state checks.</returns>
+    /// <summary>Creates an Active Event at the adjacent valid date boundary with its creator roles and exact completion intent in one commit.</summary>
+    /// <returns>A task completing after returned projection, persisted aggregate, audit, outbox, and scheduled-work checks.</returns>
     [Fact]
-    public async Task CreateDraftAtomicallyAssignsCreatorWithoutNotifications()
+    public async Task CreateAsyncCreatesActiveOwnerMembershipAndSchedulesCompletionAtomically()
     {
         var context = new EventTestContext(database);
         var user = FoundationSeed.NewUser();
         await FoundationSeed.PersistAsync(database, user);
-        var id = await context.Service(user).CreateAsync(EventTestContext.Input());
+        var input = EventTestContext.Input() with
+        {
+            EndDate = EventTestContext.Input().StartDate.AddDays(1)
+        };
+        var service = context.Service(user);
+        var id = await service.CreateAsync(input);
+        var returned = await service.GetAsync(id);
+        Assert.Equal(id, returned.Summary.Id);
+        Assert.Equal(EventStatus.Active, returned.Summary.Status);
+        Assert.True(returned.Summary.IsOwner);
+        Assert.True(returned.Summary.IsMember);
+        Assert.Equal(user.Id, Assert.Single(returned.Summary.Owners).Id);
+        Assert.Equal(input.StartDate, returned.Summary.StartDate);
+        Assert.Equal(input.EndDate, returned.Summary.EndDate);
+        Assert.Equal(input.Description, returned.Description);
+
         await using var read = database.CreateContext();
         var item = await read.Events.SingleAsync(x => x.Id == id);
         Assert.Equal("New Event", item.Name);
         Assert.Equal("Member-only details", item.Description);
-        Assert.Equal(EventStatus.Draft, item.Status);
+        Assert.Equal(EventStatus.Active, item.Status);
         Assert.Equal(user.Id, item.CreatorId);
         Assert.Equal(FoundationSeed.Now, item.CreatedUtc);
-        Assert.Equal(user.Id, (await read.EventOwners.SingleAsync(x => x.EventId == id)).UserId);
+        Assert.Equal(FoundationSeed.Now, item.UpdatedUtc);
+        var owner = await read.EventOwners.SingleAsync(x => x.EventId == id);
+        Assert.Equal(user.Id, owner.UserId);
         var membership = await read.EventMemberships.SingleAsync(x => x.EventId == id);
         Assert.Equal(user.Id, membership.UserId);
         Assert.Equal(MembershipStatus.Active, membership.Status);
         Assert.Equal(user.Id, membership.ChangedById);
+        Assert.Equal(FoundationSeed.Now, membership.ChangedUtc);
+
+        var audit = await read.AuditEntries.SingleAsync(x => x.ResourceId == id);
+        Assert.Equal(ResourceKind.Event, audit.ResourceKind);
+        Assert.Equal("Event.Created", audit.Action);
+        Assert.Equal("Event activated; creator assigned as equal owner and member.", audit.Reason);
+        Assert.Equal(user.Id, audit.ActorId);
+        Assert.Equal(FoundationSeed.Now, audit.OccurredUtc);
+
+        var expectedEnd = TimeRules.EventWindow(input.StartDate, input.EndDate, input.TimeZoneId).End.ToUniversalTime();
+        var work = await read.ScheduledWork.SingleAsync(x => x.Type == WorkTypes.EventCompletion &&
+            x.DeduplicationKey == $"event.complete.v1:{id:N}:{expectedEnd.UtcTicks}");
+        Assert.Equal(expectedEnd, work.DueUtc);
+        Assert.Equal(WorkStatus.Pending, work.Status);
+        Assert.Equal(0, work.Attempts);
+        Assert.Null(work.QuestId);
+        Assert.Null(work.UserId);
+        var payload = JsonSerializer.Deserialize<EventCompletionPayload>(work.PayloadJson)!;
+        Assert.Equal(1, payload.SchemaVersion);
+        Assert.Equal(id, payload.EventId);
+        Assert.Equal(expectedEnd, payload.ExpectedEndUtc);
+
+        Assert.Equal(1, await read.Events.CountAsync(x => x.Id == id));
+        Assert.Equal(1, await read.EventOwners.CountAsync(x => x.EventId == id));
+        Assert.Equal(1, await read.EventMemberships.CountAsync(x => x.EventId == id));
+        Assert.Equal(1, await read.AuditEntries.CountAsync(x => x.ResourceId == id));
+        Assert.Equal(1, await read.ScheduledWork.CountAsync(x => x.DeduplicationKey.StartsWith($"event.complete.v1:{id:N}:")));
         Assert.Empty(await read.OutboxMessages.Where(x => x.AggregateId == id).ToListAsync());
-        Assert.Empty(await read.ScheduledWork.Where(x => x.PayloadJson.Contains(id.ToString())).ToListAsync());
-        Assert.Equal("Event.Created", (await read.AuditEntries.SingleAsync(x => x.ResourceId == id)).Action);
         Assert.Empty(context.Quests.Calls);
     }
 
@@ -274,6 +317,13 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         await FoundationSeed.PersistAsync(database, user);
         var sut = context.Service(user);
         var published = await sut.CreateAsync(EventTestContext.Input());
+        await using (var setup = database.CreateContext())
+        {
+            (await setup.Events.SingleAsync(x => x.Id == published)).Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{published:N}:")));
+            await setup.SaveChangesAsync();
+        }
         var version = (await sut.GetAsync(published)).Summary.Version;
         await sut.ChangeStatusAsync(published, version, EventStatus.Active, "");
         var active = await sut.GetAsync(published);
@@ -281,6 +331,13 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() =>
             sut.DeleteDraftAsync(published, active.Summary.Version))).Code);
         var clean = await sut.CreateAsync(EventTestContext.Input("Clean draft"));
+        await using (var setup = database.CreateContext())
+        {
+            (await setup.Events.SingleAsync(x => x.Id == clean)).Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{clean:N}:")));
+            await setup.SaveChangesAsync();
+        }
         await sut.DeleteDraftAsync(clean, (await sut.GetAsync(clean)).Summary.Version);
         await using var read = database.CreateContext();
         Assert.True(await read.Events.AnyAsync(x => x.Id == published));
@@ -365,6 +422,13 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         var seed = await context.SeedAsync();
         var sut = context.Service(seed.User);
         var id = await sut.CreateAsync(EventTestContext.Input("Guarded draft"));
+        await using (var setup = database.CreateContext())
+        {
+            (await setup.Events.SingleAsync(x => x.Id == id)).Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{id:N}:")));
+            await setup.SaveChangesAsync();
+        }
         Entity row = dependency switch
         {
             "request" => new EventMembershipRequest { EventId = id, UserId = seed.Other.Id, CreatedUtc = FoundationSeed.Now },
@@ -401,5 +465,41 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(ErrorCode.Validation, error.Code);
         Assert.Empty(context.Quests.Calls);
         Assert.Equal(0, context.Directory.UserCalls);
+    }
+
+    /// <summary>Rejects equal and reversed creation dates before opening a transaction and leaves every creation effect unchanged.</summary>
+    /// <param name="endOffsetDays">Zero for equal dates or negative one for a reversed date range.</param>
+    /// <returns>A task completing after exact validation and fresh-context no-write checks.</returns>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task CreateRequiresStrictlyLaterEndWithoutPartialWrites(int endOffsetDays)
+    {
+        var context = new EventTestContext(database);
+        var user = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(database, user);
+        var input = EventTestContext.Input();
+        input = input with { EndDate = input.StartDate.AddDays(endOffsetDays) };
+        int outboxCount;
+        int scheduledWorkCount;
+        await using (var before = database.CreateContext())
+        {
+            outboxCount = await before.OutboxMessages.CountAsync();
+            scheduledWorkCount = await before.ScheduledWork.CountAsync();
+        }
+
+        var error = await Assert.ThrowsAsync<DomainException>(() => context.Service(user).CreateAsync(input));
+
+        Assert.Equal(ErrorCode.Validation, error.Code);
+        Assert.Equal("EndDate", error.Field);
+        Assert.Equal("End date must be after start date.", error.Message);
+        await using var read = database.CreateContext();
+        Assert.False(await read.Events.AnyAsync(x => x.CreatorId == user.Id));
+        Assert.False(await read.EventOwners.AnyAsync(x => x.UserId == user.Id));
+        Assert.False(await read.EventMemberships.AnyAsync(x => x.UserId == user.Id));
+        Assert.False(await read.AuditEntries.AnyAsync(x => x.ActorId == user.Id));
+        Assert.Equal(outboxCount, await read.OutboxMessages.CountAsync());
+        Assert.Equal(scheduledWorkCount, await read.ScheduledWork.CountAsync());
+        Assert.Empty(context.Quests.Calls);
     }
 }

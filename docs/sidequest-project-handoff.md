@@ -1,7 +1,7 @@
 # Sidequest — Project Handoff / Product & Technical Specification
 
 **Status:** Accepted for implementation (D34, 2026-09-14); external approval gates remain open.
-**Last revised:** 2026-10-05.
+**Last revised:** 2026-10-07.
 **Implementation:** M1/M2 verified; combined M3 acceptance passed. M4 release hardening remains. No production deployment.
 
 Sections 1–46 explain the product intent. Section 47 summarizes the agreed direction.
@@ -1153,7 +1153,7 @@ The scope below is accepted through D34, incorporating the refinements in D01–
 | Area | V1 requirement |
 |------|----------------|
 | Identity | Microsoft-alias magic-code sign-in, stable tenant/object account identity, database-managed administrators |
-| Events | Draft/publish, listed discovery for all Active Events, duplicate warning, membership requests, direct adds, invitations, individual membership with background group-to-user bulk add/invite, ownership, automatic completion, cancellation and archive |
+| Events | One-step Active creation, listed discovery for all Active Events, direct self-service joining, duplicate warning, direct adds, invitations, individual membership with background group-to-user bulk add/invite, ownership, automatic completion, cancellation and archive |
 | Quests | Draft/publish, Public/Private visibility, invitations, ownership, advisory capacity, follow/join/leave, moderation, history |
 | Experience | Quest-first dashboard, Event overview, responsive accessible forms, explicit local times, installable web app with read-only offline basics for joined Quests |
 | Delivery | Email and in-app notifications, preferences, reminders, durable retries, ICS invitations/updates/cancellations |
@@ -1194,7 +1194,7 @@ callbacks, jobs, images, search results, counts, and exports. Hiding a button is
 | Action | Eligible tenant user | Event member | Event manager | Quest manager | Administrator only |
 |--------|----------------------|--------------|---------------|---------------|--------------------|
 | Create Event | Yes | Yes | Yes | Yes | Yes |
-| View discoverable Event summary / request access | Yes, subject to discovery/state | Yes | Yes | Yes | Yes |
+| View discoverable Event summary / join | Yes, subject to discovery/state | Yes | Yes | Yes | Yes |
 | View full Event / public non-draft Quests | No | Yes | Yes | Yes, with membership | No |
 | Configure Event / manage audience / decide requests | No | No | Yes | No | No |
 | Create Quest | No | Yes, in Active Event | Yes, in Active Event | Yes, with membership | No |
@@ -1214,9 +1214,9 @@ on administrators using ordinary user features.
 
 ### Visibility and disclosure
 
-- All published Active Events are listed to eligible signed-in users and expose only name, dates, time zone, short discovery summary,
-  and owners' directory contacts to eligible tenant users. Full descriptions, audiences,
-  Quests, member lists, and counts are member-only.
+- All Active Events are listed to eligible signed-in users and expose only name, dates, time zone, short discovery summary,
+  and owners' directory contacts to non-members. Full descriptions, audiences,
+  Quests, member lists, and counts become available after direct Event joining.
 - There is no Unlisted Event mode. A signed-in user with a direct Active Event URL
   sees the same discovery summary and can request access; knowing the URL is not a
   membership grant.
@@ -1277,8 +1277,10 @@ not a public "first user wins" flow.
 One individual membership record per Event/user is the source of truth: Active or
 Removed, with audit history. Authorization checks this record and account eligibility,
 not group grants, membership assertions, exclusions, or Graph membership queries.
-Pending requests and invitations are not membership. Draft Event access remains
-manager-only even if its individual audience has been configured.
+Eligible signed-in users join an Active Event directly and repeat-safely; no owner
+approval or membership-request workflow is required. Pending legacy requests are
+closed when the requester joins. Invitations remain optional owner outreach and are
+not membership until accepted. Legacy Draft Event access remains manager-only.
 
 "Remove member" deactivates that person's membership; no group exclusion or grant
 precedence is necessary. Ordinary members can leave through the same deactivation
@@ -1411,14 +1413,15 @@ cancelled/completed Quests.
 
 | From | To | Actor and guards | Effects |
 |------|----|------------------|---------|
-| Draft | Active | Event manager; valid dates, zone, at least one eligible owner, audience configuration | Lists Event to eligible signed-in users; membership becomes usable |
+| Creation | Active | Eligible signed-in creator; valid dates and zone | Atomically creates the Event, assigns the creator as equal owner/member, lists it, and schedules completion |
+| Draft | Active | Event manager; legacy Draft only; valid dates, zone, at least one eligible owner | Activates a pre-existing Draft; new Event creation never uses this ceremony |
 | Draft / Active | Cancelled | Event manager; reason required; show impact confirmation | Applies the cancellation rule below; closes pending requests/invitations |
 | Active | Completed | System at midnight after the Event's inclusive end date in its time zone | Stops new activity/discovery, resolves pending membership work, preserves historical access |
 | Completed | Archived | Event manager; all Quests are Completed, Cancelled, or Archived | Preserves authorized historical access |
 | Cancelled | Archived | Event manager | Preserves cancellation history |
 
-Draft Events cannot contain Quests. Hard deletion is permitted only for an unpublished
-Draft Event with no requests, invitations, or Quests; record the deletion in the audit log.
+Legacy Draft Events cannot contain Quests. Hard deletion is permitted only for an unpublished
+legacy Draft Event with no requests, invitations, or Quests; record the deletion in the audit log.
 A Draft Event is never disclosed to a non-manager. An Event cancelled before publication
 retains owner-only access after cancellation and archival; draft audience membership does
 not become usable through cancellation. Retained Draft-to-Cancelled Event history identifies
@@ -1534,8 +1537,8 @@ Completed/Cancelled/Archived Events are not candidates. No AI or hidden Event hi
 |--------|-------------------|
 | Home / Quests | Home is the authorized joined-first board (section 20); the Quests page retains joined/following/organizing/discover/invited views, Event filter and separate history actions |
 | Discover | Public Active Quests in the user's Events; Event/date filters; no private items or private-count hints |
-| Events | My Events, Available Events that are open to requests, Pending Requests; create Event action and duplicate warning |
-| Event detail | Member context, public Quests, create Quest; manager-only settings/membership/moderation tabs |
+| Events | All Active Events with joined/not-joined state, direct Join action, separate retained history, create Event action and duplicate warning |
+| Event detail | Discovery or member context with direct Join/Leave; reusable Overview, Quests, Members, Invitations, and manager-only Settings tabs rather than separate management pages |
 | Quest detail | Status, time in the inherited Event zone and user-local equivalent, location, owners' contacts, advisory capacity, accessible cover, attendees; Join replaces Following; Joined state offers Leave, not Follow; leaving never restores Following |
 | Quest editor | Draft/save/publish flow, inherited Event time zone shown read-only, private-moderation disclosure, validation, pending upload indicators; no AI controls |
 | Invitations | Pending Event invitations with accept/decline/expiry; private Quest invitations link directly to details with Join/Follow, never Accept/Decline; private cards require current access |
@@ -2319,6 +2322,7 @@ not V1 release requirements.
 | D43 | 2026-09-18 | Hide routine Reload/Refresh actions on healthy pages; retain error/conflict recovery and progress refresh for unfinished bulk operations. Give native form fields explicit identifiers, including Fluent native proxy controls. Present Event timezones as readable CLDR city groups sorted by their UTC offset on the Event start date, preserving stored IANA identifiers and regional daylight-saving rules rather than replacing zones with fixed offsets. |
 | D44 | 2026-10-05 | Replace deployed interactive Entra sign-in with a Microsoft-alias magic-code flow delivered through the existing Azure Communication Services Email adapter. Retain loopback-only synthetic Development sign-in. Codes expire after 10 minutes, are single-use six-digit cryptographic values, allow at most five verification attempts, and use generic request/verification responses with resend/request throttling. Persist only salted code hashes and challenge metadata in SQL. Preserve existing ownership by linking only a single eligible account whose stored address exactly matches the verified `alias@microsoft.com`; ambiguous, disabled, or departed matches fail closed. New aliases receive stable application-issued object IDs in the configured account namespace. Email control authenticates the user but grants no application role, membership, ownership, or administrator permission. |
 | D45 | 2026-10-06 | Select `vaclav.pekarek` as the initial administrator bootstrap alias. Normalize valid stored Microsoft mailboxes to their lower-case aliases before account-link comparison, so casing and surrounding storage whitespace do not create distinct identities. If multiple user records normalize to the verified alias, authentication fails closed rather than selecting an account. |
+| D46 | 2026-10-07 | Simplify Event participation for the internal tool: every eligible signed-in user can list all Active Events and join one directly without owner approval. Event creation is one step and immediately Active; Draft publication remains only for legacy records. Joined Event members can read that Event's authorized Quests. Event detail owns tabbed Overview, Quests, Members, Invitations, and Settings management instead of separate product navigation. Event cancel/delete/leave/member-owner removal/invitation-revocation actions require modal confirmation. Empty Quest results direct users to find and join an Event. Events expose only attendance membership (joined or not joined), with no Event-follow action. This supersedes D01/D14 and the Event portions of sections 7–8, 48–52 that require membership requests or Draft-first creation; it does not remove Quest-level Following. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.

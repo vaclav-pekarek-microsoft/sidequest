@@ -24,13 +24,20 @@ public interface IEventService
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The actor is forbidden or the Event is unavailable without disclosing protected content.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<EventDetail> GetAsync(Guid id, CancellationToken cancellationToken = default);
-    /// <summary>Creates an unpublished Event and atomically assigns the eligible creator as its first equal owner and individual member.</summary>
+    /// <summary>Creates an Active Event and atomically assigns the eligible creator as its first equal owner and individual member.</summary>
     /// <param name="input">Proposed Event configuration with an inclusive end date strictly after its start date.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation; the operation must not commit partial state.</param>
     /// <returns>The new internal Event identifier.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Input is invalid or the current account is forbidden.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<Guid> CreateAsync(EventInput input, CancellationToken cancellationToken = default);
+    /// <summary>Directly and repeat-safely joins the current eligible actor to an Active Event.</summary>
+    /// <param name="eventId">Internal discoverable Event identifier.</param>
+    /// <param name="cancellationToken">Requests cooperative cancellation of the atomic membership activation.</param>
+    /// <returns>A task completing after membership, pending-work resolution, audit, and delivery intent are persisted.</returns>
+    /// <exception cref="Sidequest.Domain.Rules.DomainException">Eligibility, tenant, lifecycle, or availability guards fail.</exception>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public Task JoinAsync(Guid eventId, CancellationToken cancellationToken = default);
     /// <summary>Updates owner-managed Draft/Active configuration before Event end, preserving published zone and child-interval constraints.</summary>
     /// <param name="id">Internal Event identifier.</param>
     /// <param name="version">Expected Base64 rowversion used to reject stale edits.</param>

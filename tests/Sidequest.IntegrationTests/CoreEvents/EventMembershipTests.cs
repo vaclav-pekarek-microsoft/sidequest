@@ -80,6 +80,13 @@ public sealed class EventMembershipTests(SqlTestDatabase database) : IClassFixtu
                 break;
             case "publish":
                 eventId = await manager.CreateAsync(EventTestContext.Input());
+                await using (var setup = database.CreateContext())
+                {
+                    (await setup.Events.SingleAsync(x => x.Id == eventId)).Status = EventStatus.Draft;
+                    setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                        x.DeduplicationKey.StartsWith($"event.complete.v1:{eventId:N}:")));
+                    await setup.SaveChangesAsync();
+                }
                 var second = FoundationSeed.NewUser();
                 second.TenantId = seed.User.TenantId;
                 await FoundationSeed.PersistAsync(database, second,
@@ -446,6 +453,343 @@ public sealed class EventMembershipTests(SqlTestDatabase database) : IClassFixtu
         var envelope = await read.OutboxMessages.SingleAsync(x => x.CorrelationId == decisionAudit.CorrelationId);
         Assert.Equal(seed.Event.Id, envelope.AggregateId);
         Assert.Contains(requester.Id.ToString(), envelope.PayloadJson);
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>Direct joining creates one precisely attributed membership, audit, and durable delivery envelope without restoring Quest participation.</summary>
+    /// <returns>A task completing after the committed membership and its exact secondary effects are verified.</returns>
+    [Fact]
+    public async Task JoinAsyncFirstActivationPersistsMembershipAuditAndOutboxWithoutQuestRestoration()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+
+        await context.Service(seed.Other).JoinAsync(seed.Event.Id);
+
+        await using var read = database.CreateContext();
+        var membership = await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+        Assert.Equal(MembershipStatus.Active, membership.Status);
+        Assert.Equal(seed.Other.Id, membership.ChangedById);
+        Assert.Equal(FoundationSeed.Now, membership.ChangedUtc);
+        var audit = await read.AuditEntries.SingleAsync(x => x.ResourceId == seed.Event.Id);
+        Assert.Equal(ResourceKind.Event, audit.ResourceKind);
+        Assert.Equal(seed.Other.Id, audit.ActorId);
+        Assert.Equal("Membership.Activated", audit.Action);
+        Assert.Equal($"User {seed.Other.Id:N}: The user joined this Event directly.", audit.Reason);
+        Assert.Equal(FoundationSeed.Now, audit.OccurredUtc);
+        var outbox = await read.OutboxMessages.SingleAsync(x => x.AggregateId == seed.Event.Id);
+        Assert.Equal(WorkTypes.Change, outbox.Type);
+        Assert.Equal(audit.CorrelationId, outbox.CorrelationId);
+        Assert.Equal(FoundationSeed.Now, outbox.OccurredUtc);
+        Assert.Equal(FoundationSeed.Now, outbox.DueUtc);
+        Assert.Equal(WorkStatus.Pending, outbox.Status);
+        var envelope = JsonSerializer.Deserialize<ChangeEnvelope>(outbox.PayloadJson)!;
+        Assert.Equal(Guid.ParseExact(audit.CorrelationId, "N"), envelope.ChangeId);
+        Assert.Equal(NotificationKind.MembershipAdded, envelope.Kind);
+        Assert.Equal(seed.Event.Id, envelope.EventId);
+        Assert.Null(envelope.QuestId);
+        Assert.Equal(seed.Other.Id, envelope.ActorId);
+        Assert.Equal(new[] { seed.User.Id, seed.Other.Id }.Order(), envelope.RecipientIds.Order());
+        Assert.Equal([seed.Other.Id], Assert.IsType<Guid[]>(envelope.AffectedUserIds));
+        Assert.Equal("The user joined this Event directly.", envelope.Reason);
+        Assert.Equal(FoundationSeed.Now, envelope.OccurredUtc);
+        Assert.Equal(QuestStatus.Active, (await read.Quests.SingleAsync(x => x.Id == seed.Quest.Id)).Status);
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>Sequential direct-join retries preserve activation identity and resolved consent history without duplicating effects.</summary>
+    /// <returns>A task completing after both calls and exact retained-state counts are verified.</returns>
+    [Fact]
+    public async Task JoinAsyncActiveMemberIsIdempotentWithoutDuplicateEffects()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var request = new EventMembershipRequest
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, CreatedUtc = FoundationSeed.Now.AddMinutes(-10)
+        };
+        var invitation = new EventInvitation
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, InvitedById = seed.User.Id,
+            CreatedUtc = FoundationSeed.Now.AddMinutes(-5), ExpiresUtc = FoundationSeed.Now.AddHours(1)
+        };
+        await FoundationSeed.PersistAsync(database, request, invitation);
+        var sut = context.Service(seed.Other);
+
+        await sut.JoinAsync(seed.Event.Id);
+        await using (var firstRead = database.CreateContext())
+        {
+            var membership = await firstRead.EventMemberships.SingleAsync(x =>
+                x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+            Assert.Equal(MembershipStatus.Active, membership.Status);
+            Assert.Equal(seed.Other.Id, membership.ChangedById);
+            Assert.Equal(FoundationSeed.Now, membership.ChangedUtc);
+        }
+        context.Clock.Now = FoundationSeed.Now.AddMinutes(30);
+        await sut.JoinAsync(seed.Event.Id);
+
+        await using var read = database.CreateContext();
+        var retained = await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+        Assert.Equal(MembershipStatus.Active, retained.Status);
+        Assert.Equal(seed.Other.Id, retained.ChangedById);
+        Assert.Equal(FoundationSeed.Now, retained.ChangedUtc);
+        var decided = await read.MembershipRequests.SingleAsync(x => x.Id == request.Id);
+        Assert.Equal(MembershipRequestStatus.Approved, decided.Status);
+        Assert.Equal(seed.Other.Id, decided.DecidedById);
+        Assert.Equal(FoundationSeed.Now, decided.DecidedUtc);
+        Assert.Equal("The user joined this Event directly.", decided.Reason);
+        var accepted = await read.EventInvitations.SingleAsync(x => x.Id == invitation.Id);
+        Assert.Equal(EventInvitationStatus.Accepted, accepted.Status);
+        Assert.Equal(FoundationSeed.Now, accepted.ResolvedUtc);
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Membership.Activated").ToListAsync());
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Invitation.Accepted").ToListAsync());
+        Assert.Single(await read.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>Direct joining explicitly restores a removed membership in place with new actor metadata and no child-participation restoration.</summary>
+    /// <returns>A task completing after the retained relation identity and restoration effects are verified.</returns>
+    [Fact]
+    public async Task JoinAsyncRestoresRemovedMembershipWithRetainedIdentityAndNewActorTime()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var removed = seed.Membership(seed.Other.Id, MembershipStatus.Removed);
+        removed.ChangedUtc = FoundationSeed.Now.AddDays(-2);
+        await FoundationSeed.PersistAsync(database, removed);
+        var retainedId = removed.Id;
+
+        await context.Service(seed.Other).JoinAsync(seed.Event.Id);
+
+        await using var read = database.CreateContext();
+        var restored = await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+        Assert.Equal(retainedId, restored.Id);
+        Assert.Equal(MembershipStatus.Active, restored.Status);
+        Assert.Equal(seed.Other.Id, restored.ChangedById);
+        Assert.Equal(FoundationSeed.Now, restored.ChangedUtc);
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Membership.Activated").ToListAsync());
+        Assert.Single(await read.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
+        Assert.Equal(QuestStatus.Active, (await read.Quests.SingleAsync(x => x.Id == seed.Quest.Id)).Status);
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>One direct join atomically activates membership while approving its pending request and accepting its live invitation.</summary>
+    /// <returns>A task completing after every committed audience transition and correlated effect is verified.</returns>
+    [Fact]
+    public async Task JoinAsyncResolvesPendingRequestAndLiveInvitationTogether()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var request = new EventMembershipRequest
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, CreatedUtc = FoundationSeed.Now.AddMinutes(-10)
+        };
+        var invitation = new EventInvitation
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, InvitedById = seed.User.Id,
+            CreatedUtc = FoundationSeed.Now.AddMinutes(-5), ExpiresUtc = FoundationSeed.Now.AddTicks(1)
+        };
+        await FoundationSeed.PersistAsync(database, request, invitation);
+
+        await context.Service(seed.Other).JoinAsync(seed.Event.Id);
+
+        await using var read = database.CreateContext();
+        var membership = await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+        Assert.Equal(MembershipStatus.Active, membership.Status);
+        Assert.Equal(seed.Other.Id, membership.ChangedById);
+        Assert.Equal(FoundationSeed.Now, membership.ChangedUtc);
+        var approved = await read.MembershipRequests.SingleAsync(x => x.Id == request.Id);
+        Assert.Equal(MembershipRequestStatus.Approved, approved.Status);
+        Assert.Equal(seed.Other.Id, approved.DecidedById);
+        Assert.Equal(FoundationSeed.Now, approved.DecidedUtc);
+        Assert.Equal("The user joined this Event directly.", approved.Reason);
+        var accepted = await read.EventInvitations.SingleAsync(x => x.Id == invitation.Id);
+        Assert.Equal(EventInvitationStatus.Accepted, accepted.Status);
+        Assert.Equal(FoundationSeed.Now, accepted.ResolvedUtc);
+        var audits = await read.AuditEntries.Where(x => x.ResourceId == seed.Event.Id).ToListAsync();
+        Assert.Equal(2, audits.Count);
+        Assert.Contains(audits, x => x.Action == "Membership.Activated" && x.ActorId == seed.Other.Id);
+        Assert.Contains(audits, x => x.Action == "Invitation.Accepted" && x.ActorId == seed.Other.Id);
+        var outbox = await read.OutboxMessages.SingleAsync(x => x.AggregateId == seed.Event.Id);
+        var envelope = JsonSerializer.Deserialize<ChangeEnvelope>(outbox.PayloadJson)!;
+        Assert.Equal(NotificationKind.MembershipAdded, envelope.Kind);
+        Assert.Equal([seed.Other.Id], Assert.IsType<Guid[]>(envelope.AffectedUserIds));
+        Assert.Equal(new[] { seed.User.Id, seed.Other.Id }.Order(), envelope.RecipientIds.Order());
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>At the exact invitation deadline, direct joining approves the request but expires rather than accepts the invitation.</summary>
+    /// <returns>A task completing after exact-boundary consent resolution and activation effects are verified.</returns>
+    [Fact]
+    public async Task JoinAsyncApprovesPendingRequestAndExpiresInvitationAtNow()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var request = new EventMembershipRequest
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, CreatedUtc = FoundationSeed.Now.AddMinutes(-10)
+        };
+        var invitation = new EventInvitation
+        {
+            EventId = seed.Event.Id, UserId = seed.Other.Id, InvitedById = seed.User.Id,
+            CreatedUtc = FoundationSeed.Now.AddMinutes(-5), ExpiresUtc = FoundationSeed.Now
+        };
+        await FoundationSeed.PersistAsync(database, request, invitation);
+
+        await context.Service(seed.Other).JoinAsync(seed.Event.Id);
+
+        await using var read = database.CreateContext();
+        Assert.Equal(MembershipStatus.Active, (await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id)).Status);
+        var approved = await read.MembershipRequests.SingleAsync(x => x.Id == request.Id);
+        Assert.Equal(MembershipRequestStatus.Approved, approved.Status);
+        Assert.Equal(seed.Other.Id, approved.DecidedById);
+        Assert.Equal(FoundationSeed.Now, approved.DecidedUtc);
+        Assert.Equal("The user joined this Event directly.", approved.Reason);
+        var expired = await read.EventInvitations.SingleAsync(x => x.Id == invitation.Id);
+        Assert.Equal(EventInvitationStatus.Expired, expired.Status);
+        Assert.Equal(FoundationSeed.Now, expired.ResolvedUtc);
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Invitation.Expired").ToListAsync());
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Membership.Activated").ToListAsync());
+        Assert.Single(await read.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
+        Assert.Empty(context.Quests.Calls);
+    }
+
+    /// <summary>Rejects every unavailable lifecycle, tenant, and actor partition without applying any direct-join effect.</summary>
+    /// <param name="partition">The unavailable Event or actor condition to arrange.</param>
+    /// <param name="status">The persisted Event lifecycle state used by the partition.</param>
+    /// <param name="expectedCode">The precise safe failure category expected by the public boundary.</param>
+    /// <returns>A task completing after the rejection and fresh-SQL no-partial-effect assertions.</returns>
+    [Theory]
+    [InlineData("draft", EventStatus.Draft, ErrorCode.Conflict)]
+    [InlineData("completed", EventStatus.Completed, ErrorCode.Conflict)]
+    [InlineData("cancelled", EventStatus.Cancelled, ErrorCode.Conflict)]
+    [InlineData("archived", EventStatus.Archived, ErrorCode.Conflict)]
+    [InlineData("ended", EventStatus.Active, ErrorCode.Conflict)]
+    [InlineData("cross-tenant", EventStatus.Active, ErrorCode.NotFound)]
+    [InlineData("ineligible", EventStatus.Active, ErrorCode.Forbidden)]
+    [InlineData("departed", EventStatus.Active, ErrorCode.Forbidden)]
+    public async Task JoinAsyncRejectsUnavailableEventOrActorWithoutPartialEffects(
+        string partition, EventStatus status, ErrorCode expectedCode)
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var actor = partition == "draft" ? seed.User : seed.Other;
+        await using (var setup = database.CreateContext())
+        {
+            var item = (await setup.Events.FindAsync(seed.Event.Id))!;
+            item.Status = status;
+            if (partition == "cross-tenant")
+            {
+                var foreignCreator = FoundationSeed.NewUser();
+                setup.Users.Add(foreignCreator);
+                await setup.SaveChangesAsync();
+                item.CreatorId = foreignCreator.Id;
+            }
+            if (partition is "ineligible" or "departed")
+            {
+                var savedActor = (await setup.Users.FindAsync(seed.Other.Id))!;
+                savedActor.IsEligible = partition != "ineligible";
+                savedActor.DepartureVerifiedUtc = partition == "departed" ? FoundationSeed.Now : null;
+            }
+            await setup.SaveChangesAsync();
+        }
+        if (partition == "ended")
+            context.Clock.Now = FoundationSeed.Now.AddDays(10);
+        await using var before = database.CreateContext();
+        var membershipCount = await before.EventMemberships.CountAsync();
+        var requestCount = await before.MembershipRequests.CountAsync();
+        var invitationCount = await before.EventInvitations.CountAsync();
+        var outboxCount = await before.OutboxMessages.CountAsync();
+
+        var error = await Assert.ThrowsAsync<DomainException>(() =>
+            context.Service(actor).JoinAsync(seed.Event.Id));
+
+        Assert.Equal(expectedCode, error.Code);
+        await using var read = database.CreateContext();
+        Assert.Equal(membershipCount, await read.EventMemberships.CountAsync());
+        Assert.Equal(requestCount, await read.MembershipRequests.CountAsync());
+        Assert.Equal(invitationCount, await read.EventInvitations.CountAsync());
+        Assert.Equal(outboxCount, await read.OutboxMessages.CountAsync());
+        Assert.Empty(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Membership.Activated").ToListAsync());
+        Assert.False(await read.EventMemberships.AnyAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id));
+        if (partition == "ended")
+        {
+            Assert.Equal(EventStatus.Completed, (await read.Events.FindAsync(seed.Event.Id))!.Status);
+            Assert.Single(await read.AuditEntries.Where(x =>
+                x.ResourceId == seed.Event.Id && x.Action == "Event.Completed").ToListAsync());
+        }
+        else
+            Assert.Empty(await read.AuditEntries.Where(x => x.ResourceId == seed.Event.Id).ToListAsync());
+    }
+
+    /// <summary>A missing Event identifier fails with the established unavailable contract and leaves every effect table unchanged.</summary>
+    /// <returns>A task completing after exact not-found and no-write assertions.</returns>
+    [Fact]
+    public async Task JoinAsyncMissingEventRejectsWithoutEffects()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var missing = Guid.NewGuid();
+        await using var before = database.CreateContext();
+        var membershipCount = await before.EventMemberships.CountAsync();
+        var requestCount = await before.MembershipRequests.CountAsync();
+        var invitationCount = await before.EventInvitations.CountAsync();
+        var auditCount = await before.AuditEntries.CountAsync();
+        var outboxCount = await before.OutboxMessages.CountAsync();
+
+        var error = await Assert.ThrowsAsync<DomainException>(() =>
+            context.Service(seed.Other).JoinAsync(missing));
+
+        Assert.Equal(ErrorCode.NotFound, error.Code);
+        Assert.Equal("This Event or membership item is unavailable.", error.Message);
+        await using var read = database.CreateContext();
+        Assert.Equal(membershipCount, await read.EventMemberships.CountAsync());
+        Assert.Equal(requestCount, await read.MembershipRequests.CountAsync());
+        Assert.Equal(invitationCount, await read.EventInvitations.CountAsync());
+        Assert.Equal(auditCount, await read.AuditEntries.CountAsync());
+        Assert.Equal(outboxCount, await read.OutboxMessages.CountAsync());
+    }
+
+    /// <summary>Concurrent direct joins serialize at the aggregate lock and converge on one membership and one logical effect set.</summary>
+    /// <returns>A task completing after both callers succeed and the single committed activation is verified.</returns>
+    [Fact]
+    public async Task JoinAsyncConcurrentCallsConvergeToOneEffectSet()
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task JoinAsync()
+        {
+            await gate.Task;
+            await context.Service(seed.Other).JoinAsync(seed.Event.Id);
+        }
+        var first = JoinAsync();
+        var second = JoinAsync();
+
+        gate.SetResult();
+        await Task.WhenAll(first, second);
+
+        await using var read = database.CreateContext();
+        var membership = await read.EventMemberships.SingleAsync(x =>
+            x.EventId == seed.Event.Id && x.UserId == seed.Other.Id);
+        Assert.Equal(MembershipStatus.Active, membership.Status);
+        Assert.Equal(seed.Other.Id, membership.ChangedById);
+        Assert.Equal(FoundationSeed.Now, membership.ChangedUtc);
+        Assert.Single(await read.AuditEntries.Where(x =>
+            x.ResourceId == seed.Event.Id && x.Action == "Membership.Activated").ToListAsync());
+        Assert.Single(await read.OutboxMessages.Where(x => x.AggregateId == seed.Event.Id).ToListAsync());
         Assert.Empty(context.Quests.Calls);
     }
 }

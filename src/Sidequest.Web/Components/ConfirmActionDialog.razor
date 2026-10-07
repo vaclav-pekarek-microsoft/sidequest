@@ -1,0 +1,34 @@
+<FluentDialog Hidden="@(!Open)" Modal="true" TrapFocus="true" aria-label="@Title">
+    <FluentDialogHeader>
+        <h2>@Title</h2>
+    </FluentDialogHeader>
+    <FluentDialogBody>
+        @ChildContent
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Disabled="@Busy" OnClick="DismissAsync">Keep current state</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" Disabled="@(Busy || ConfirmDisabled)" OnClick="ConfirmAsync">@ConfirmLabel</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    /// <summary>Whether the modal confirmation is visible.</summary>
+    [Parameter] public bool Open { get; set; }
+    /// <summary>Heading and accessible label describing the destructive action.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    /// <summary>Label for the button that commits the destructive action.</summary>
+    [Parameter, EditorRequired] public string ConfirmLabel { get; set; } = "";
+    /// <summary>Whether an operation is pending and both dialog actions must be disabled.</summary>
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Whether required confirmation input is incomplete.</summary>
+    [Parameter] public bool ConfirmDisabled { get; set; }
+    /// <summary>Content explaining impact and collecting any required reason.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>Notifies the owner to execute the confirmed action.</summary>
+    [Parameter] public EventCallback Confirmed { get; set; }
+    /// <summary>Notifies the owner to close the dialog without changing persisted state.</summary>
+    [Parameter] public EventCallback Dismissed { get; set; }
+
+    private Task ConfirmAsync() => Confirmed.InvokeAsync();
+    private Task DismissAsync() => Dismissed.InvokeAsync();
+}

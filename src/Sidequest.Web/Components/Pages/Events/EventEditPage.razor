@@ -19,7 +19,7 @@
 @if (input is not null)
 {
     <EventEditor Input="input" Busy="Busy" ZoneLocked="@(detail?.Summary.Status != EventStatus.Draft && Id is not null)"
-                 SubmitLabel="@(Id is null ? "Save Draft" : "Save changes")" Submitted="SaveAsync" />
+                 SubmitLabel="@(Id is null ? "Create Event" : "Save changes")" Submitted="SaveAsync" />
 }
 @if (duplicates.Count > 0)
 {
@@ -35,7 +35,7 @@
 }
 
 @code {
-    /// <summary>Event to edit, or null for a new Draft. Route changes cancel stale loads.</summary>
+    /// <summary>Event to edit, or null for a new Event that becomes Active in the same operation. Route changes cancel stale loads.</summary>
     [Parameter] public Guid? Id { get; set; }
     private EventDetail? detail;
     private EventInput? input;
