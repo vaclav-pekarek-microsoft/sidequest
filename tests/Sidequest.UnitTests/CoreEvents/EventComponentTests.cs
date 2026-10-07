@@ -174,14 +174,16 @@ public sealed class EventComponentTests : BunitContext
         var item = new EventSummary(id, "<script>sentinel</script>", "Safe public discovery",
             new(2026, 7, 15), new(2026, 7, 16), "Europe/Prague", EventStatus.Active,
             [new(ownerId, "Equal owner", "owner@example.invalid")], false, false, "opaque-version");
-        var cut = Render<EventCard>(p => p.Add(x => x.Item, item).Add(x => x.ShowJoinAction, true));
+        var cut = Render<EventCard>(p => p.Add(x => x.Item, item).Add(x => x.ShowParticipationActions, true));
         Assert.Equal($"/events/{id}", cut.Find("h2 a").GetAttribute("href"));
         Assert.Equal("<script>sentinel</script>", cut.Find("h2").TextContent);
         Assert.Contains("Safe public discovery", cut.Markup);
         Assert.Contains("owner@example.invalid", cut.Markup);
+        Assert.Equal("Contacts:", cut.Find(".event-contacts").ChildNodes[0].TextContent.Trim());
         Assert.Contains("owner@example.invalid (Equal owner)", cut.Markup);
         Assert.DoesNotContain(ownerId.ToString(), cut.Markup);
-        Assert.Contains("You have not joined this Event.", cut.Markup);
+        Assert.DoesNotContain("You have not joined this Event.", cut.Markup);
+        Assert.DoesNotContain("You joined this Event.", cut.Markup);
         Assert.Empty(cut.FindAll("script"));
         Assert.DoesNotContain("opaque-version", cut.Markup);
         Assert.DoesNotContain("You are a member", cut.Markup);
@@ -489,6 +491,24 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal(0, confirmed);
     }
 
+    /// <summary>A safe operation failure remains visible as an alert inside the open modal so confirmation never appears inert.</summary>
+    [Fact]
+    public void ConfirmActionDialogOpenErrorRendersInsideModalBody()
+    {
+        const string error = "This action is no longer allowed or the item changed.";
+        var cut = Render<ConfirmActionDialog>(parameters => parameters
+            .Add(component => component.Open, true)
+            .Add(component => component.Title, "Leave Event")
+            .Add(component => component.ConfirmLabel, "Leave Event")
+            .Add(component => component.Error, error));
+
+        Assert.False(cut.FindComponent<FluentDialog>().Instance.Hidden);
+        Assert.Equal(error, cut.Find("[role=alert]").TextContent);
+        Assert.Contains(error, cut.FindComponent<FluentDialog>().Markup);
+        Assert.False(cut.FindComponents<FluentButton>().Single(button =>
+            button.Find("fluent-button").TextContent.Trim() == "Leave Event").Instance.Disabled);
+    }
+
     /// <summary>An ordinary Event member receives no management tab strip because membership alone is not a management grant.</summary>
     [Fact]
     public void EventManagementTabsOrdinaryMemberRendersNoManagementNavigation()
@@ -510,7 +530,7 @@ public sealed class EventComponentTests : BunitContext
     {
         var selected = principal switch
         {
-            "creator" => "overview",
+            "creator" => "detail",
             "assigned owner" => "quests",
             _ => "settings"
         };
@@ -518,7 +538,7 @@ public sealed class EventComponentTests : BunitContext
             .Add(component => component.CanManage, true)
             .Add(component => component.Selected, selected));
 
-        Assert.Equal(["Overview", "Quests", "Members", "Invitations", "Settings"],
+        Assert.Equal(["Detail", "Quests", "Members", "Invitations", "Settings"],
             cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
         Assert.Equal("Event management tabs", cut.Find("nav").GetAttribute("aria-label"));
         Assert.Equal(selected,
@@ -555,7 +575,7 @@ public sealed class EventComponentTests : BunitContext
             [], false, false, "join-version");
         var cut = Render<EventCard>(parameters => parameters
             .Add(component => component.Item, item)
-            .Add(component => component.ShowJoinAction, true)
+            .Add(component => component.ShowParticipationActions, true)
             .Add(component => component.JoinRequested, value => joined.Add(value)));
 
         var join = Assert.Single(cut.FindComponents<FluentButton>());
@@ -582,11 +602,91 @@ public sealed class EventComponentTests : BunitContext
             [], isMember, false, "partition-version");
         var cut = Render<EventCard>(parameters => parameters
             .Add(component => component.Item, item)
-            .Add(component => component.ShowJoinAction, true));
+            .Add(component => component.ShowParticipationActions, true));
 
-        Assert.Empty(cut.FindComponents<FluentButton>());
+        Assert.DoesNotContain(cut.FindComponents<FluentButton>(),
+            button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
+        Assert.Equal(status == EventStatus.Active && isMember ? 1 : 0, cut.FindComponents<FluentButton>().Count);
         Assert.Contains(status.ToString(), cut.Markup);
         Assert.DoesNotContain("request membership", cut.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>An Active joined non-owner receives Leave rather than membership prose, and the callback carries the card Event identifier exactly once.</summary>
+    /// <returns>Completion after the rendered participation action invokes its owning callback.</returns>
+    [Fact]
+    public async Task EventCardActiveJoinedNonownerRendersLeaveAndInvokesCardIdOnce()
+    {
+        var id = Guid.Parse("54000000-0000-0000-0000-000000000045");
+        var leaves = new List<Guid>();
+        var cut = Render<EventCard>(parameters => parameters
+            .Add(component => component.Item, Summary(id, "Joined Event", EventStatus.Active, true))
+            .Add(component => component.ShowParticipationActions, true)
+            .Add(component => component.LeaveRequested, value => leaves.Add(value)));
+
+        var leave = Assert.Single(cut.FindComponents<FluentButton>());
+        Assert.Equal("Leave Event…", leave.Find("fluent-button").TextContent.Trim());
+        Assert.DoesNotContain("You joined this Event.", cut.Markup);
+        Assert.DoesNotContain("You have not joined this Event.", cut.Markup);
+        await cut.InvokeAsync(() => leave.Instance.OnClick.InvokeAsync());
+
+        Assert.Equal(id, Assert.Single(leaves));
+    }
+
+    /// <summary>An explicit Event owner cannot leave and alone receives ownership-continuity guidance; an ordinary member receives neither guidance nor owner treatment.</summary>
+    [Fact]
+    public void EventCardOwnerSuppressesLeaveAndOwnershipGuidanceIsOwnerOnly()
+    {
+        var eventId = Guid.Parse("55000000-0000-0000-0000-000000000055");
+        var owner = Render<EventCard>(parameters => parameters
+            .Add(component => component.Item, Summary(eventId, "Owned Event", EventStatus.Active, true, true))
+            .Add(component => component.ShowParticipationActions, true));
+        var member = Render<EventCard>(parameters => parameters
+            .Add(component => component.Item, Summary(eventId, "Member Event", EventStatus.Active, true))
+            .Add(component => component.ShowParticipationActions, true));
+
+        Assert.Empty(owner.FindComponents<FluentButton>());
+        Assert.Contains("Owners must remove all Event and child Quest ownership assignments before leaving.",
+            owner.Find(".text-muted").TextContent);
+        Assert.Single(member.FindComponents<FluentButton>(),
+            button => button.Find("fluent-button").TextContent.Trim() == "Leave Event…");
+        Assert.Empty(member.FindAll(".text-muted"));
+        Assert.DoesNotContain("ownership assignments", member.Markup);
+    }
+
+    /// <summary>A joined detail card places Event notification preferences in its content panel and points to the exact Event route.</summary>
+    [Fact]
+    public void EventCardJoinedDetailPlacesNotificationPreferencesInContentPanel()
+    {
+        var eventId = Guid.Parse("56000000-0000-0000-0000-000000000065");
+        var cut = Render<EventCard>(parameters => parameters
+            .Add(component => component.Item, Summary(eventId, "Detailed Event", EventStatus.Active, true))
+            .Add(component => component.DetailLayout, true)
+            .Add(component => component.ShowParticipationActions, true)
+            .Add(component => component.ShowNotificationPreferences, true));
+
+        var content = cut.Find(".event-card-content");
+        var preference = Assert.Single(content.QuerySelectorAll("a"),
+            link => link.TextContent.Trim() == "Notification preferences");
+        Assert.Equal($"/notifications/preferences/{eventId}", preference.GetAttribute("href"));
+        Assert.Empty(cut.Find(".event-card-media").QuerySelectorAll("a"));
+        Assert.True(cut.Find("article").ClassList.Contains("event-card-detail"));
+    }
+
+    /// <summary>A detail visitor who has not joined receives no Event notification-preferences destination even when the host enables that feature.</summary>
+    [Fact]
+    public void EventCardNonmemberDetailHidesNotificationPreferences()
+    {
+        var eventId = Guid.Parse("57000000-0000-0000-0000-000000000075");
+        var cut = Render<EventCard>(parameters => parameters
+            .Add(component => component.Item, Summary(eventId, "Visitor Event", EventStatus.Active, false))
+            .Add(component => component.DetailLayout, true)
+            .Add(component => component.ShowParticipationActions, true)
+            .Add(component => component.ShowNotificationPreferences, true));
+
+        Assert.Empty(cut.FindAll($"a[href='/notifications/preferences/{eventId}']"));
+        Assert.DoesNotContain("Notification preferences", cut.Markup);
+        Assert.Single(cut.FindComponents<FluentButton>(),
+            button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
     }
 
     /// <summary>The editor renders an explicitly supplied create label while preserving its exact default edit label.</summary>
@@ -722,7 +822,82 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal("Page 2 · 26 items", cut.Find("nav[aria-label='List pages'] span").TextContent.Trim());
         Assert.DoesNotContain(cut.FindComponents<FluentButton>(),
             button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
-        Assert.Contains("You joined this Event.", cut.Markup);
+        Assert.Contains("Leave Event…", cut.Markup);
+        Assert.DoesNotContain("You joined this Event.", cut.Markup);
+    }
+
+    /// <summary>List Leave is held behind confirmation, calls the exact Event once, closes the modal, and reloads the current view into Join state.</summary>
+    /// <returns>Completion after confirmation and the refreshed list projection.</returns>
+    [Fact]
+    public async Task EventListPageLeaveConfirmsThenCallsServiceOnceAndReloadsActionState()
+    {
+        var eventId = Guid.Parse("61500000-0000-0000-0000-000000000015");
+        var joined = true;
+        var leaveCalls = new List<Guid>();
+        var listReads = 0;
+        await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
+        {
+            if (method.Name == nameof(IEventService.LeaveAsync))
+            {
+                leaveCalls.Add((Guid)arguments![0]!);
+                joined = false;
+                return Task.CompletedTask;
+            }
+
+            Assert.Equal(nameof(IEventService.ListAsync), method.Name);
+            listReads++;
+            var request = (PageRequest)arguments![1]!;
+            return Task.FromResult(new PageResult<EventSummary>(
+                [Summary(eventId, "List leave", EventStatus.Active, joined)], 1, request.Page, request.PageSize));
+        }));
+        var cut = Render<EventListPage>();
+
+        Assert.Contains("Leave Event…", cut.Markup);
+        Assert.DoesNotContain("You joined this Event.", cut.Markup);
+        await ClickButtonAsync(cut, "Leave Event…");
+        var dialog = Assert.Single(cut.FindComponents<ConfirmActionDialog>(), candidate => candidate.Instance.Open);
+        Assert.Empty(leaveCalls);
+        await ClickButtonAsync(dialog, "Leave Event");
+
+        Assert.Equal(eventId, Assert.Single(leaveCalls));
+        Assert.Equal(2, listReads);
+        Assert.False(dialog.Instance.Open);
+        Assert.Contains("Join Event", cut.Markup);
+        Assert.DoesNotContain("Leave Event…", cut.Markup);
+    }
+
+    /// <summary>A list Leave conflict keeps the confirmation open and presents the normalized safe server conflict inside it.</summary>
+    /// <returns>Completion after the failing service call is rendered by the still-open modal.</returns>
+    [Fact]
+    public async Task EventListPageLeaveConflictRemainsVisibleInsideOpenDialog()
+    {
+        var eventId = Guid.Parse("61600000-0000-0000-0000-000000000016");
+        var leaveCalls = 0;
+        await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
+        {
+            if (method.Name == nameof(IEventService.LeaveAsync))
+            {
+                Assert.Equal(eventId, (Guid)arguments![0]!);
+                leaveCalls++;
+                throw new DomainException(ErrorCode.Conflict, "Unsafe persistence detail.");
+            }
+
+            Assert.Equal(nameof(IEventService.ListAsync), method.Name);
+            var request = (PageRequest)arguments![1]!;
+            return Task.FromResult(new PageResult<EventSummary>(
+                [Summary(eventId, "Conflict leave", EventStatus.Active, true)], 1, request.Page, request.PageSize));
+        }));
+        var cut = Render<EventListPage>();
+
+        await ClickButtonAsync(cut, "Leave Event…");
+        var dialog = Assert.Single(cut.FindComponents<ConfirmActionDialog>(), candidate => candidate.Instance.Open);
+        await ClickButtonAsync(dialog, "Leave Event");
+
+        Assert.Equal(1, leaveCalls);
+        Assert.True(dialog.Instance.Open);
+        Assert.Contains("This action is no longer allowed or the item changed.", dialog.Find("[role=alert]").TextContent);
+        Assert.DoesNotContain("Unsafe persistence detail.", dialog.Markup);
+        Assert.Contains("Leave Event…", cut.Markup);
     }
 
     /// <summary>The Event list exposes direct Join without retaining any request-membership action surface.</summary>
@@ -776,7 +951,6 @@ public sealed class EventComponentTests : BunitContext
         var cut = Render<EventDetailPage>(parameters => parameters.Add(component => component.Id, eventId));
 
         Assert.Empty(cut.FindAll("[role=tab]"));
-        Assert.Contains("No owner approval is required.", cut.Markup);
         var join = cut.FindComponents<FluentButton>().Single(button =>
             button.Find("fluent-button").TextContent.Trim() == "Join Event");
         await cut.InvokeAsync(() => join.Instance.OnClick.InvokeAsync());
@@ -786,12 +960,12 @@ public sealed class EventComponentTests : BunitContext
         Assert.Empty(cut.FindAll("[role=tab]"));
         Assert.Empty(cut.FindComponents<EventQuestsPanel>());
         Assert.Empty(cut.FindComponents<EventMembersPanel>());
-        Assert.Contains("Protected member description", cut.Markup);
+        Assert.Single(cut.FindComponents<EventCard>());
         Assert.DoesNotContain(cut.FindComponents<FluentButton>(),
             button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
     }
 
-    /// <summary>An ordinary member receives Overview content but no management strip or management panel.</summary>
+    /// <summary>An ordinary member receives detail content but no management strip or management panel.</summary>
     /// <returns>Completion after the ordinary member projection is rendered without privileged components.</returns>
     [Fact]
     public async Task EventDetailPageOrdinaryMemberHidesManagementTabsAndPanels()
@@ -816,8 +990,9 @@ public sealed class EventComponentTests : BunitContext
         Assert.Empty(cut.FindComponents<EventMembersPanel>());
         Assert.Empty(cut.FindComponents<EventInvitationsPanel>());
         Assert.Empty(cut.FindComponents<EventSettingsPanel>());
-        Assert.Contains("Member description", cut.Markup);
+        Assert.Single(cut.FindComponents<EventCard>());
         Assert.Contains("Leave Event", cut.Markup);
+        Assert.Contains("Notification preferences", cut.Markup);
         Assert.DoesNotContain("Invitations", cut.Markup);
         Assert.DoesNotContain("Settings", cut.Markup);
     }
@@ -851,9 +1026,11 @@ public sealed class EventComponentTests : BunitContext
         }));
         var cut = Render<EventDetailPage>(parameters => parameters.Add(component => component.Id, eventId));
 
-        Assert.Equal(["Overview", "Quests", "Members", "Invitations", "Settings"],
+        Assert.Equal(["Detail", "Quests", "Members", "Invitations", "Settings"],
             cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        Assert.Single(cut.FindComponents<EventCard>());
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Quests").Click();
+        Assert.Empty(cut.FindComponents<EventCard>());
         var quests = cut.FindComponent<EventQuestsPanel>();
         Assert.Equal(eventId, quests.Instance.EventId);
         Assert.True(quests.Instance.CanModerate);
@@ -874,10 +1051,10 @@ public sealed class EventComponentTests : BunitContext
         Assert.Contains("Event actions", settings.Markup);
     }
 
-    /// <summary>Losing management permission while Settings is selected resets to Overview and removes every management surface.</summary>
+    /// <summary>Losing management permission while Settings is selected resets to Detail and removes every management surface.</summary>
     /// <returns>Completion after the route reloads a downgraded ordinary-member projection.</returns>
     [Fact]
-    public async Task EventDetailPageManagementPermissionLossResetsToOverviewAndHidesAllManagementSurfaces()
+    public async Task EventDetailPageManagementPermissionLossResetsToDetailAndHidesAllManagementSurfaces()
     {
         var eventId = Guid.Parse("66000000-0000-0000-0000-000000000061");
         var canManage = true;
@@ -896,7 +1073,7 @@ public sealed class EventComponentTests : BunitContext
         cut.Render(parameters => parameters.Add(component => component.Id, eventId));
 
         Assert.Empty(cut.FindAll("[role=tab]"));
-        Assert.Single(cut.FindAll("h2"), heading => heading.TextContent.Trim() == "About this Event");
+        Assert.Single(cut.FindComponents<EventCard>());
         Assert.Empty(cut.FindComponents<EventQuestsPanel>());
         Assert.Empty(cut.FindComponents<EventMembersPanel>());
         Assert.Empty(cut.FindComponents<EventInvitationsPanel>());
@@ -1059,6 +1236,42 @@ public sealed class EventComponentTests : BunitContext
         await ClickButtonAsync(dialog, "Leave Event");
 
         Assert.Equal(eventId, Assert.Single(leaves));
+    }
+
+    /// <summary>A detail Leave conflict remains visible inside the still-open confirmation and does not navigate or expose unsafe server text.</summary>
+    /// <returns>Completion after the normalized conflict is rendered in the modal.</returns>
+    [Fact]
+    public async Task EventDetailPageLeaveConflictRemainsVisibleInsideOpenDialog()
+    {
+        var eventId = Guid.Parse("6b500000-0000-0000-0000-0000000000b5");
+        var leaveCalls = 0;
+        await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
+        {
+            if (method.Name == nameof(IEventService.LeaveAsync))
+            {
+                Assert.Equal(eventId, (Guid)arguments![0]!);
+                leaveCalls++;
+                throw new DomainException(ErrorCode.Conflict, "Unsafe persistence detail.");
+            }
+
+            Assert.Equal(nameof(IEventService.GetAsync), method.Name);
+            return Task.FromResult(new EventDetail(
+                Summary(eventId, "Conflict Event", EventStatus.Active, true), "Member details"));
+        }));
+        var navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        var before = navigation.Uri;
+        var cut = Render<EventDetailPage>(parameters => parameters.Add(component => component.Id, eventId));
+
+        await ClickButtonAsync(cut, "Leave Event…");
+        var dialog = Assert.Single(cut.FindComponents<ConfirmActionDialog>(), candidate => candidate.Instance.Open);
+        await ClickButtonAsync(dialog, "Leave Event");
+
+        Assert.Equal(1, leaveCalls);
+        Assert.True(dialog.Instance.Open);
+        Assert.Contains("This action is no longer allowed or the item changed.", dialog.Find("[role=alert]").TextContent);
+        Assert.DoesNotContain("Unsafe persistence detail.", dialog.Markup);
+        Assert.Equal(before, navigation.Uri);
+        Assert.Single(cut.FindComponents<EventCard>());
     }
 
     /// <summary>Dismissing leave preserves membership, and its destructive dialog contains no checkbox confirmation control.</summary>
@@ -1758,7 +1971,7 @@ public sealed class EventComponentTests : BunitContext
         var cut = Render<EventCard>(parameters => parameters
             .Add(component => component.Item,
                 Summary(eventId, "Busy join", EventStatus.Active, false))
-            .Add(component => component.ShowJoinAction, true)
+            .Add(component => component.ShowParticipationActions, true)
             .Add(component => component.Busy, true)
             .Add(component => component.JoinRequested, value => callbacks.Add(value)));
         var join = Assert.Single(cut.FindComponents<FluentButton>());
@@ -1777,7 +1990,7 @@ public sealed class EventComponentTests : BunitContext
         var selections = new List<string>();
         var cut = Render<EventManagementTabs>(parameters => parameters
             .Add(component => component.CanManage, true)
-            .Add(component => component.Selected, "overview")
+            .Add(component => component.Selected, "detail")
             .Add(component => component.Disabled, true)
             .Add(component => component.SelectedChanged, value => selections.Add(value)));
         var tabs = cut.FindAll("[role=tab]");
@@ -1787,8 +2000,48 @@ public sealed class EventComponentTests : BunitContext
         ((AngleSharp.Html.Dom.IHtmlElement)tabs.Single(tab => tab.TextContent.Trim() == "Settings")).DoClick();
 
         Assert.Empty(selections);
-        Assert.Equal("overview", cut.Instance.Selected);
-        Assert.True(tabs.Single(tab => tab.TextContent.Trim() == "Overview")
+        Assert.Equal("detail", cut.Instance.Selected);
+        Assert.True(tabs.Single(tab => tab.TextContent.Trim() == "Detail")
             .HasAttribute("aria-selected"));
+    }
+
+    /// <summary>An ordinary Active joined member without ownership assignments receives Leave and no ownership-continuity guidance.</summary>
+    [Fact]
+    public void EventParticipationActionsOrdinaryJoinedMemberShowsLeaveWithoutOwnershipGuidance()
+    {
+        var item = Summary(Guid.Parse("7c000000-0000-0000-0000-000000000001"),
+            "Ordinary member", EventStatus.Active, true);
+
+        var cut = Render<EventParticipationActions>(parameters => parameters
+            .Add(component => component.Item, item));
+
+        var leave = Assert.Single(cut.FindComponents<FluentButton>());
+        Assert.Equal("Leave Event…", leave.Find("fluent-button").TextContent.Trim());
+        Assert.False(item.HasOwnershipAssignments);
+        Assert.Empty(cut.FindAll(".text-muted"));
+        Assert.DoesNotContain("ownership assignments", cut.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A joined child-Quest owner who is not an Event owner receives continuity guidance instead of Leave.</summary>
+    [Fact]
+    public void EventParticipationActionsChildQuestOwnerHidesLeaveAndShowsOwnershipGuidance()
+    {
+        var item = Summary(Guid.Parse("7c000000-0000-0000-0000-000000000002"),
+            "Quest owner", EventStatus.Active, true) with
+        {
+            HasOwnershipAssignments = true
+        };
+
+        var cut = Render<EventParticipationActions>(parameters => parameters
+            .Add(component => component.Item, item));
+
+        Assert.False(item.IsOwner);
+        Assert.False(item.CanManage);
+        Assert.True(item.HasOwnershipAssignments);
+        Assert.Empty(cut.FindComponents<FluentButton>());
+        Assert.Equal(
+            "Owners must remove all Event and child Quest ownership assignments before leaving.",
+            cut.Find(".text-muted").TextContent.Trim());
+        Assert.DoesNotContain("Leave Event", cut.Markup);
     }
 }

@@ -19,6 +19,11 @@ internal static class EventQueries
                             select new OwnerSummary(user.Id, user.DisplayName, user.Email))
                             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var ownerAccess = member && owners.Any(x => x.Id == userId);
+        var hasOwnershipAssignments = ownerAccess || await (from owner in db.QuestOwners
+                                                            join quest in db.Quests on owner.QuestId equals quest.Id
+                                                            where quest.EventId == item.Id && owner.UserId == userId
+                                                            select owner.Id)
+            .AnyAsync(cancellationToken).ConfigureAwait(false);
         var canManage = item.CreatorId == userId || ownerAccess ||
             await db.Administrators.AnyAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
         var status = EventTransactions.Effective(item, now);
@@ -31,7 +36,8 @@ internal static class EventQueries
             item.TimeZoneId, status, owners, member, ownerAccess,
             member || canManage ? Convert.ToBase64String(item.Version) : "")
         {
-            CanManage = canManage
+            CanManage = canManage,
+            HasOwnershipAssignments = hasOwnershipAssignments
         };
     }
 

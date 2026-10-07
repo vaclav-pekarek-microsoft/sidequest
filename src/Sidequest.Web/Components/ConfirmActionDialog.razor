@@ -4,6 +4,10 @@
     </FluentDialogHeader>
     <FluentDialogBody>
         @ChildContent
+        @if (Error is not null)
+        {
+            <p role="alert">@Error</p>
+        }
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Disabled="@Busy" OnClick="DismissAsync">Keep current state</FluentButton>
@@ -22,6 +26,8 @@
     [Parameter] public bool Busy { get; set; }
     /// <summary>Whether required confirmation input is incomplete.</summary>
     [Parameter] public bool ConfirmDisabled { get; set; }
+    /// <summary>Safe operation failure shown inside the still-open modal, or null when no failure occurred.</summary>
+    [Parameter] public string? Error { get; set; }
     /// <summary>Content explaining impact and collecting any required reason.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
     /// <summary>Notifies the owner to execute the confirmed action.</summary>

@@ -16,13 +16,24 @@
 <EventFeedback Busy="Busy" Error="@Error" />
 @if (detail is not null)
 {
-    <EventCard Item="detail.Summary" />
-    @if (detail.Summary.IsMember || detail.Summary.CanManage)
+    @if (detail.Summary.CanManage)
     {
         <EventManagementTabs Selected="selectedTab" CanManage="detail.Summary.CanManage" Disabled="Busy"
                              SelectedChanged="SelectTabAsync" />
         @switch (selectedTab)
         {
+            case "detail":
+                <EventCard Item="detail.Summary" Description="detail.Description" DetailLayout="true"
+                           ShowParticipationActions="true" ShowNotificationPreferences="true"
+                           JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync">
+                    <AdditionalActions>
+                        @if (detail.Summary.Status == EventStatus.Active)
+                        {
+                            <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a>
+                        }
+                    </AdditionalActions>
+                </EventCard>
+                break;
             case "quests" when detail.Summary.CanManage:
                 <EventQuestsPanel EventId="Id"
                                   CanCreate="@(detail.Summary.Status == EventStatus.Active)"
@@ -38,35 +49,14 @@
                 <EventSettingsPanel Detail="detail" Changed="LoadAsync" />
                 break;
             default:
-                <section class="section-box">
-                    <h2 class="section-heading">About this Event</h2>
-                    <p class="description">@detail.Description</p>
-                    <div class="page-actions">
-                        <a href="@($"/notifications/preferences/{Id}")">Notification preferences</a>
-                        @if (detail.Summary.CanManage && detail.Summary.Status == EventStatus.Active)
-                        {
-                            <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a>
-                        }
-                        @if (detail.Summary.IsMember && !detail.Summary.CanManage)
-                        {
-                            <FluentButton Disabled="@Busy" OnClick="@(() => leaveDialogOpen = true)">Leave Event…</FluentButton>
-                        }
-                    </div>
-                    @if (detail.Summary.IsMember && !detail.Summary.CanManage)
-                    {
-                        <p class="text-muted">Owners must remove all Event and child Quest ownership assignments before leaving.</p>
-                    }
-                </section>
                 break;
         }
     }
     else
     {
-        <section class="section-box" aria-label="Join Event">
-            <h2 class="section-heading">Join this Event</h2>
-            <p>Join directly to see the full Event and its authorized Quests. No owner approval is required.</p>
-            <FluentButton Appearance="Appearance.Accent" Disabled="@Busy" OnClick="JoinAsync">Join Event</FluentButton>
-        </section>
+        <EventCard Item="detail.Summary" Description="detail.Description" DetailLayout="true"
+                   ShowParticipationActions="true" ShowNotificationPreferences="true"
+                   JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync" />
     }
 }
 
@@ -74,6 +64,7 @@
                      Title="Leave Event"
                      ConfirmLabel="Leave Event"
                      Busy="Busy"
+                     Error="@Error"
                      Confirmed="LeaveAsync"
                      Dismissed="@(() => leaveDialogOpen = false)">
     <p>Leaving removes your Quest invitations, attendance, follows, and applicable calendar entries for this Event.</p>
@@ -83,7 +74,7 @@
     /// <summary>Internal Event route identifier; every load reauthorizes it on the server.</summary>
     [Parameter] public Guid Id { get; set; }
     private EventDetail? detail;
-    private string selectedTab = "overview";
+    private string selectedTab = "detail";
     private bool leaveDialogOpen;
     /// <inheritdoc />
     protected override Task OnParametersSetAsync() => LoadAsync();
@@ -97,10 +88,10 @@
         token.ThrowIfCancellationRequested();
         detail = loaded;
         if (!loaded.Summary.CanManage)
-            selectedTab = "overview";
+            selectedTab = "detail";
     });
 
-    private Task JoinAsync() => RunMutationAsync(async token =>
+    private Task JoinAsync(Guid _) => RunMutationAsync(async token =>
     {
         await Events.JoinAsync(Id, token);
         var loaded = await Events.GetAsync(Id, token);
@@ -113,6 +104,12 @@
         if (detail?.Summary.CanManage != true)
             return Task.CompletedTask;
         selectedTab = tab;
+        return Task.CompletedTask;
+    }
+
+    private Task OpenLeaveDialogAsync(Guid _)
+    {
+        leaveDialogOpen = true;
         return Task.CompletedTask;
     }
 

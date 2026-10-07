@@ -200,7 +200,9 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         var eventId = await ExperienceBrowserSupport.CreateEventAsync(owner);
         await member.GotoAsync($"/events/{eventId}");
         await member.GetByRole(AriaRole.Button, new() { Name = "Join Event", Exact = true }).ClickAsync();
-        await Expect(member.GetByText("You joined this Event.", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(member.GetByRole(AriaRole.Button, new() { Name = "Leave Event", Exact = false })).ToBeVisibleAsync();
+        await Expect(member.GetByRole(AriaRole.Link, new() { Name = "Notification preferences", Exact = true })).ToBeVisibleAsync();
+        await Expect(member.GetByText("You joined this Event.", new() { Exact = true })).ToHaveCountAsync(0);
         await Expect(member.GetByRole(AriaRole.Tab)).ToHaveCountAsync(0);
         var quest = await ExperienceBrowserSupport.CreateQuestAsync(owner, eventId, $"Revocation {Guid.NewGuid():N}", privateQuest: true);
         await ExperienceBrowserSupport.SelectQuestActionAsync(owner, "Invite (immediate access)");

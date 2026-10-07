@@ -1,0 +1,41 @@
+<div class="event-participation-actions">
+    @if (ShowNotificationPreferences && Item.IsMember)
+    {
+        <a href="@($"/notifications/preferences/{Item.Id}")">Notification preferences</a>
+    }
+    @if (Item.Status == EventStatus.Active && !Item.IsMember)
+    {
+        <FluentButton Appearance="Appearance.Accent" Disabled="@Busy"
+                      OnClick="@(() => JoinRequested.InvokeAsync(Item.Id))">Join Event</FluentButton>
+    }
+    else if (Item.Status == EventStatus.Active && Item.IsMember && !Item.HasOwnershipAssignments)
+    {
+        <FluentButton Disabled="@Busy"
+                      OnClick="@(() => LeaveRequested.InvokeAsync(Item.Id))">Leave Event…</FluentButton>
+    }
+    @if (Item.HasOwnershipAssignments)
+    {
+        <p class="text-muted">Owners must remove all Event and child Quest ownership assignments before leaving.</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>Authorized Event summary that determines the available participation actions.</summary>
+    [Parameter, EditorRequired] public EventSummary Item { get; set; } = null!;
+
+    /// <summary>Whether the owning page is processing an operation and actions must be disabled.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Whether a joined member receives the Event-scoped notification preferences link.</summary>
+    [Parameter] public bool ShowNotificationPreferences { get; set; }
+
+    /// <summary>Additional authorized actions rendered after participation controls.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Requests direct Event joining from the owning page.</summary>
+    [Parameter] public EventCallback<Guid> JoinRequested { get; set; }
+
+    /// <summary>Requests leave confirmation from the owning page.</summary>
+    [Parameter] public EventCallback<Guid> LeaveRequested { get; set; }
+}

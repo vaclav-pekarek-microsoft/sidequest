@@ -21,4 +21,7 @@ public sealed record EventSummary(Guid Id, string Name, string DiscoverySummary,
 {
     /// <summary>Whether the actor may manage the Event as its creator, an assigned equal owner, or an administrator.</summary>
     public bool CanManage { get; init; } = IsOwner;
+
+    /// <summary>Whether the actor has an explicit Event or child Quest owner assignment that must be removed before leaving.</summary>
+    public bool HasOwnershipAssignments { get; init; } = IsOwner;
 }

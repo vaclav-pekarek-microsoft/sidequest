@@ -338,4 +338,49 @@ public sealed class EventQueryTests(SqlTestDatabase database) : IClassFixture<Sq
         Assert.Equal("Kind", exception.Field);
         Assert.Equal("Choose a valid Event list.", exception.Message);
     }
+
+    /// <summary>Projects child-Quest, explicit Event, and absent ownership assignments independently from Event management authorization.</summary>
+    /// <returns>A task completing after real-SQL list and detail projections preserve each actor's exact ownership flags.</returns>
+    [Fact]
+    public async Task OwnershipAssignmentProjectionDistinguishesChildQuestOwnerEventOwnerAndUnrelatedMember()
+    {
+        var context = new EventTestContext(database);
+        var creator = FoundationSeed.NewUser();
+        var questOwner = FoundationSeed.NewUser();
+        var eventOwner = FoundationSeed.NewUser();
+        var unrelatedMember = FoundationSeed.NewUser();
+        questOwner.TenantId = creator.TenantId;
+        eventOwner.TenantId = creator.TenantId;
+        unrelatedMember.TenantId = creator.TenantId;
+        await FoundationSeed.PersistAsync(database, creator, questOwner, eventOwner, unrelatedMember);
+        var item = Candidate(creator.Id, "Ownership projection");
+        var quest = FoundationSeed.NewQuest(item.Id, creator.Id);
+        await FoundationSeed.PersistAsync(database, item, quest);
+        await FoundationSeed.PersistAsync(database,
+            Membership(item, questOwner),
+            Membership(item, eventOwner),
+            Membership(item, unrelatedMember),
+            new QuestOwner { QuestId = quest.Id, UserId = questOwner.Id },
+            new EventOwner { EventId = item.Id, UserId = eventOwner.Id });
+
+        var questOwnerList = Assert.Single((await context.Service(questOwner)
+            .ListAsync(EventListKind.Mine, new(1, 25))).Items);
+        var questOwnerDetail = (await context.Service(questOwner).GetAsync(item.Id)).Summary;
+        var eventOwnerSummary = (await context.Service(eventOwner).GetAsync(item.Id)).Summary;
+        var unrelatedSummary = (await context.Service(unrelatedMember).GetAsync(item.Id)).Summary;
+
+        Assert.Equal(item.Id, questOwnerList.Id);
+        Assert.True(questOwnerList.HasOwnershipAssignments);
+        Assert.False(questOwnerList.IsOwner);
+        Assert.False(questOwnerList.CanManage);
+        Assert.True(questOwnerDetail.HasOwnershipAssignments);
+        Assert.False(questOwnerDetail.IsOwner);
+        Assert.False(questOwnerDetail.CanManage);
+        Assert.True(eventOwnerSummary.HasOwnershipAssignments);
+        Assert.True(eventOwnerSummary.IsOwner);
+        Assert.True(eventOwnerSummary.CanManage);
+        Assert.False(unrelatedSummary.HasOwnershipAssignments);
+        Assert.False(unrelatedSummary.IsOwner);
+        Assert.False(unrelatedSummary.CanManage);
+    }
 }
