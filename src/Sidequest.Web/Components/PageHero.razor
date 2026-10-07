@@ -1,0 +1,34 @@
+<header class="page-hero @Class">
+    <div class="page-hero-copy">
+        @if (!string.IsNullOrWhiteSpace(Eyebrow))
+        {
+            <p class="eyebrow">@Eyebrow</p>
+        }
+        <h1>@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Summary))
+        {
+            <p class="page-hero-summary">@Summary</p>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <div class="page-hero-actions">@Actions</div>
+    }
+</header>
+
+@code {
+    /// <summary>Gets or sets the required primary page heading.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Gets or sets the optional uppercase context label rendered before the heading.</summary>
+    [Parameter] public string? Eyebrow { get; set; }
+
+    /// <summary>Gets or sets the optional concise description of the page purpose.</summary>
+    [Parameter] public string? Summary { get; set; }
+
+    /// <summary>Gets or sets optional primary actions rendered alongside the page introduction.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>Gets or sets additional shared CSS classes applied to the hero container.</summary>
+    [Parameter] public string? Class { get; set; }
+}

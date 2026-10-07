@@ -1,0 +1,19 @@
+<article class="feature-tile feature-tile-@Tone">
+    <span class="feature-index" aria-hidden="true">@Index</span>
+    <h2>@Title</h2>
+    <div class="feature-description">@ChildContent</div>
+</article>
+
+@code {
+    /// <summary>Gets or sets the short visual index displayed as a decorative orientation marker.</summary>
+    [Parameter, EditorRequired] public string Index { get; set; } = "";
+
+    /// <summary>Gets or sets the feature heading.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Gets or sets the shared accent tone name used by the global design system.</summary>
+    [Parameter] public string Tone { get; set; } = "blue";
+
+    /// <summary>Gets or sets the descriptive feature content.</summary>
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = null!;
+}

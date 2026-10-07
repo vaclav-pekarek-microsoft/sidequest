@@ -140,15 +140,27 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         var factory = new ProvisioningTestContext(database);
         var gateway = new RecordingEmailGateway();
         var service = CreateService(factory, gateway, LoadSettings(factory.TenantId));
+        var existing = new UserAccount
+        {
+            TenantId = factory.TenantId,
+            ObjectId = Guid.NewGuid(),
+            DisplayName = "Vaclav Pekarek",
+            Email = "vaclav.pekarek@microsoft.com"
+        };
+        await FoundationSeed.PersistAsync(database, existing);
 
-        var challengeId = await service.RequestAsync("local.user", true, default);
+        var challengeId = await service.RequestAsync("vaclav.pekarek", true, default);
 
         Assert.Empty(gateway.Messages);
         Assert.Null(await service.VerifyAsync(challengeId, "123456", default));
         var principal = await service.VerifyAsync(challengeId, "000000", default);
         Assert.NotNull(principal);
-        Assert.Equal("local.user@microsoft.com", principal.FindFirst("preferred_username")?.Value);
+        Assert.Equal(existing.ObjectId.ToString(), principal.FindFirst("oid")?.Value);
+        Assert.Equal("vaclav.pekarek@microsoft.com", principal.FindFirst("preferred_username")?.Value);
         Assert.Null(await service.VerifyAsync(challengeId, "000000", default));
+        await using var read = database.CreateContext();
+        Assert.True(await read.Administrators.AnyAsync(
+            administrator => administrator.UserId == existing.Id));
     }
 
     private static MagicCodeAuthenticationService CreateService(

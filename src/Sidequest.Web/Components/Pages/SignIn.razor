@@ -5,9 +5,12 @@
 
 <PageTitle>Sign in · Sidequest</PageTitle>
 <div class="signin-page">
+<PageHero Eyebrow="Microsoft internal"
+          Title="Welcome to Sidequest"
+          Summary="Use your Microsoft alias to continue."
+          Class="page-hero-compact" />
 @if (Authentication.IsDevelopment)
 {
-    <h1>Sign in to Sidequest</h1>
     <h2>Synthetic development personas</h2>
     <p>Loopback only. These are not real employees. Local SQL and the foundation schema must be available.</p>
     <form class="section-box" method="post" action="/auth/development" data-enhance="false" data-authentication-change>
@@ -27,7 +30,6 @@
 }
 else
 {
-    <h1>Sign in to Sidequest</h1>
     @if (!Sent)
     {
         <p>Enter your Microsoft alias. We will send a one-time code to <strong>alias@microsoft.com</strong>.</p>

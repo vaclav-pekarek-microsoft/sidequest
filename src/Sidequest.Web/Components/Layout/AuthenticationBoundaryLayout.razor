@@ -8,7 +8,20 @@
     <ConnectionStatus @rendermode="InteractiveServer" />
     <p data-authentication-warning role="alert" hidden></p>
 }
-<main class="authentication-boundary">@Body</main>
+<div class="authentication-shell">
+    <aside class="authentication-brand">
+        <BrandLockup ShowTagline="true" />
+        <div class="authentication-promise">
+            <p class="eyebrow">Microsoft internal</p>
+            <h2>Turn a little free time into shared momentum.</h2>
+            <p>Discover activities, bring colleagues together, and make company Events feel more human.</p>
+        </div>
+        <div class="microsoft-spectrum" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+        </div>
+    </aside>
+    <main class="authentication-boundary">@Body</main>
+</div>
 
 @code {
     private bool IsDevelopmentSignIn =>
