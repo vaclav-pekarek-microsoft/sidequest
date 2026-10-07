@@ -1,71 +1,50 @@
-@rendermode InteractiveServer
-<PageHero Eyebrow="Make room for a shared experience"
-          Title="Quests"
-          Summary="Everything happening in your Events. Join to attend; follow when you want to stay in the loop.">
-    <Actions>
-        <a class="button-link" href="/quests/create">Create a Quest</a>
-    </Actions>
-</PageHero>
-<nav class="page-actions dashboard-shortcuts" aria-label="Quest actions" data-online-actions>
-    <a href="/events">Browse Events</a>
-    <a href="/quests?view=Discover">Discover Quests</a>
-    <a href="/quests?view=History">Quest history</a>
-    <a href="/quests?view=Invited">Private invitations</a>
-</nav>
-<nav class="quest-view-navigation" aria-label="Quest views">
-    @foreach (var option in ViewOptions)
-    {
-        <button type="button" class="@(filter.Kind == option.Kind ? "selected" : null)"
-                aria-pressed="@(filter.Kind == option.Kind ? "true" : "false")"
-                disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)"
-                @onclick="() => SelectKindAsync(option.Kind)">@option.Label</button>
-    }
-</nav>
-<DashboardFilters Kind="filter.Kind" Events="events" EventPage="eventPage" EventTotal="eventTotal" EventPageChanged="EventPageAsync"
-                  Disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)" Changed="FilterAsync" />
-<section class="dashboard-results" data-protected-experience data-online-actions aria-label="Authorized Quest results" aria-busy="@loading">
-    <header class="results-header">
-        <h2>@Heading</h2>
-        <div class="layout-switcher" role="group" aria-label="Quest layout">
-            <button type="button" class="@(layout == QuestLayout.Board ? "selected" : null)"
-                    aria-pressed="@(layout == QuestLayout.Board ? "true" : "false")" @onclick="() => layout = QuestLayout.Board">Board</button>
-            <button type="button" class="@(layout == QuestLayout.List ? "selected" : null)"
-                    aria-pressed="@(layout == QuestLayout.List ? "true" : "false")" @onclick="() => layout = QuestLayout.List">List</button>
-        </div>
+@namespace Sidequest.Web.Components.Experience
+
+<section class="quest-home">
+    <header class="page-header">
+        <p class="eyebrow">Your Sidequest</p>
+        <h1>Quests at a glance</h1>
+        <p class="text-muted">See what is happening now, what is next, and which invitations await you.</p>
     </header>
-    @if (loading)
+
+    @if (isLoading)
     {
-        <p class="state-panel" role="status">Loading authorized Quests…</p>
+        <p>Loading Quest overview...</p>
     }
-    else if (error is not null)
+    else if (data is null)
     {
-        <p class="state-panel error-message" role="alert">@error</p>
-        <button type="button" disabled="@(!RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions)" @onclick="LoadAsync">Reload authorized Quests</button>
-    }
-    else if (result is null || result.Quests.Items.Count == 0)
-    {
-        <div class="state-panel">
-            <h3>A little space for something great</h3>
-            <p>No Quests in this view. Find an Event that interests you, join it directly, and come back to discover its Quests.</p>
-            <a class="button-link" href="/events">Find and join an Event</a>
+        <div class="alert error" role="alert">
+            <p>@error</p>
+            <FluentButton Appearance="Appearance.Accent" OnClick="LoadAsync">Try again</FluentButton>
         </div>
     }
     else
     {
-        <p class="result-caption">@result.Quests.TotalCount matching Quests.
-            @(filter.Kind == Sidequest.Application.Quests.QuestListKind.Board
-                ? "Joined first, then start date and time in each Event's time zone. Past and cancelled Quests keep their status."
-                : "Ordered by start time, then identifier.")</p>
-        <div class="@(layout == QuestLayout.Board ? "quest-board" : "quest-list")">
-            @foreach (var item in result.Quests.Items)
-            {
-                <DashboardQuestCard @key="item.Id" Item="item" InvitedCount="@(result.InvitedCounts.TryGetValue(item.Id, out var count) ? count : null)" />
-            }
+        @if (error is not null)
+        {
+            <p class="alert error" role="alert">@error</p>
+        }
+
+        <QuestHomeStatistics UpcomingJoinedCount="data.UpcomingJoinedCount"
+                             UpcomingTotalCount="data.UpcomingTotalCount"
+                             ActiveCount="data.ActiveCount"
+                             PastCount="data.PastCount" />
+
+        <QuestHomeQuestList Title="Happening now"
+                            Items="data.ActiveQuests"
+                            EmptyMessage="No Quests are active right now." />
+
+        <div class="quest-home-upcoming">
+            <QuestHomeQuestList Title="Upcoming joined"
+                                Items="data.UpcomingJoined"
+                                EmptyMessage="You have no upcoming joined Quests." />
+            <QuestHomeQuestList Title="Upcoming following"
+                                Items="data.UpcomingFollowing"
+                                EmptyMessage="You have no upcoming followed Quests." />
         </div>
+
+        <QuestInvitationTable Items="data.Invitations"
+                              Busy="@(isJoining || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions)"
+                              JoinRequested="JoinInvitationAsync" />
     }
-    <div class="dashboard-pagination">
-        <button type="button" disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions || page == 1)" @onclick="PreviousAsync">Previous Quests</button>
-        <span>Page @(page)</span>
-        <button type="button" disabled="@(loading || !RendererInfo.IsInteractive || !Coordinator.CanUseOnlineActions || result is null || (long)page * filter.PageSize >= result.Quests.TotalCount)" @onclick="NextAsync">Next Quests</button>
-    </div>
 </section>

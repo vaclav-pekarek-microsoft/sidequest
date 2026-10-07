@@ -1,0 +1,37 @@
+@using Sidequest.Application.Quests
+
+<section class="quest-home-section" aria-labelledby="@headingId">
+    <h2 id="@headingId">@Title</h2>
+    @if (Items.Count == 0)
+    {
+        <p class="text-muted">@EmptyMessage</p>
+    }
+    else
+    {
+        <ul class="quest-home-list">
+            @foreach (var item in Items)
+            {
+                <li @key="item.Id">
+                    <div>
+                        <span class="text-muted">@item.EventName</span>
+                        <a href="@($"/quests/{item.Id}")">@item.Title</a>
+                    </div>
+                    <QuestLocalDate StartUtc="item.StartUtc" ZoneId="@item.TimeZoneId" />
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private readonly string headingId = $"quest-home-{Guid.NewGuid():N}";
+
+    /// <summary>Section heading describing the supplied Quest category.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Authorized Quests rendered in their supplied order.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<QuestSummary> Items { get; set; } = [];
+
+    /// <summary>Message shown when the supplied category is empty.</summary>
+    [Parameter, EditorRequired] public string EmptyMessage { get; set; } = "";
+}

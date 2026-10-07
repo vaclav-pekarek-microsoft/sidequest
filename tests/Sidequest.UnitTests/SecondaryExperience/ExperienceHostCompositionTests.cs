@@ -15,7 +15,7 @@ namespace Sidequest.UnitTests.SecondaryExperience;
 /// <summary>Verifies the actual feature registrations compose with the existing core graph and require the sixth durable handler before polling.</summary>
 public sealed class ExperienceHostCompositionTests
 {
-    /// <summary>Real dashboard, administration and media services resolve without provider I/O; departure recovery stays closed and omitting required Media fails startup.</summary>
+    /// <summary>Real home, administration and media services resolve without provider I/O; departure recovery stays closed and omitting required Media fails startup.</summary>
     /// <param name="includeMedia">Whether the real Media feature and its cleanup handler are registered.</param>
     /// <returns>Completion after scoped-lifetime, exact handler-set and startup admission assertions.</returns>
     [Theory]
@@ -31,7 +31,7 @@ public sealed class ExperienceHostCompositionTests
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         await using var first = provider.CreateAsyncScope();
         await using var second = provider.CreateAsyncScope();
-        Assert.IsType<DashboardService>(first.ServiceProvider.GetRequiredService<DashboardService>());
+        Assert.IsType<QuestHomeService>(first.ServiceProvider.GetRequiredService<QuestHomeService>());
         Assert.IsType<AdministrationService>(first.ServiceProvider.GetRequiredService<AdministrationService>());
         Assert.IsType<BusinessEmailService>(first.ServiceProvider.GetRequiredService<BusinessEmailService>());
         Assert.False(provider.GetRequiredService<DepartureRecoveryPolicy>().Enabled);

@@ -1,0 +1,31 @@
+<section aria-labelledby="quest-home-statistics-title">
+    <h2 id="quest-home-statistics-title">Quest overview</h2>
+    <div class="quest-home-statistics">
+        <article>
+            <strong>@UpcomingJoinedCount / @UpcomingTotalCount</strong>
+            <span>Upcoming joined / total</span>
+        </article>
+        <article>
+            <strong>@ActiveCount</strong>
+            <span>Active now</span>
+        </article>
+        <article>
+            <strong>@PastCount</strong>
+            <span>Past Quests</span>
+        </article>
+    </div>
+</section>
+
+@code {
+    /// <summary>Number of future Active Quests joined by the actor.</summary>
+    [Parameter] public int UpcomingJoinedCount { get; set; }
+
+    /// <summary>Total number of future Active Quests visible to the actor.</summary>
+    [Parameter] public int UpcomingTotalCount { get; set; }
+
+    /// <summary>Number of visible Active Quests happening now.</summary>
+    [Parameter] public int ActiveCount { get; set; }
+
+    /// <summary>Number of visible Quests whose end time has passed.</summary>
+    [Parameter] public int PastCount { get; set; }
+}

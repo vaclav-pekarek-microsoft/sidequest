@@ -74,5 +74,5 @@ else
 <div class="quest-pagination">
     <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || page == 1)" OnClick="PreviousAsync">Previous</FluentButton>
     <span>Page @(page)</span>
-    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || result is null || page * 25 >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>
+    <FluentButton Disabled="@(loading || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions || result is null || page * PageSize >= result.TotalCount)" OnClick="NextAsync">Next</FluentButton>
 </div>

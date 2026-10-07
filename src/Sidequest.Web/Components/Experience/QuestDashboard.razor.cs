@@ -1,131 +1,135 @@
 using Microsoft.AspNetCore.Components;
 using Sidequest.Application.Abstractions;
-using Sidequest.Application.Events;
 using Sidequest.Application.Experience;
 using Sidequest.Application.Quests;
+using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
-using Sidequest.Web.Components.Quests;
 using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Experience;
 
-/// <summary>Owns authorized dashboard paging; rechecks access during interactive activation and reconnection rather than trusting prerendered state.</summary>
-public partial class QuestDashboard : IAsyncDisposable
+/// <summary>Owns the signed-in Quest home projection and invitation participation commands.</summary>
+public partial class QuestDashboard : ComponentBase, IAsyncDisposable
 {
-    private static readonly (QuestListKind Kind, string Label)[] ViewOptions =
-    [
-        (QuestListKind.Board, "All Quests"),
-        (QuestListKind.Joined, "Upcoming Joined"),
-        (QuestListKind.Following, "Following"),
-        (QuestListKind.Organizing, "Organizing"),
-        (QuestListKind.Discover, "Discover"),
-        (QuestListKind.Invited, "Invited")
-    ];
     private readonly CancellationTokenSource lifetime = new();
-    private IReadOnlyList<EventSummary> events = [];
-    private DashboardPage? result;
-    private DashboardFilter filter = new(QuestListKind.Board, null, null, null);
-    private QuestLayout layout = QuestLayout.Board;
-    private int page = 1;
-    private int eventPage = 1;
-    private int eventTotal;
-    private int generation;
-    private bool loading;
+    private ExperienceViewSubscription? experience;
+    private QuestHomeData? data;
     private string? error;
-    [Inject] private DashboardService Dashboard { get; set; } = default!;
-    [Inject] private IEventService Events { get; set; } = default!;
-    [Inject] private ExperienceCoordinator Coordinator { get; set; } = default!;
-    [Inject] private ILogger<QuestDashboard> Logger { get; set; } = default!;
-    private string Heading => filter.Kind switch
-    {
-        QuestListKind.Board => "Your Quest board",
-        QuestListKind.Joined => "Upcoming Joined",
-        _ => filter.Kind.ToString()
-    };
+    private int generation;
+    private bool isJoining;
+    private bool isLoading = true;
+
+    [Inject] private QuestHomeService Home { get; set; } = null!;
+    [Inject] private IQuestService Quests { get; set; } = null!;
+    [Inject] private ExperienceCoordinator Experience { get; set; } = null!;
+    [Inject] private ILogger<QuestDashboard> Logger { get; set; } = null!;
+
+    /// <inheritdoc />
+    protected override void OnInitialized() =>
+        experience = new(Experience, () => InvokeAsync(StateHasChanged), ReauthorizeAsync);
+
+    /// <inheritdoc />
+    protected override Task OnAfterRenderAsync(bool firstRender) =>
+        RendererInfo.IsInteractive ? experience?.AfterRenderAsync() ?? Task.CompletedTask : Task.CompletedTask;
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
-        Coordinator.Changed += OnConnectionAsync;
-        Coordinator.ReauthorizationRequested += ReauthorizeAsync;
         await LoadAsync();
     }
-
-    private Task OnConnectionAsync() => InvokeAsync(StateHasChanged);
-    private Task ReauthorizeAsync() => InvokeAsync(async () =>
-    {
-        await LoadAsync();
-        if (!lifetime.IsCancellationRequested) StateHasChanged();
-    });
-    private async Task FilterAsync(DashboardFilter next) { filter = next; page = 1; await LoadAsync(); }
-    private async Task SelectKindAsync(QuestListKind kind)
-    {
-        filter = filter with { Kind = kind };
-        page = 1;
-        await LoadAsync();
-    }
-    private async Task PreviousAsync() { page--; await LoadAsync(); }
-    private async Task NextAsync() { page++; await LoadAsync(); }
-    private async Task EventPageAsync(int next) { eventPage = next; await LoadAsync(); }
 
     private async Task LoadAsync()
     {
         var request = ++generation;
-        loading = true;
-        result = null;
+        isLoading = true;
+        error = null;
+        data = null;
+        try
+        {
+            var next = await Home.GetAsync(lifetime.Token);
+            if (request != generation || lifetime.IsCancellationRequested)
+                return;
+            data = next;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (DomainException ex) when (request == generation)
+        {
+            error = ex.Message;
+        }
+        catch (Exception) when (request != generation)
+        {
+        }
+        catch (Exception ex)
+        {
+            var reference = Guid.NewGuid().ToString("N");
+            Logger.LogError(ex, "Quest home load failed. Reference {Reference}.", reference);
+            error = $"Quest overview could not be loaded. Please retry. Reference: {reference}.";
+        }
+        finally
+        {
+            if (request == generation)
+            {
+                isLoading = false;
+                if (experience is not null)
+                    await experience.AfterOperationAsync();
+            }
+        }
+    }
+
+    private async Task JoinInvitationAsync(Guid questId)
+    {
+        if (data is null || isJoining || !RendererInfo.IsInteractive || !Experience.CanUseOnlineActions ||
+            !data.Invitations.Any(quest => quest.Id == questId))
+            return;
+
+        isJoining = true;
         error = null;
         try
         {
-            var eventResult = await Events.ListAsync(EventListKind.Mine, new PageRequest(eventPage, 100), lifetime.Token);
-            var nextEvents = eventResult.Items;
-            var zone = "Etc/UTC";
-            if (filter.EventId is { } id)
-            {
-                var selected = nextEvents.SingleOrDefault(e => e.Id == id) ?? (await Events.GetAsync(id, lifetime.Token)).Summary;
-                if (!nextEvents.Any(e => e.Id == id)) nextEvents = nextEvents.Append(selected).ToArray();
-                zone = selected.TimeZoneId;
-            }
-            var dates = QuestDateFilterFactory.FromDates(filter.From, filter.Through, zone);
-            var next = await Dashboard.ListAsync(filter.Kind, filter.EventId, new PageRequest(page, filter.PageSize),
-                dates, lifetime.Token);
-            if (request != generation || lifetime.IsCancellationRequested) return;
-            events = nextEvents;
-            eventTotal = eventResult.TotalCount;
-            result = next;
-            if (RendererInfo.IsInteractive) await Coordinator.RequestSnapshotRefreshAsync();
+            await Quests.ParticipateAsync(questId, ParticipationCommand.Join, lifetime.Token);
+            await LoadAsync();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (DomainException failure) when (request == generation)
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
-            if (failure.Code != ErrorCode.Validation) events = [];
-            error = failure.Code == ErrorCode.Validation ? "Check the Event and date range. The last date must not precede the first." :
-                "Quests are unavailable or access has changed. Reconnect and sign in if needed.";
-            if (RendererInfo.IsInteractive) await Coordinator.RequestSnapshotRefreshAsync();
+            return;
         }
-        catch (Exception failure) when (request == generation)
+        catch (DomainException ex)
         {
-            events = [];
+            error = ex.Message;
+        }
+        catch (Exception ex)
+        {
             var reference = Guid.NewGuid().ToString("N");
-            Logger.LogError(failure, "Dashboard load failed. Reference {Reference}.", reference);
-            error = $"Quests could not be loaded. Please retry. Reference: {reference}.";
+            Logger.LogError(ex, "Quest invitation join failed for {QuestId}. Reference {Reference}.", questId, reference);
+            error = $"The Quest could not be joined. Please retry. Reference: {reference}.";
         }
-        catch (Exception) when (request != generation) { }
-        finally { if (request == generation) loading = false; }
+        finally
+        {
+            isJoining = false;
+        }
     }
 
-    /// <inheritdoc />
+    private Task ReauthorizeAsync() => InvokeAsync(async () =>
+    {
+        if (lifetime.IsCancellationRequested)
+            return;
+        await LoadAsync();
+        if (!lifetime.IsCancellationRequested)
+            StateHasChanged();
+    });
+
+    /// <summary>Cancels pending operations and removes connection-coordinator subscriptions.</summary>
+    /// <returns>A completed asynchronous disposal operation.</returns>
     public async ValueTask DisposeAsync()
     {
-        Coordinator.Changed -= OnConnectionAsync;
-        Coordinator.ReauthorizationRequested -= ReauthorizeAsync;
+        if (experience is not null)
+            await experience.DisposeAsync();
         generation++;
         await lifetime.CancelAsync();
         lifetime.Dispose();
-    }
-
-    private enum QuestLayout
-    {
-        Board,
-        List
+        GC.SuppressFinalize(this);
     }
 }

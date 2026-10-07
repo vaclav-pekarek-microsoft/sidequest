@@ -483,21 +483,29 @@ Joining does not require organizer approval. See sections 50 and 54.
 
 ## 20. User Dashboard
 
-The main Sidequest dashboard is a **Quest-centric board**. Its default view contains
-all ordinarily accessible Quests from Events where the user has current individual
-membership, with Joined Quests first and other participation states afterward.
-Within each partition, order by start date/time in the parent Event's IANA time zone;
-break equal local times by UTC instant, then identifier. Apply access and date filters
-before pagination. Only the selected page loads full cards and owner-only statistics.
-Private/draft visibility is unchanged. Past, cancelled and archived Quests remain
-clearly labelled; users can narrow the board with the existing views below.
+Signed-in Home is a lightweight **Quest overview**, not another filterable Quest board.
+It shows:
+
+- upcoming Active Quests joined by the user compared with all visible upcoming Active
+  Quests
+- counts of all visible Quests happening now and all visible Quests whose end instant
+  has passed
+- every visible Active Quest happening now
+- the first three upcoming joined Quests and first three upcoming followed Quests,
+  ordered by start instant and identifier
+- active private invitations not already joined, in a table with Event, linked Quest
+  name, Event-local Quest date and direct Join action
+
+Home has no filters, layout switcher, pagination, dashboard shortcuts or owner-only
+card statistics. Joining an invitation uses ordinary Quest participation and refreshes
+the overview. Reauthorization clears stale protected data before rebuilding it.
 
 Event membership and Quest participation remain separate. Because membership is
-already the access prerequisite, "joined first" describes Quest attendance rather
-than admitting Quests from unjoined Events. Pending Event invitations do not disclose
-Quest content. Membership revocation removes cards on reauthorization.
+already the access prerequisite, Home never admits Quests from unjoined Events.
+Membership or invitation revocation removes content on reauthorization.
 
-Additional views:
+The separate Quests page retains filtering, board/list layouts and these authorized
+views. It pages all views by exactly 12 Quests:
 
 ### Upcoming
 
@@ -1538,7 +1546,7 @@ Completed/Cancelled/Archived Events are not candidates. No AI or hidden Event hi
 
 | Screen | Required behavior |
 |--------|-------------------|
-| Home / Quests | Home is the authorized joined-first board (section 20); the Quests page retains joined/following/organizing/discover/invited views, Event filter and separate history actions |
+| Home / Quests | Home is the unfiltered Quest overview in section 20; the Quests page retains joined/following/organizing/discover/invited views, Event/date filters, board/list layouts, 12-Quest pages and separate history actions |
 | Discover | Public Active Quests in the user's Events; Event/date filters; no private items or private-count hints |
 | Events | All Active Events with joined/not-joined state, direct Join action, separate retained history, create Event action and duplicate warning |
 | Event detail | Discovery or member context with direct Join/Leave; reusable Overview, Quests, Members, Invitations, and manager-only Settings tabs rather than separate management pages |
@@ -2327,6 +2335,7 @@ not V1 release requirements.
 | D45 | 2026-10-06 | Select `vaclav.pekarek` as the initial administrator bootstrap alias. Normalize valid stored Microsoft mailboxes to their lower-case aliases before account-link comparison, so casing and surrounding storage whitespace do not create distinct identities. If multiple user records normalize to the verified alias, authentication fails closed rather than selecting an account. |
 | D46 | 2026-10-07 | Simplify Event participation for the internal tool: every eligible signed-in user can list all Active Events and join one directly without owner approval. Event creation is one step and immediately Active; Draft publication remains only for legacy records. Joined Event members can read that Event's authorized Quests. Event detail owns tabbed Overview, Quests, Members, Invitations, and Settings management instead of separate product navigation. Event cancel/delete/leave/member-owner removal/invitation-revocation actions require modal confirmation. Empty Quest results direct users to find and join an Event. Events expose only attendance membership (joined or not joined), with no Event-follow action. This supersedes D01/D14 and the Event portions of sections 7–8, 48–52 that require membership requests or Draft-first creation; it does not remove Quest-level Following. |
 | D47 | 2026-10-07 | Deployed authentication is magic-code-only for `alias@microsoft.cz`; no interactive Entra/OpenID handler or fallback is registered. Retain loopback-only synthetic Development personas for automated and local testing. Normalize a unique eligible legacy `alias@microsoft.com` account by alias for continuity, update its stored contact to `alias@microsoft.cz` after successful verification, and fail closed on cross-domain ambiguity. Never deliver a code to the legacy domain. Microsoft Graph and Azure managed identity remain separate directory and infrastructure integrations, not user sign-in methods. This supersedes the authentication-domain and direct-Entra-entry portions of D42, D44 and D45. |
+| D48 | 2026-10-07 | Replace the signed-in Home board from D41 with a lightweight, unfiltered Quest overview: upcoming joined/total, active-now and past counts; every active-now Quest; top three upcoming joined and followed Quests; and active invitation rows with Event, linked Quest, Event-local date and direct Join. Keep filtering, layout selection and category navigation exclusively on the Quests page, which uses 12-item pagination for every view. Home has no dashboard shortcuts. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
