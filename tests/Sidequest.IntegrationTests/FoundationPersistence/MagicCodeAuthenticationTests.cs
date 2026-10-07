@@ -26,7 +26,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         var settings = LoadSettings(factory.TenantId, "new.user");
         var service = CreateService(factory, gateway, settings);
 
-        var challengeId = await service.RequestAsync("New.User", default);
+        var challengeId = await service.RequestAsync("New.User", false, default);
         var message = Assert.Single(gateway.Messages);
         Assert.Equal("new.user@microsoft.com", message.Recipient);
         var code = AssertCode(message.TextBody);
@@ -73,7 +73,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         await FoundationSeed.PersistAsync(database, existing);
         var service = CreateService(factory, gateway, settings);
 
-        var linkChallenge = await service.RequestAsync("existing", default);
+        var linkChallenge = await service.RequestAsync("existing", false, default);
         var principal = await service.VerifyAsync(
             linkChallenge, AssertCode(Assert.Single(gateway.Messages).TextBody), default);
         Assert.NotNull(principal);
@@ -82,8 +82,8 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         Assert.Equal("existing@microsoft.com", principal.FindFirst("preferred_username")?.Value);
         Assert.NotNull(WorkforceIdentity.Read(principal, settings));
 
-        var exhaustedChallenge = await service.RequestAsync("other", default);
-        var throttledDecoy = await service.RequestAsync("other", default);
+        var exhaustedChallenge = await service.RequestAsync("other", false, default);
+        var throttledDecoy = await service.RequestAsync("other", false, default);
         Assert.NotEqual(exhaustedChallenge, throttledDecoy);
         Assert.Equal(2, gateway.Messages.Count);
         for (var attempt = 0; attempt < 5; attempt++)
@@ -120,7 +120,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
             });
         var service = CreateService(factory, gateway, settings);
 
-        var challengeId = await service.RequestAsync("DUPLICATE", default);
+        var challengeId = await service.RequestAsync("DUPLICATE", false, default);
         var principal = await service.VerifyAsync(
             challengeId, AssertCode(Assert.Single(gateway.Messages).TextBody), default);
 
@@ -130,6 +130,25 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
             user.TenantId == factory.TenantId && user.Email.ToLower().Contains("duplicate")));
         Assert.NotNull((await read.MagicSignInChallenges.SingleAsync(
             challenge => challenge.Id == challengeId)).ConsumedUtc);
+    }
+
+    /// <summary>A local development request hashes the fixed code, skips email delivery, and uses the normal single-use verification path.</summary>
+    /// <returns>A task completing after local-code verification and consumption assertions.</returns>
+    [Fact]
+    public async Task LocalDevelopmentCodeUsesNormalChallengeVerification()
+    {
+        var factory = new ProvisioningTestContext(database);
+        var gateway = new RecordingEmailGateway();
+        var service = CreateService(factory, gateway, LoadSettings(factory.TenantId));
+
+        var challengeId = await service.RequestAsync("local.user", true, default);
+
+        Assert.Empty(gateway.Messages);
+        Assert.Null(await service.VerifyAsync(challengeId, "123456", default));
+        var principal = await service.VerifyAsync(challengeId, "000000", default);
+        Assert.NotNull(principal);
+        Assert.Equal("local.user@microsoft.com", principal.FindFirst("preferred_username")?.Value);
+        Assert.Null(await service.VerifyAsync(challengeId, "000000", default));
     }
 
     private static MagicCodeAuthenticationService CreateService(

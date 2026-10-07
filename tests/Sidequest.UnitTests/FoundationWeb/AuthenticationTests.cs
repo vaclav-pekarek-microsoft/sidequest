@@ -225,6 +225,32 @@ public sealed class AuthenticationTests
         Assert.Equal(expected, AuthenticationEndpoints.IsLoopback(context));
     }
 
+    /// <summary>Verifies the fixed local magic code requires Development plus known loopback peer and listener addresses.</summary>
+    /// <param name="environment">Host environment presented to the endpoint.</param>
+    /// <param name="remoteAddress">Direct peer address, or unknown.</param>
+    /// <param name="localAddress">Listener address, or unknown.</param>
+    /// <param name="expected">Whether the local development code may be generated.</param>
+    [Theory]
+    [InlineData("Development", "127.0.0.1", "127.0.0.1", true)]
+    [InlineData("Development", "::1", "::1", true)]
+    [InlineData("Production", "127.0.0.1", "127.0.0.1", false)]
+    [InlineData("Development", "192.0.2.4", "127.0.0.1", false)]
+    [InlineData("Development", "127.0.0.1", "192.0.2.4", false)]
+    [InlineData("Development", null, "127.0.0.1", false)]
+    [InlineData("Development", "127.0.0.1", null, false)]
+    public void LocalMagicCodeRequiresDevelopmentLoopback(
+        string environment, string? remoteAddress, string? localAddress, bool expected)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress =
+            remoteAddress is null ? null : IPAddress.Parse(remoteAddress);
+        context.Connection.LocalIpAddress =
+            localAddress is null ? null : IPAddress.Parse(localAddress);
+
+        Assert.Equal(expected, AuthenticationEndpoints.IsLocalDevelopment(
+            context, new TestEnvironment { EnvironmentName = environment }));
+    }
+
     /// <summary>Verifies disabled or departed accounts are rejected before contact or timestamp changes.</summary>
     /// <param name="eligible">Persisted eligibility flag.</param>
     /// <param name="departed">Whether departure verification is present.</param>
