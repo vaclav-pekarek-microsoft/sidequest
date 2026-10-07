@@ -629,7 +629,7 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal($"/quests?view=Moderation&eventId={eventId}", links[2].GetAttribute("href"));
     }
 
-    /// <summary>The Event list requests All by default and offers Join only on an Active card the actor has not joined.</summary>
+    /// <summary>The Event list requests All by default, groups cards in the responsive grid, and offers Join only on an Active card the actor has not joined.</summary>
     /// <returns>Completion after the interactive page performs its initial authorized read.</returns>
     [Fact]
     public async Task EventListPageDefaultsToAllAndRendersJoinOnlyForActiveNonmembers()
@@ -652,6 +652,7 @@ public sealed class EventComponentTests : BunitContext
 
         Assert.Equal((EventListKind.All, 1), Assert.Single(requests));
         Assert.Equal(4, cut.FindComponents<EventCard>().Count);
+        Assert.Equal(4, cut.Find(".event-card-grid").Children.Length);
         var join = Assert.Single(cut.FindComponents<FluentButton>(),
             button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
         Assert.Single(cut.FindComponents<EventCard>().Single(card => card.Instance.Item.Id == activeUnjoined.Id)

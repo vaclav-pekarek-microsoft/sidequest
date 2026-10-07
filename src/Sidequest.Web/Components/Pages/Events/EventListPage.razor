@@ -37,11 +37,13 @@
     {
         <p>No Events in this view. Browse all Events and join one directly.</p>
     }
-    @foreach (var item in result.Items)
-    {
-        <EventCard @key="item.Id" Item="item" ShowJoinAction="@(kind == EventListKind.All)"
-                   Busy="Busy" JoinRequested="JoinAsync" />
-    }
+    <div class="event-card-grid">
+        @foreach (var item in result.Items)
+        {
+            <EventCard @key="item.Id" Item="item" ShowJoinAction="@(kind == EventListKind.All)"
+                       Busy="Busy" JoinRequested="JoinAsync" />
+        }
+    </div>
     <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="ChangePageAsync" />
 }
 
