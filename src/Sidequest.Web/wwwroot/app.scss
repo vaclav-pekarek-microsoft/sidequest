@@ -456,6 +456,55 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 .error-message, .validation-message { color: var(--sq-danger); }
 .error-message { padding: .75rem; border-left: 4px solid var(--sq-danger); }
 .text-muted, .result-caption { color: var(--sq-muted); }
+.management-tabs {
+    display: flex;
+    gap: .45rem;
+    margin-block: 1.25rem;
+    padding: .4rem;
+    overflow-x: auto;
+    background: color-mix(in srgb, var(--sq-blue) 8%, white);
+    border: 1px solid var(--sq-line);
+    border-radius: 1rem;
+
+    button {
+        flex: 0 0 auto;
+        color: var(--sq-ink-soft);
+        background: transparent;
+        border-color: transparent;
+        box-shadow: none;
+    }
+
+    button.selected {
+        color: white;
+        background: linear-gradient(135deg, var(--sq-blue), var(--sq-violet));
+        border-color: transparent;
+    }
+}
+.management-list {
+    display: grid;
+    gap: .7rem;
+    margin: 1rem 0;
+    padding: 0;
+    list-style: none;
+
+    > li,
+    > article {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .9rem 1rem;
+        background: #f7faff;
+        border: 1px solid var(--sq-line);
+        border-radius: .9rem;
+    }
+
+    p { margin: .2rem 0 0; }
+}
+.event-settings {
+    display: grid;
+    gap: 1rem;
+}
 
 [data-authentication-warning],
 #components-reconnect-modal {
@@ -520,6 +569,8 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
     .authentication-brand { min-height: 18rem; }
     .authentication-promise p:not(.eyebrow), .microsoft-spectrum { display: none; }
     .authentication-boundary { padding: 1.25rem; }
+    .management-list > li,
+    .management-list > article { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,0 +1,99 @@
+@inherits EventViewBase
+
+<section class="section-box" aria-labelledby="event-invitations-title">
+    <h2 id="event-invitations-title" class="section-heading">Event invitations</h2>
+    <p>Invitations are optional outreach. Anyone eligible can also find and join an Active Event directly.</p>
+    <EventFeedback Busy="Busy" Error="@Error" />
+    @if (result is not null)
+    {
+        @if (result.Items.Count == 0)
+        {
+            <p>No Event invitations.</p>
+        }
+        <div class="management-list">
+            @foreach (var invitation in result.Items)
+            {
+                <article @key="invitation.Id">
+                    <div>
+                        <strong>@invitation.User.Label</strong>
+                        <p>@invitation.Status · Expires @invitation.ExpiresUtc.ToString("g") UTC</p>
+                    </div>
+                    @if (invitation.Status == EventInvitationStatus.Pending)
+                    {
+                        <FluentButton Disabled="@Busy" OnClick="@(() => OpenRevocation(invitation))">Revoke invitation…</FluentButton>
+                    }
+                </article>
+            }
+        </div>
+        <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="PageAsync" />
+    }
+</section>
+
+<ConfirmActionDialog Open="revokeDialogOpen"
+                     Title="Revoke pending invitation"
+                     ConfirmLabel="Revoke invitation"
+                     Busy="Busy"
+                     Confirmed="ConfirmRevocationAsync"
+                     Dismissed="CloseRevocation">
+    <p>Revoke the pending Event invitation for <strong>@revokeLabel</strong>? This does not remove an existing membership.</p>
+</ConfirmActionDialog>
+
+@code {
+    /// <summary>Owner-managed Event whose pending invitations are displayed.</summary>
+    [Parameter] public Guid EventId { get; set; }
+
+    private PageResult<EventInvitationSummary>? result;
+    private Guid revokeInvitationId;
+    private string revokeLabel = "";
+    private bool revokeDialogOpen;
+    private int page = 1;
+
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync()
+    {
+        page = 1;
+        return LoadAsync();
+    }
+
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => LoadAsync();
+
+    private Task LoadAsync() => RunAsync(RefreshAsync);
+
+    private async Task RefreshAsync(CancellationToken token)
+    {
+        result = null;
+        var loaded = await Events.ListInvitationsAsync(EventId, new(page), token);
+        token.ThrowIfCancellationRequested();
+        result = loaded;
+    }
+
+    private void OpenRevocation(EventInvitationSummary invitation)
+    {
+        revokeInvitationId = invitation.Id;
+        revokeLabel = invitation.User.Label;
+        revokeDialogOpen = true;
+    }
+
+    private void CloseRevocation() => revokeDialogOpen = false;
+
+    private Task ConfirmRevocationAsync() => RunMutationAsync(async token =>
+    {
+        await Events.RevokeInvitationAsync(revokeInvitationId, token);
+        revokeDialogOpen = false;
+        await RefreshAsync(token);
+    });
+
+    private Task PageAsync(int selected)
+    {
+        page = selected;
+        return LoadAsync();
+    }
+
+    /// <inheritdoc />
+    protected override void ClearProtectedState()
+    {
+        result = null;
+        revokeDialogOpen = false;
+    }
+}

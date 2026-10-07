@@ -22,6 +22,9 @@ public partial class QuestManagement
     } : action;
     private bool NeedsPerson => CurrentAction is "add-owner" or "remove-owner" or "invite" or "revoke" or "remove-attendee";
     private bool NeedsReason => CurrentAction is "cancel" or "suspend" or "reinstate" or "revoke" or "remove-attendee";
+    private bool IsDestructive => CurrentAction is "delete" or "cancel" or "remove-owner" or "revoke" or "remove-attendee";
+    private bool DestructiveDisabled => Busy || NeedsPerson && !Guid.TryParse(selected, out _) ||
+        NeedsReason && reason.Trim().Length < 10;
     private string ActionLabel => CurrentAction switch
     {
         "publish" => "Publish draft", "delete" => "Delete draft", "cancel" => "Cancel Quest",
@@ -103,9 +106,19 @@ public partial class QuestManagement
 
     private async Task SendAsync(string action)
     {
-        if (Disabled || action != CurrentAction || (NeedsPerson && TargetDisabled))
+        if (Busy || !IsDestructive && !confirmed || action != CurrentAction ||
+            NeedsPerson && !Guid.TryParse(selected, out _))
             return;
         confirmed = false;
         await Execute.InvokeAsync(new(action, Guid.TryParse(selected, out var id) ? id : null, reason));
+    }
+
+    private async Task DismissActionAsync()
+    {
+        action = "";
+        selected = "";
+        reason = "";
+        confirmed = false;
+        await PublishDraftAsync();
     }
 }

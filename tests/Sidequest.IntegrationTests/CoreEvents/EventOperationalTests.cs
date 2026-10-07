@@ -46,10 +46,14 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         string version;
         await using (var setup = database.CreateContext())
         {
-            version = Convert.ToBase64String((await setup.Events.FindAsync(id))!.Version);
+            var item = (await setup.Events.FindAsync(id))!;
+            item.Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{id:N}:")));
             var membership = await setup.EventMemberships.SingleAsync(x => x.EventId == id);
             membership.Status = MembershipStatus.Removed;
             await setup.SaveChangesAsync();
+            version = Convert.ToBase64String(item.Version);
         }
         var sut = context.Service(seed.User);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => sut.GetAsync(id))).Code);
@@ -91,6 +95,13 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         var seed = await context.SeedAsync();
         var sut = context.Service(seed.User);
         var id = await sut.CreateAsync(EventTestContext.Input());
+        await using (var setup = database.CreateContext())
+        {
+            (await setup.Events.SingleAsync(x => x.Id == id)).Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{id:N}:")));
+            await setup.SaveChangesAsync();
+        }
         await sut.AddMemberAsync(id, seed.Other.ObjectId, false);
         await sut.RemoveMemberAsync(id, seed.Other.Id, "Draft audience changed.");
         await sut.AddMemberAsync(id, seed.Other.ObjectId, true);
@@ -230,6 +241,13 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         var owner = context.Service(seed.User);
         var member = context.Service(seed.Other);
         var id = await owner.CreateAsync(EventTestContext.Input("Unpublished confidential Event"));
+        await using (var setup = database.CreateContext())
+        {
+            (await setup.Events.SingleAsync(x => x.Id == id)).Status = EventStatus.Draft;
+            setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                x.DeduplicationKey.StartsWith($"event.complete.v1:{id:N}:")));
+            await setup.SaveChangesAsync();
+        }
         await owner.AddMemberAsync(id, seed.Other.ObjectId, false);
         var draft = await owner.GetAsync(id);
         await owner.ChangeStatusAsync(id, draft.Summary.Version, EventStatus.Cancelled, "Unpublished planning was cancelled.");

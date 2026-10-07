@@ -42,7 +42,7 @@ public sealed class EventDateValidationTests(SqlTestDatabase database) : IClassF
             var saved = await service.GetAsync(id);
             Assert.Equal(input.StartDate, saved.Summary.StartDate);
             Assert.Equal(input.EndDate, saved.Summary.EndDate);
-            Assert.Equal(EventStatus.Draft, saved.Summary.Status);
+            Assert.Equal(EventStatus.Active, saved.Summary.Status);
             Assert.True(saved.Summary.IsOwner);
         }
     }

@@ -71,7 +71,7 @@
             </details>
         }
     }
-    @if (CurrentAction.Length > 0)
+    @if (CurrentAction.Length > 0 && !IsDestructive)
     {
         <section class="section-box management-confirmation" aria-label="Confirm Quest action">
             <h3 class="section-heading">@ActionLabel</h3>
@@ -94,3 +94,26 @@
         </section>
     }
 </section>
+
+@if (IsDestructive)
+{
+    <ConfirmActionDialog Open="true"
+                         Title="@ActionLabel"
+                         ConfirmLabel="@($"Confirm: {ActionLabel}")"
+                         Busy="Busy"
+                         ConfirmDisabled="DestructiveDisabled"
+                         Confirmed="@(() => SendAsync(CurrentAction))"
+                         Dismissed="DismissActionAsync">
+        <p>@ConfirmationDescription</p>
+        @if (NeedsPerson)
+        {
+            <QuestManagementPeople Candidates="Candidates.ToArray()" Selected="@selected" SelectedChanged="SelectPersonAsync"
+                                   Busy="Busy" MemberPage="MemberPage" MoreMembers="MoreMembers" PageChanged="PageChanged" />
+        }
+        @if (NeedsReason)
+        {
+            <FluentTextArea Name="quest-management-reason" Label="Reason (10–2000 characters)"
+                            @bind-Value="reason" @bind-Value:after="PublishDraftAsync" Immediate="true" Disabled="@Busy" />
+        }
+    </ConfirmActionDialog>
+}

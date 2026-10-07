@@ -74,6 +74,13 @@ internal sealed class CoreCompositionScenario : IAsyncDisposable
             scenario.Manager = await scenario.AddUserAsync("manager", registered: true, member: false);
             scenario.ActAs(scenario.Manager);
             scenario.EventId = await scenario.Events.CreateAsync(EventInput());
+            await using (var setup = scenario.Read())
+            {
+                (await setup.Events.SingleAsync(x => x.Id == scenario.EventId)).Status = EventStatus.Draft;
+                setup.ScheduledWork.RemoveRange(setup.ScheduledWork.Where(x =>
+                    x.DeduplicationKey.StartsWith($"event.complete.v1:{scenario.EventId:N}:")));
+                await setup.SaveChangesAsync();
+            }
             if (publish)
                 await scenario.Events.ChangeStatusAsync(scenario.EventId, await scenario.EventVersionAsync(),
                     EventStatus.Active, "");

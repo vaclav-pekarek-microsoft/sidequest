@@ -59,6 +59,9 @@ public sealed class QuestDashboardTests : BunitContext
         Assert.Contains("No Quests in this view", component.Markup);
         Assert.Empty(component.FindAll("[role=alert]"));
         Assert.Empty(component.FindAll("article"));
+        var eventLink = Assert.Single(component.FindAll("a"),
+            link => link.TextContent.Trim() == "Find and join an Event");
+        Assert.Equal("/events", eventLink.GetAttribute("href"));
         Assert.Equal("/quests?view=Invited", component.Find("a[href*='Invited']").GetAttribute("href"));
         Assert.Equal("true", component.FindAll("button").Single(button => button.TextContent == "Board").GetAttribute("aria-pressed"));
         Assert.Equal("false", component.FindAll("button").Single(button => button.TextContent == "Upcoming Joined").GetAttribute("aria-pressed"));

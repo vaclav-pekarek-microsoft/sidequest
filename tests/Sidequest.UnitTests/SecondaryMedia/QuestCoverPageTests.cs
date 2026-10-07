@@ -446,6 +446,8 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         /// <inheritdoc />
         public Task<Guid> CreateAsync(EventInput input, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />
+        public Task JoinAsync(Guid eventId, CancellationToken cancellationToken = default) => throw Unexpected();
+        /// <inheritdoc />
         public Task EditAsync(Guid id, string version, EventInput input, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />
         public Task ChangeStatusAsync(Guid id, string version, EventStatus target, string reason, CancellationToken cancellationToken = default) => throw Unexpected();

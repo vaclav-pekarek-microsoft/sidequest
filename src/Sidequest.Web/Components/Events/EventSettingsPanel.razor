@@ -1,0 +1,45 @@
+@inherits EventViewBase
+
+<section class="event-settings" aria-labelledby="event-settings-title">
+    <h2 id="event-settings-title" class="section-heading">Event settings</h2>
+    <EventFeedback Busy="Busy" Error="@Error" />
+    @if (input is not null)
+    {
+        <EventEditor Input="input" Busy="Busy" ZoneLocked="@(Detail.Summary.Status != EventStatus.Draft)"
+                     SubmitLabel="Save changes" Submitted="SaveAsync" />
+    }
+    <EventLifecycle Item="Detail.Summary" Changed="Changed" />
+</section>
+
+@code {
+    private EventInput? input;
+    private string? loadedVersion;
+
+    /// <summary>Owner-authorized Event detail snapshot copied into independent editor state.</summary>
+    [Parameter, EditorRequired] public EventDetail Detail { get; set; } = null!;
+    /// <summary>Requests the owning Event page to reload after settings or lifecycle changes.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (loadedVersion == Detail.Summary.Version)
+            return;
+        loadedVersion = Detail.Summary.Version;
+        var item = Detail.Summary;
+        input = new(item.Name, Detail.Description ?? "", item.DiscoverySummary,
+            item.StartDate, item.EndDate, item.TimeZoneId);
+    }
+
+    /// <inheritdoc />
+    protected override Task RefreshAfterReconnectAsync() => Changed.InvokeAsync();
+
+    private Task SaveAsync(EventInput values) => RunMutationAsync(async token =>
+    {
+        await Events.EditAsync(Detail.Summary.Id, Detail.Summary.Version, values, token);
+        await Changed.InvokeAsync();
+    });
+
+    /// <inheritdoc />
+    protected override void ClearProtectedState() => input = null;
+}

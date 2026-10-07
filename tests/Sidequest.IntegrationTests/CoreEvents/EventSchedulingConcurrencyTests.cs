@@ -21,8 +21,8 @@ public sealed class EventSchedulingConcurrencyTests
         try
         {
             await database.InitializeAsync();
-            var first = await EventSchedulingScenario.CreateAsync(database);
-            var second = await EventSchedulingScenario.CreateAsync(database);
+            var first = await EventSchedulingScenario.CreateAsync(database, coldLegacyDraft: true);
+            var second = await EventSchedulingScenario.CreateAsync(database, coldLegacyDraft: true);
             await using (var before = database.CreateContext())
                 Assert.Empty(await before.ScheduledWork.ToListAsync());
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));

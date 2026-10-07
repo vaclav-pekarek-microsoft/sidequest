@@ -21,7 +21,7 @@
         </label>
         <ValidationMessage For="() => model.TimeZoneId" />
         <p class="text-muted">UTC offsets are shown for the start date. Daylight-saving changes are handled automatically.</p>
-        <p class="text-muted">End date must be after start date. Both dates are inclusive in the selected zone, which is fixed when published. Every child Quest must fit within these dates.</p>
+        <p class="text-muted">End date must be after start date. Both dates are inclusive in the selected zone, which is fixed when the Event is created. Every child Quest must fit within these dates.</p>
         <div class="page-actions">
             <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">@SubmitLabel</FluentButton>
         </div>
@@ -39,7 +39,7 @@
     [Parameter] public bool ZoneLocked { get; set; }
     /// <summary>Disables repeated submission while the page saves.</summary>
     [Parameter] public bool Busy { get; set; }
-    /// <summary>Names the save action for a new Draft or an existing Event without changing command semantics.</summary>
+    /// <summary>Names the create or save action without changing command semantics.</summary>
     [Parameter] public string SubmitLabel { get; set; } = "Save changes";
     /// <summary>Submits validated form values to the owning page without changing lifecycle directly.</summary>
     [Parameter] public EventCallback<EventInput> Submitted { get; set; }

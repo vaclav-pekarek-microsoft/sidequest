@@ -128,4 +128,214 @@ public sealed class EventQueryTests(SqlTestDatabase database) : IClassFixture<Sq
         item.DiscoverySummary = "Public candidate";
         return item;
     }
+
+    /// <summary>Returns every effective-Active Event in the actor's tenant and only the actor's eligible legacy Draft with exact audience flags.</summary>
+    /// <returns>A task completing after exact union, count, lifecycle, membership, and ownership projections are asserted.</returns>
+    [Fact]
+    public async Task ListAllReturnsSameTenantActiveUnionAndActorsOwnedLegacyDraftWithAudienceProjection()
+    {
+        var context = new EventTestContext(database);
+        var actor = FoundationSeed.NewUser();
+        var creator = FoundationSeed.NewUser();
+        creator.TenantId = actor.TenantId;
+        await FoundationSeed.PersistAsync(database, actor, creator);
+        var joined = Candidate(creator.Id, "Joined active");
+        var unjoined = Candidate(creator.Id, "Unjoined active");
+        unjoined.StartDate = new(2026, 7, 16);
+        unjoined.EndDate = new(2026, 7, 17);
+        var ownedDraft = Candidate(creator.Id, "Owned legacy draft");
+        ownedDraft.Status = EventStatus.Draft;
+        ownedDraft.StartDate = new(2026, 7, 17);
+        ownedDraft.EndDate = new(2026, 7, 18);
+        await FoundationSeed.PersistAsync(database, joined, unjoined, ownedDraft);
+        await FoundationSeed.PersistAsync(database,
+            Membership(joined, actor),
+            Membership(ownedDraft, actor),
+            new EventOwner { EventId = ownedDraft.Id, UserId = actor.Id });
+
+        var result = await context.Service(actor).ListAsync(EventListKind.All, new(1, 100));
+
+        Assert.Equal(new[] { joined.Id, unjoined.Id, ownedDraft.Id }, result.Items.Select(x => x.Id));
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(100, result.PageSize);
+        var projections = result.Items.ToDictionary(x => x.Id);
+        Assert.Equal((EventStatus.Active, true, false),
+            (projections[joined.Id].Status, projections[joined.Id].IsMember, projections[joined.Id].IsOwner));
+        Assert.Equal((EventStatus.Active, false, false),
+            (projections[unjoined.Id].Status, projections[unjoined.Id].IsMember, projections[unjoined.Id].IsOwner));
+        Assert.Equal((EventStatus.Draft, true, true),
+            (projections[ownedDraft.Id].Status, projections[ownedDraft.Id].IsMember, projections[ownedDraft.Id].IsOwner));
+        Assert.Equal(actor.Id, Assert.Single(projections[ownedDraft.Id].Owners).Id);
+    }
+
+    /// <summary>Rejects every foreign, removed, cross-tenant, terminal, and exactly-ended partition while retaining an Event ending after now.</summary>
+    /// <returns>A task completing after the exact post-filter singleton and effective-completion boundary are asserted.</returns>
+    [Fact]
+    public async Task ListAllExcludesForeignDraftRemovedOwnedDraftCrossTenantAndTerminalRows()
+    {
+        var context = new EventTestContext(database);
+        context.Clock.Now = new(2026, 7, 16, 22, 0, 0, TimeSpan.Zero);
+        var actor = FoundationSeed.NewUser();
+        var sameTenantCreator = FoundationSeed.NewUser();
+        var otherActor = FoundationSeed.NewUser();
+        sameTenantCreator.TenantId = actor.TenantId;
+        otherActor.TenantId = actor.TenantId;
+        var crossTenantCreator = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(database, actor, sameTenantCreator, otherActor, crossTenantCreator);
+
+        var endingAfterNow = Candidate(sameTenantCreator.Id, "Ends after now");
+        endingAfterNow.TimeZoneId = "Etc/UTC";
+        var endingExactlyNow = Candidate(sameTenantCreator.Id, "Ends exactly now");
+        var foreignDraft = Candidate(sameTenantCreator.Id, "Another actor draft");
+        foreignDraft.Status = EventStatus.Draft;
+        var removedOwnedDraft = Candidate(sameTenantCreator.Id, "Removed owner draft");
+        removedOwnedDraft.Status = EventStatus.Draft;
+        var crossTenant = Candidate(crossTenantCreator.Id, "Cross tenant active");
+        var completed = Candidate(sameTenantCreator.Id, "Completed");
+        completed.Status = EventStatus.Completed;
+        var cancelled = Candidate(sameTenantCreator.Id, "Cancelled");
+        cancelled.Status = EventStatus.Cancelled;
+        var archived = Candidate(sameTenantCreator.Id, "Archived");
+        archived.Status = EventStatus.Archived;
+        await FoundationSeed.PersistAsync(database, endingAfterNow, endingExactlyNow, foreignDraft,
+            removedOwnedDraft, crossTenant, completed, cancelled, archived);
+        await FoundationSeed.PersistAsync(database,
+            Membership(endingExactlyNow, actor),
+            Membership(foreignDraft, otherActor),
+            new EventOwner { EventId = foreignDraft.Id, UserId = otherActor.Id },
+            Membership(removedOwnedDraft, actor, MembershipStatus.Removed),
+            new EventOwner { EventId = removedOwnedDraft.Id, UserId = actor.Id },
+            Membership(completed, actor),
+            Membership(cancelled, actor),
+            Membership(archived, actor));
+
+        var result = await context.Service(actor).ListAsync(EventListKind.All, new(1, 100));
+
+        var visible = Assert.Single(result.Items);
+        Assert.Equal(endingAfterNow.Id, visible.Id);
+        Assert.Equal(EventStatus.Active, visible.Status);
+        Assert.False(visible.IsMember);
+        Assert.Equal(1, result.TotalCount);
+        Assert.DoesNotContain(result.Items, x => new[]
+        {
+            endingExactlyNow.Id, foreignDraft.Id, removedOwnedDraft.Id, crossTenant.Id,
+            completed.Id, cancelled.Id, archived.Id
+        }.Contains(x.Id));
+    }
+
+    /// <summary>Orders the filtered union by start date and SQL GUID before returning full, interior singleton, and out-of-range pages.</summary>
+    /// <returns>A task completing after every page reports the same exact post-filter total and stable item slice.</returns>
+    [Fact]
+    public async Task ListAllOrdersAndPagesPostFilterUnionByStartDateThenSqlGuid()
+    {
+        var context = new EventTestContext(database);
+        var actor = FoundationSeed.NewUser();
+        var creator = FoundationSeed.NewUser();
+        creator.TenantId = actor.TenantId;
+        await FoundationSeed.PersistAsync(database, actor, creator);
+        var earlier = Candidate(creator.Id, "Earlier");
+        earlier.Id = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        earlier.StartDate = new(2026, 7, 14);
+        var tiedA = Candidate(creator.Id, "Tied A");
+        tiedA.Id = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var tiedB = Candidate(creator.Id, "Tied B");
+        tiedB.Id = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var filteredTerminal = Candidate(creator.Id, "Filtered before paging");
+        filteredTerminal.Id = Guid.Parse("00000000-0000-0000-0000-000000000004");
+        filteredTerminal.StartDate = new(2026, 7, 13);
+        filteredTerminal.Status = EventStatus.Completed;
+        await FoundationSeed.PersistAsync(database, tiedA, filteredTerminal, earlier, tiedB);
+        await FoundationSeed.PersistAsync(database, Membership(filteredTerminal, actor));
+        var expected = new[] { earlier, tiedA, tiedB }
+            .OrderBy(x => x.StartDate)
+            .ThenBy(x => new System.Data.SqlTypes.SqlGuid(x.Id))
+            .Select(x => x.Id)
+            .ToArray();
+        var cases = new[]
+        {
+            (Request: new Sidequest.Application.Abstractions.PageRequest(1, 100), Expected: expected),
+            (Request: new Sidequest.Application.Abstractions.PageRequest(1, 2), Expected: expected[..2]),
+            (Request: new Sidequest.Application.Abstractions.PageRequest(2, 2), Expected: expected[2..]),
+            (Request: new Sidequest.Application.Abstractions.PageRequest(3, 2), Expected: Array.Empty<Guid>())
+        };
+        var sut = context.Service(actor);
+
+        foreach (var testCase in cases)
+        {
+            var result = await sut.ListAsync(EventListKind.All, testCase.Request);
+            Assert.Equal(testCase.Expected, result.Items.Select(x => x.Id));
+            Assert.Equal(3, result.TotalCount);
+            Assert.Equal(testCase.Request.Page, result.Page);
+            Assert.Equal(testCase.Request.PageSize, result.PageSize);
+            Assert.DoesNotContain(result.Items, x => x.Id == filteredTerminal.Id);
+        }
+
+        Assert.Equal(expected, (await sut.ListAsync(EventListKind.All, new(1, 100))).Items.Select(x => x.Id));
+    }
+
+    /// <summary>Limits unjoined discovery to public fields while proving that active membership exposes the corresponding protected projection.</summary>
+    /// <returns>A task completing after exact list versions and detail descriptions are compared for joined and unjoined Events.</returns>
+    [Fact]
+    public async Task ListAllHidesMemberOnlyProjectionFromUnjoinedRows()
+    {
+        var context = new EventTestContext(database);
+        var actor = FoundationSeed.NewUser();
+        var creator = FoundationSeed.NewUser();
+        creator.TenantId = actor.TenantId;
+        await FoundationSeed.PersistAsync(database, actor, creator);
+        var unjoined = Candidate(creator.Id, "Public discovery only");
+        unjoined.Description = "Unjoined private description";
+        unjoined.DiscoverySummary = "Unjoined public summary";
+        var joined = Candidate(creator.Id, "Member projection");
+        joined.Description = "Joined private description";
+        joined.DiscoverySummary = "Joined public summary";
+        await FoundationSeed.PersistAsync(database, unjoined, joined);
+        await FoundationSeed.PersistAsync(database, Membership(joined, actor));
+        var sut = context.Service(actor);
+
+        var result = await sut.ListAsync(EventListKind.All, new(1, 100));
+
+        var unjoinedSummary = Assert.Single(result.Items, x => x.Id == unjoined.Id);
+        var joinedSummary = Assert.Single(result.Items, x => x.Id == joined.Id);
+        Assert.Equal("Unjoined public summary", unjoinedSummary.DiscoverySummary);
+        Assert.False(unjoinedSummary.IsMember);
+        Assert.Empty(unjoinedSummary.Version);
+        Assert.Equal("Joined public summary", joinedSummary.DiscoverySummary);
+        Assert.True(joinedSummary.IsMember);
+        Assert.Equal(Convert.ToBase64String(joined.Version), joinedSummary.Version);
+        var unjoinedDetail = await sut.GetAsync(unjoined.Id);
+        var joinedDetail = await sut.GetAsync(joined.Id);
+        Assert.Null(unjoinedDetail.Description);
+        Assert.Equal("Joined private description", joinedDetail.Description);
+        Assert.Empty(unjoinedDetail.Summary.Version);
+        Assert.Equal(joinedSummary.Version, joinedDetail.Summary.Version);
+    }
+
+    private static EventMembership Membership(Event item, UserAccount user,
+        MembershipStatus status = MembershipStatus.Active) => new()
+    {
+        EventId = item.Id,
+        UserId = user.Id,
+        Status = status,
+        ChangedById = user.Id,
+        ChangedUtc = FoundationSeed.Now
+    };
+
+    /// <summary>An undefined list discriminator is rejected at the public Event service boundary with its stable field association.</summary>
+    /// <returns>A task completing after the exact validation category and field are observed.</returns>
+    [Fact]
+    public async Task ListRejectsUndefinedKindAsValidationOnKind()
+    {
+        var context = new EventTestContext(database);
+        var actor = FoundationSeed.NewUser();
+        var sut = context.Service(actor);
+
+        var exception = await Assert.ThrowsAsync<DomainException>(() =>
+            sut.ListAsync((EventListKind)int.MaxValue, new(1, 25)));
+
+        Assert.Equal(ErrorCode.Validation, exception.Code);
+        Assert.Equal("Kind", exception.Field);
+        Assert.Equal("Choose a valid Event list.", exception.Message);
+    }
 }

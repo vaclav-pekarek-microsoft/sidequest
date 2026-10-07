@@ -71,6 +71,8 @@ public sealed class EventService : IEventService, IEventManagementQueries
             var status = EventTransactions.Effective(item, now);
             return kind switch
             {
+                EventListKind.All => status == EventStatus.Active ||
+                    status == EventStatus.Draft && mine.Contains(item.Id),
                 EventListKind.Available => status == EventStatus.Active && !mine.Contains(item.Id),
                 EventListKind.History => mine.Contains(item.Id) && status is EventStatus.Completed or EventStatus.Cancelled or EventStatus.Archived,
                 _ => mine.Contains(item.Id) && status is EventStatus.Draft or EventStatus.Active
@@ -106,7 +108,14 @@ public sealed class EventService : IEventService, IEventManagementQueries
         await db.LockEventAsync(eventId, cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow();
-        var item = new Event { Id = eventId, CreatorId = actor.Id, CreatedUtc = now, UpdatedUtc = now };
+        var item = new Event
+        {
+            Id = eventId,
+            CreatorId = actor.Id,
+            Status = EventStatus.Active,
+            CreatedUtc = now,
+            UpdatedUtc = now
+        };
         Copy(item, normalized);
         db.Events.Add(item);
         db.EventOwners.Add(new EventOwner { EventId = item.Id, UserId = actor.Id });
@@ -115,11 +124,22 @@ public sealed class EventService : IEventService, IEventManagementQueries
             EventId = item.Id, UserId = actor.Id, Status = MembershipStatus.Active,
             ChangedById = actor.Id, ChangedUtc = now
         });
-        EventTransactions.Audit(db, item.Id, actor.Id, "Event.Created", "Creator assigned as equal owner and member.", now);
+        EventTransactions.Audit(db, item.Id, actor.Id, "Event.Created",
+            "Event activated; creator assigned as equal owner and member.", now);
+        await EventTransactions.ScheduleCompletionAsync(db, item, cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return item.Id;
     }
+
+    /// <inheritdoc />
+    public Task JoinAsync(Guid eventId, CancellationToken cancellationToken = default) =>
+        MutateAsync(eventId, null, async (db, item, actor, now) =>
+        {
+            EventTransactions.RequireActive(item, now);
+            await audience.ActivateAsync(db, item, actor.Id, actor.Id, true, now,
+                "The user joined this Event directly.", NotificationKind.MembershipAdded, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken);
 
     /// <inheritdoc />
     public async Task EditAsync(Guid id, string version, EventInput input, CancellationToken cancellationToken = default)

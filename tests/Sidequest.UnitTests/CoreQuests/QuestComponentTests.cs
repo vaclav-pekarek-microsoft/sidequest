@@ -170,8 +170,8 @@ public sealed class QuestComponentTests : BunitContext
         Assert.Contains("Second occurrence (later)", cut.Markup);
     }
 
-    /// <summary>Owner actions expose only relevant inputs, use contact labels rather than visible IDs, and require an explicit confirmation.</summary>
-    /// <returns>Completion after publication and reasoned invitation-removal intents pass through real callbacks.</returns>
+    /// <summary>Owner actions expose only relevant inputs, use contact labels rather than visible IDs, and put invitation removal in a modal confirmation.</summary>
+    /// <returns>Completion after publication and reasoned modal invitation-removal intents pass through real callbacks.</returns>
     [Fact]
     public async Task Management_ActionSectionsShowOnlyRequiredInputsAndContactLabels()
     {
@@ -194,7 +194,8 @@ public sealed class QuestComponentTests : BunitContext
         Assert.DoesNotContain(person.Id.ToString(), cut.Find("select").TextContent);
         cut.Find("select").Change(person.Id.ToString());
         cut.Find("fluent-text-area").Input("Reviewed invitation removal.");
-        cut.Find("input[type=checkbox]").Change(true);
+        Assert.Contains("fluent-dialog", cut.Markup);
+        Assert.Empty(cut.FindAll("input[type=checkbox]"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(button => button.Markup.Contains("Confirm: Revoke invitation", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
         Assert.Equal(new QuestActionRequest("revoke", person.Id, "Reviewed invitation removal."), requests[1]);
