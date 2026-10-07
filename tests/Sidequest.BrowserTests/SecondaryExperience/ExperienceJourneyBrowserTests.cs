@@ -202,7 +202,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         var eventId = await ExperienceBrowserSupport.CreateEventAsync(owner);
         await member.GotoAsync($"/events/{eventId}");
         await member.GetByRole(AriaRole.Button, new() { Name = "Join Event", Exact = true }).ClickAsync();
-        await Expect(member.GetByRole(AriaRole.Button, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
+        await Expect(member.GetByRole(AriaRole.Tab, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
         var quest = await ExperienceBrowserSupport.CreateQuestAsync(owner, eventId, $"Revocation {Guid.NewGuid():N}", privateQuest: true);
         await ExperienceBrowserSupport.SelectQuestActionAsync(owner, "Invite (immediate access)");
         var select = owner.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member\\b") });

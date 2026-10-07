@@ -92,7 +92,7 @@ internal static class ExperienceBrowserSupport
         await page.GetByRole(AriaRole.Button, new() { Name = "Create Event", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Quests", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Tab, new() { Name = "Quests", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Create Quest", Exact = true })).ToBeVisibleAsync();
         return id;
     }
