@@ -43,10 +43,10 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(layout, /<footer>[\s\S]*href="\/install">Install and device privacy/);
     assert.match(layout, /<footer>[\s\S]*<ConnectionStatus @rendermode="InteractiveServer"/);
     const home = await readFile(join(web, "Components", "Pages", "Home.razor"), "utf8");
-    assert.match(home, /class="landing-sign-in"><SignInLink Class="button-link"/);
+    assert.match(home, /<PageHero[\s\S]*<Actions>[\s\S]*<SignInLink Class="button-link"/);
     assert.doesNotMatch(home, /View sign-in options|href="\/install"/);
     const styles = compile(join(web, "wwwroot", "app.scss")).css;
-    assert.match(styles, /\.landing-sign-in\s*\{[^}]*justify-content: center/s);
+    assert.match(styles, /\.page-hero-actions\s*\{[^}]*display: flex/s);
     assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 

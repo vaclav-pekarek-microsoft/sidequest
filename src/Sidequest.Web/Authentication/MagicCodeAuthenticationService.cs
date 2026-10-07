@@ -27,6 +27,7 @@ public sealed class MagicCodeAuthenticationService(
     private const int MaximumAttempts = 5;
     private const int HashIterations = 100_000;
     private const string LocalDevelopmentCode = "000000";
+    private const string LocalDevelopmentAdministratorEmail = "vaclav.pekarek@microsoft.com";
     private static readonly TimeSpan ChallengeLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MinimumRequestInterval = TimeSpan.FromMinutes(1);
 
@@ -169,7 +170,14 @@ public sealed class MagicCodeAuthenticationService(
 
         user.LastSignedInUtc = now;
         challenge.ConsumedUtc = now;
-        if (isNew && string.Equals(settings.BootstrapAdministratorEmail, challenge.Email, StringComparison.Ordinal))
+        var configuredBootstrap = isNew &&
+            string.Equals(settings.BootstrapAdministratorEmail, challenge.Email, StringComparison.Ordinal);
+        var localBootstrap =
+            string.Equals(code, LocalDevelopmentCode, StringComparison.Ordinal) &&
+            string.Equals(challenge.Email, LocalDevelopmentAdministratorEmail, StringComparison.Ordinal);
+        if ((configuredBootstrap || localBootstrap) &&
+            !await db.Administrators.AnyAsync(
+                administrator => administrator.UserId == user.Id, cancellationToken).ConfigureAwait(false))
             db.Administrators.Add(new Administrator { UserId = user.Id });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -209,7 +217,7 @@ public sealed class MagicCodeAuthenticationService(
         }
 
         var code = fixedCode ??
-            RandomNumberGenerator.GetInt32(1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+            RandomNumberGenerator.GetInt32(1, 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
         var salt = RandomNumberGenerator.GetBytes(16);
         var challenge = new MagicSignInChallenge
         {

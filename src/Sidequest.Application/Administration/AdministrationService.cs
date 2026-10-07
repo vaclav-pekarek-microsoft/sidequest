@@ -16,6 +16,24 @@ namespace Sidequest.Application.Administration;
 public sealed class AdministrationService(ISidequestDbContextFactory factory, IResourceAccess access,
     IChangeWriter changes, TimeProvider clock, DepartureRecoveryPolicy recoveryPolicy)
 {
+    /// <summary>Checks whether the current persisted account is an eligible administrator.</summary>
+    /// <param name="cancellationToken">Cancels identity resolution and SQL reads.</param>
+    /// <returns><see langword="true"/> only while the current eligible account has an administrator assignment.</returns>
+    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
+    public async Task<bool> CanAccessAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await access.RequireAdministratorAsync(db, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (DomainException exception) when (exception.Code == ErrorCode.Forbidden)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Lists same-tenant administrator assignments, including disabled assignments which confer no access.</summary>
     /// <param name="cancellationToken">Cancels authorization and SQL reads.</param>
     /// <param name="page">Optional one-based paging, default 25 and maximum 100 assignments per page.</param>

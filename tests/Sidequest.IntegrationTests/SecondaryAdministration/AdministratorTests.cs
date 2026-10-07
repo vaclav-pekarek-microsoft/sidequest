@@ -17,6 +17,7 @@ public sealed class AdministratorTests
     public async Task TrustedSelectionAndExplicitAddRemoveAreAudited()
     {
         await using var s = await AdministrationScenario.CreateAsync();
+        Assert.True(await s.Service.CanAccessAsync());
         var choices = await s.Service.SearchAccountsAsync("Replacement");
         var target = Assert.Single(choices);
         Assert.Equal(s.Replacement.Id, target.Id);
@@ -57,6 +58,7 @@ public sealed class AdministratorTests
             if (failure == "wrong-tenant") s.Current.Identity = s.Current.Identity! with { TenantId = Guid.NewGuid() };
             await db.SaveChangesAsync();
         }
+        Assert.False(await s.Service.CanAccessAsync());
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => s.Service.ListAsync())).Code);
         Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() =>
             s.Service.SearchAccountsAsync("Replacement"))).Code);
