@@ -16,7 +16,7 @@ internal sealed class ProvisioningTestContext(SqlTestDatabase database) : ISideq
     internal Guid BootstrapObjectId { get; } = Guid.NewGuid();
     internal IReadOnlyCollection<string> Warnings => log.Warnings.ToArray();
 
-    internal ClaimsPrincipal Principal(Guid objectId, string name = "First sign-in", string email = "first@microsoft.com") =>
+    internal ClaimsPrincipal Principal(Guid objectId, string name = "First sign-in", string email = "first@microsoft.cz") =>
         new(new ClaimsIdentity(
         [
             new("tid", TenantId.ToString()), new("oid", objectId.ToString()),

@@ -6,11 +6,12 @@ namespace Sidequest.Web.Authentication;
 public static class MagicAlias
 {
     /// <summary>The fixed mailbox domain accepted by deployed magic-code authentication.</summary>
-    public const string Domain = "microsoft.com";
+    public const string Domain = "microsoft.cz";
+    private const string LegacyDomain = "microsoft.com";
 
     /// <summary>Normalizes an alias or rejects values that do not form one exact Microsoft mailbox.</summary>
     /// <param name="alias">User-entered mailbox local part without a domain.</param>
-    /// <returns>The lower-case <c>alias@microsoft.com</c> address.</returns>
+    /// <returns>The lower-case <c>alias@microsoft.cz</c> address.</returns>
     /// <exception cref="ArgumentException">The value is empty, includes a domain, contains unsupported characters, or exceeds email limits.</exception>
     public static string Normalize(string? alias)
     {
@@ -20,19 +21,19 @@ public static class MagicAlias
             !char.IsAsciiLetterOrDigit(localPart[^1]) ||
             localPart.Any(character => !char.IsAsciiLetterOrDigit(character) &&
                 character is not ('.' or '-' or '_')))
-            throw new ArgumentException("Enter a valid Microsoft alias without @microsoft.com.", nameof(alias));
+            throw new ArgumentException("Enter a valid Microsoft alias without @microsoft.cz.", nameof(alias));
 
         var address = $"{localPart}@{Domain}";
         if (!MailAddress.TryCreate(address, out var parsed) ||
             !string.Equals(parsed.Address, address, StringComparison.Ordinal))
-            throw new ArgumentException("Enter a valid Microsoft alias without @microsoft.com.", nameof(alias));
+            throw new ArgumentException("Enter a valid Microsoft alias without @microsoft.cz.", nameof(alias));
         return address;
     }
 
-    /// <summary>Normalizes a stored Microsoft mailbox for alias comparison.</summary>
+    /// <summary>Normalizes a stored current or legacy Microsoft mailbox to the current authentication domain for alias comparison.</summary>
     /// <param name="email">Stored mailbox candidate, including its domain.</param>
-    /// <param name="normalizedEmail">The normalized Microsoft mailbox when the candidate is valid; otherwise an empty string.</param>
-    /// <returns><see langword="true"/> when the candidate is one valid Microsoft mailbox; otherwise <see langword="false"/>.</returns>
+    /// <param name="normalizedEmail">The normalized <c>alias@microsoft.cz</c> mailbox when the candidate is valid; otherwise an empty string.</param>
+    /// <returns><see langword="true"/> when the candidate uses the current domain or the legacy <c>microsoft.com</c> domain; otherwise <see langword="false"/>.</returns>
     public static bool TryNormalizeMailbox(string? email, out string normalizedEmail)
     {
         normalizedEmail = "";
@@ -42,7 +43,7 @@ public static class MagicAlias
 
         var separator = candidate.IndexOf('@');
         if (separator <= 0 || separator != candidate.LastIndexOf('@') ||
-            !string.Equals(candidate[(separator + 1)..], Domain, StringComparison.OrdinalIgnoreCase))
+            !IsStoredDomain(candidate[(separator + 1)..]))
             return false;
 
         try
@@ -68,4 +69,8 @@ public static class MagicAlias
             throw new ArgumentException("A normalized Microsoft mailbox is required.", nameof(email));
         return email[..^suffix.Length];
     }
+
+    private static bool IsStoredDomain(string domain) =>
+        string.Equals(domain, Domain, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(domain, LegacyDomain, StringComparison.OrdinalIgnoreCase);
 }

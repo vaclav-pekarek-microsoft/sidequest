@@ -33,7 +33,7 @@ public sealed class AuthenticationTests
         Assert.False(settings.IsDevelopment);
         Assert.Equal(Tenant, settings.TenantId);
         Assert.Equal(FoundationAuthenticationSettings.MagicCodeRole, settings.WorkforceRole);
-        Assert.Equal("test.alias@microsoft.com", settings.BootstrapAdministratorEmail);
+        Assert.Equal("test.alias@microsoft.cz", settings.BootstrapAdministratorEmail);
         Assert.Null(settings.BootstrapAdministratorObjectId);
     }
 
@@ -56,7 +56,7 @@ public sealed class AuthenticationTests
     [InlineData("Authentication:AccountNamespaceId", "common")]
     [InlineData("Authentication:AccountNamespaceId", "00000000-0000-0000-0000-000000000000")]
     [InlineData("Authentication:BootstrapAdministrator:Alias", "user@outside.invalid")]
-    [InlineData("Authentication:BootstrapAdministrator:Alias", "user@microsoft.com")]
+    [InlineData("Authentication:BootstrapAdministrator:Alias", "user@microsoft.cz")]
     public void InvalidMagicCodeConfigurationFailsVisibly(string key, string? value)
     {
         var configuration = ValidConfiguration();
@@ -113,7 +113,7 @@ public sealed class AuthenticationTests
         var identity = Assert.IsType<UserIdentity>(WorkforceIdentity.Read(Principal(), Magic));
         Assert.Equal(Tenant, identity.TenantId);
         Assert.Equal(ObjectId, identity.ObjectId);
-        Assert.Equal("test.alias@microsoft.com", identity.Email);
+        Assert.Equal("test.alias@microsoft.cz", identity.Email);
         Assert.Equal("Test workforce user", identity.DisplayName);
     }
 
@@ -126,6 +126,7 @@ public sealed class AuthenticationTests
     [InlineData("oid", "not-an-object-id")]
     [InlineData("roles", "Guest")]
     [InlineData("preferred_username", "test.alias@outside.invalid")]
+    [InlineData("preferred_username", "test.alias@microsoft.com")]
     [InlineData(FoundationAuthenticationSettings.MagicCodeClaim, "false")]
     public void InvalidMagicCodeIdentityClaimIsRejected(string type, string value)
     {
@@ -151,9 +152,10 @@ public sealed class AuthenticationTests
     /// <param name="alias">Candidate alias.</param>
     /// <param name="expected">Normalized mailbox, or null when rejection is expected.</param>
     [Theory]
-    [InlineData("Test.Alias", "test.alias@microsoft.com")]
-    [InlineData(" user-name ", "user-name@microsoft.com")]
+    [InlineData("Test.Alias", "test.alias@microsoft.cz")]
+    [InlineData(" user-name ", "user-name@microsoft.cz")]
     [InlineData("", null)]
+    [InlineData("user@microsoft.cz", null)]
     [InlineData("user@microsoft.com", null)]
     [InlineData("user name", null)]
     [InlineData(".user", null)]
@@ -170,11 +172,12 @@ public sealed class AuthenticationTests
     /// <param name="email">Stored mailbox candidate.</param>
     /// <param name="expected">Normalized mailbox, or null when the candidate is not a Microsoft alias mailbox.</param>
     [Theory]
-    [InlineData(" Test.Alias@Microsoft.com ", "test.alias@microsoft.com")]
-    [InlineData("test_alias@MICROSOFT.COM", "test_alias@microsoft.com")]
+    [InlineData(" Test.Alias@Microsoft.cz ", "test.alias@microsoft.cz")]
+    [InlineData("test_alias@MICROSOFT.CZ", "test_alias@microsoft.cz")]
+    [InlineData("legacy@Microsoft.com", "legacy@microsoft.cz")]
     [InlineData("test.alias@example.com", null)]
-    [InlineData("test.alias@@microsoft.com", null)]
-    [InlineData(".test@microsoft.com", null)]
+    [InlineData("test.alias@@microsoft.cz", null)]
+    [InlineData(".test@microsoft.cz", null)]
     public void StoredMicrosoftMailboxNormalizationIsExact(string email, string? expected)
     {
         var result = MagicAlias.TryNormalizeMailbox(email, out var normalized);
@@ -187,11 +190,11 @@ public sealed class AuthenticationTests
     [Fact]
     public void MagicCodeObjectIdentityIsStableAndNamespaced()
     {
-        var first = MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.com");
+        var first = MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.cz");
         Assert.NotEqual(Guid.Empty, first);
-        Assert.Equal(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.com"));
-        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Guid.NewGuid(), "test.alias@microsoft.com"));
-        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "other@microsoft.com"));
+        Assert.Equal(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "test.alias@microsoft.cz"));
+        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Guid.NewGuid(), "test.alias@microsoft.cz"));
+        Assert.NotEqual(first, MagicCodeAuthenticationService.CreateObjectId(Tenant, "other@microsoft.cz"));
     }
 
     /// <summary>Verifies safe local paths survive normalization while external or malformed targets resolve to home.</summary>
@@ -265,7 +268,7 @@ public sealed class AuthenticationTests
             IsEligible = eligible, DepartureVerifiedUtc = departed ? Now : null, DisplayName = "Original"
         };
         var error = Assert.Throws<DomainException>(() => WorkforceAccounts.UpdateContact(user,
-            new(Tenant, ObjectId, "Changed", "changed@microsoft.com"), Now));
+            new(Tenant, ObjectId, "Changed", "changed@microsoft.cz"), Now));
         Assert.Equal(ErrorCode.Forbidden, error.Code);
         Assert.Equal("Original", user.DisplayName);
         Assert.Null(user.LastSignedInUtc);
@@ -276,9 +279,9 @@ public sealed class AuthenticationTests
     public void EligibleSignInUpdatesContactWithoutChangingIdentity()
     {
         var user = new UserAccount { TenantId = Tenant, ObjectId = ObjectId };
-        WorkforceAccounts.UpdateContact(user, new(Tenant, ObjectId, "Updated", "new@microsoft.com"), Now);
+        WorkforceAccounts.UpdateContact(user, new(Tenant, ObjectId, "Updated", "new@microsoft.cz"), Now);
         Assert.Equal("Updated", user.DisplayName);
-        Assert.Equal("new@microsoft.com", user.Email);
+        Assert.Equal("new@microsoft.cz", user.Email);
         Assert.Equal(Now, user.LastSignedInUtc);
         Assert.Equal(Tenant, user.TenantId);
         Assert.Equal(ObjectId, user.ObjectId);
@@ -352,7 +355,7 @@ public sealed class AuthenticationTests
         new("oid", ObjectId.ToString()),
         new("roles", FoundationAuthenticationSettings.MagicCodeRole),
         new("name", "Test workforce user"),
-        new("preferred_username", "test.alias@microsoft.com"),
+        new("preferred_username", "test.alias@microsoft.cz"),
         new(FoundationAuthenticationSettings.MagicCodeClaim, "true")
     ], "test", "name", "roles"));
 

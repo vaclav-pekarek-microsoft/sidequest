@@ -32,8 +32,9 @@ Stop and report blockers; do not label unsupported or untested combinations pass
 
 For every approved supported client, record:
 
-1. Sign in through real Entra as a permitted member; test denied/excluded user
-   separately. Navigate Discover→Event→create/publish Quest→join/leave. Use an
+1. Sign in with a delivered magic code for an approved `@microsoft.cz` mailbox;
+   test a denied or ineligible account separately. Navigate
+   Discover→Event→create/publish Quest→join/leave. Use an
    invited private Quest and another user to verify inaccessible content is not
    disclosed. Record loading, empty, error and unavailable states.
 2. At **360 CSS pixels**, exercise primary create/edit/join/confirmation flows

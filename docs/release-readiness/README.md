@@ -45,7 +45,7 @@ AuthenticationStartupBrowser 1, ExperienceJourney 5, HostLifecycle 5,
 OfflineStorage 8 and WorkerNetwork 9. The remaining 46 are BrowserContextOptions 3,
 SyntheticAppSettings 28, AuthenticationStartupRouting 14 and LoopbackWorkerProbe 1.
 Parameterized cases count separately. Synthetic loopback Chromium is neither
-live Entra nor certification of supported physical devices.
+live magic-code email verification nor certification of supported physical devices.
 
 The retained `node-step.log` was read and its SHA-256 verified: **56 tests,
 56 passed, zero failed/cancelled/skipped**. It is the parent's extracted Node-step

@@ -172,7 +172,7 @@ public sealed class AccountProvisioningTests(SqlTestDatabase database) : IClassF
         Assert.Equal(held.Version, (await read.Users.SingleAsync(x => x.Id == held.Id)).Version);
         var updated = await read.Users.SingleAsync(x => x.Id == independent.Id);
         Assert.Equal("First sign-in", updated.DisplayName);
-        Assert.Equal("first@microsoft.com", updated.Email);
+        Assert.Equal("first@microsoft.cz", updated.Email);
         Assert.Equal(FoundationSeed.Now, updated.LastSignedInUtc);
         Assert.NotEqual(independent.Version, updated.Version);
         Assert.False(await read.Administrators.AnyAsync(x => x.UserId == held.Id || x.UserId == independent.Id));
@@ -205,12 +205,12 @@ public sealed class AccountProvisioningTests(SqlTestDatabase database) : IClassF
             await revoke.SaveChangesAsync();
         }
         await context.Accounts(now: FoundationSeed.Now.AddMinutes(1))
-            .ProvisionAsync(context.Principal(context.BootstrapObjectId, "Later sign-in", "later@microsoft.com"), default);
+            .ProvisionAsync(context.Principal(context.BootstrapObjectId, "Later sign-in", "later@microsoft.cz"), default);
         await using var final = database.CreateContext();
         var account = await final.Users.SingleAsync(x => x.TenantId == context.TenantId);
         Assert.Equal(first.Id, account.Id);
         Assert.Equal("Later sign-in", account.DisplayName);
-        Assert.Equal("later@microsoft.com", account.Email);
+        Assert.Equal("later@microsoft.cz", account.Email);
         Assert.Equal(FoundationSeed.Now.AddMinutes(1), account.LastSignedInUtc);
         Assert.NotEqual(first.Version, account.Version);
         Assert.False(await final.Administrators.AnyAsync(x => x.UserId == account.Id));

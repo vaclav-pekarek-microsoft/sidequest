@@ -3,7 +3,7 @@
 These checks exercise synthetic authentication, actual Fluent input/dialog binding,
 keyboard interaction at a 360px viewport, protected-route redirects and POST logout.
 They are **not release A21 coverage**: no product Event/Quest flows, offline caching,
-full accessibility audit, live Entra, or production sign-in is claimed.
+full accessibility audit, live magic-code email verification, or production sign-in is claimed.
 
 ## Required parent-managed CI setup
 

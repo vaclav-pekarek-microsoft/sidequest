@@ -43,8 +43,9 @@ For the approved shared hackathon database, configure the ignored file with
 `ConnectionStrings:Sidequest` targeting
 `sidequest-sql-b7ljjkoqcaedc.database.windows.net`, database `sidequest`,
 `Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False`.
-Sign Azure CLI into the approved subscription and use real Entra app authentication
-locally; put the app credential in user secrets, not this JSON file. Local access also
+Sign Azure CLI into the approved subscription and use Entra application authentication
+for SQL access locally; this infrastructure credential is not a Sidequest user sign-in
+method. Put the app credential in user secrets, not this JSON file. Local access also
 requires explicit owner-IP SQL firewall entries. Keep `SIDEQUEST_TEST_SQL` isolated:
 tests must never use the shared staging database. Starting the local app against shared
 staging can mutate its data. Set `Delivery:Work:Enabled=false` on a shared-database
@@ -95,7 +96,7 @@ daylight-saving time asks for its first or second occurrence; nonexistent times
 are rejected rather than shifted.
 
 Sign-in starts from navigation or the centered Home button and sends a one-time code
-to the entered Microsoft alias at `alias@microsoft.com`.
+to the entered Microsoft alias at `alias@microsoft.cz`.
 Completion normally shows only a progress loader; verified device/session
 binding still precedes automatic navigation. Installation/privacy guidance and
 collapsed device tools are in the footer. Healthy connection details are hidden;
@@ -116,9 +117,11 @@ with the prior application build. Readiness rejects an unapplied migration.
 
 Development sign-in uses conspicuously labeled synthetic accounts only when the
 Development environment and explicit development authentication mode are both active.
-It is not proof that live Entra integration is configured. Production must use Entra,
-an approved workforce admission policy, and an explicitly configured bootstrap
-administrator; there is no "first user becomes admin" behavior.
+It is not proof that live magic-code delivery or mailbox control works. Deployed hosts
+use only SQL-backed magic-code authentication for `@microsoft.cz`, an approved mailbox
+policy, and an explicitly configured bootstrap administrator; there is no "first user
+becomes admin" behavior. Microsoft Graph and Azure managed identity remain separate
+directory and infrastructure integrations, not interactive sign-in methods.
 See `src\Sidequest.Web\AGENTS.md` for authentication/rendering configuration.
 The approved hackathon deployment instead uses the explicitly assigned-participant
 policy, including the approved guest owner, without changing production workforce
@@ -223,7 +226,7 @@ completion guidance and explicit continuation, separately from initialized sign-
 Real SQL also verifies write-intent scheduling before insertion, unchanged work
 deduplication and caller-owned commit/rollback.
 
-This evidence does not establish live Entra/Graph/ACS or Outlook approval, physical
+This evidence does not establish live magic-code/Graph/ACS or Outlook approval, physical
 device/screen-reader certification, the 300-user load target, SQL/Blob recovery
 targets, operational ownership, or production deployment. Those remain M4 gates.
 

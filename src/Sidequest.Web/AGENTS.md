@@ -117,7 +117,8 @@ stable Sidequest account namespace. Configure `ConnectionStrings:Sidequest`,
 `AllowedHosts`, HTTPS, persisted Data Protection keys and the existing
 `Delivery:Email` Azure Communication Services sender/endpoint.
 
-The sign-in page accepts only a mailbox alias and appends `@microsoft.com`. A
+The sign-in page accepts only a mailbox alias and appends `@microsoft.cz`. No deployed
+Entra/OpenID sign-in handler is registered. A
 cryptographically generated six-digit code expires after ten minutes, is single-use,
 permits at most five attempts and is request-throttled to one request per minute and
 five per hour for one normalized mailbox. Store only its salted PBKDF2 hash and
@@ -185,7 +186,7 @@ development bootstrap configuration. It is bootstrapped at first provisioning. P
 and logout are antiforgery-protected POSTs. Return URLs are local-only.
 Apply integration-owner SQL migrations before signing in; only the anonymous home
 page works without SQL. The authenticated dashboard performs authorized SQL queries.
-Synthetic sign-in is not evidence of live Entra correctness.
+Synthetic sign-in is not evidence of live magic-code email delivery or mailbox control.
 
 ## Compatibility / operations
 Author UI styles in `.scss` and `.razor.scss`, not inline attributes or generated CSS.

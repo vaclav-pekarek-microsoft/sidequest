@@ -28,13 +28,13 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
 
         var challengeId = await service.RequestAsync("New.User", false, default);
         var message = Assert.Single(gateway.Messages);
-        Assert.Equal("new.user@microsoft.com", message.Recipient);
+        Assert.Equal("new.user@microsoft.cz", message.Recipient);
         var code = AssertCode(message.TextBody);
 
         await using (var read = database.CreateContext())
         {
             var challenge = await read.MagicSignInChallenges.SingleAsync(x => x.Id == challengeId);
-            Assert.Equal("new.user@microsoft.com", challenge.Email);
+            Assert.Equal("new.user@microsoft.cz", challenge.Email);
             Assert.Equal(16, challenge.CodeSalt.Length);
             Assert.Equal(32, challenge.CodeHash.Length);
             Assert.Null(challenge.ConsumedUtc);
@@ -43,12 +43,12 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         var principal = await service.VerifyAsync(challengeId, code, default);
         Assert.NotNull(principal);
         Assert.Equal(factory.TenantId.ToString(), principal.FindFirst("tid")?.Value);
-        Assert.Equal("new.user@microsoft.com", principal.FindFirst("preferred_username")?.Value);
+        Assert.Equal("new.user@microsoft.cz", principal.FindFirst("preferred_username")?.Value);
         Assert.True(principal.HasClaim(FoundationAuthenticationSettings.MagicCodeClaim, "true"));
         Assert.Null(await service.VerifyAsync(challengeId, code, default));
 
         await using var final = database.CreateContext();
-        var user = await final.Users.SingleAsync(x => x.Email == "new.user@microsoft.com");
+        var user = await final.Users.SingleAsync(x => x.Email == "new.user@microsoft.cz");
         Assert.Equal(MagicCodeAuthenticationService.CreateObjectId(factory.TenantId, user.Email), user.ObjectId);
         Assert.Equal(Now, user.LastSignedInUtc);
         Assert.True(await final.Administrators.AnyAsync(x => x.UserId == user.Id));
@@ -79,8 +79,11 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         Assert.NotNull(principal);
         Assert.Equal(existing.ObjectId.ToString(), principal.FindFirst("oid")?.Value);
         Assert.Equal("Existing display name", principal.Identity?.Name);
-        Assert.Equal("existing@microsoft.com", principal.FindFirst("preferred_username")?.Value);
+        Assert.Equal("existing@microsoft.cz", principal.FindFirst("preferred_username")?.Value);
         Assert.NotNull(WorkforceIdentity.Read(principal, settings));
+        await using (var linked = database.CreateContext())
+            Assert.Equal("existing@microsoft.cz",
+                (await linked.Users.SingleAsync(user => user.Id == existing.Id)).Email);
 
         var exhaustedChallenge = await service.RequestAsync("other", false, default);
         var throttledDecoy = await service.RequestAsync("other", false, default);
@@ -92,7 +95,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         var exhausted = await read.MagicSignInChallenges.SingleAsync(x => x.Id == exhaustedChallenge);
         Assert.Equal(5, exhausted.AttemptCount);
         Assert.NotNull(exhausted.ConsumedUtc);
-        Assert.False(await read.Users.AnyAsync(x => x.Email == "other@microsoft.com"));
+        Assert.False(await read.Users.AnyAsync(x => x.Email == "other@microsoft.cz"));
     }
 
     /// <summary>Duplicate stored addresses that normalize to one alias fail closed without creating another account.</summary>
@@ -116,7 +119,7 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
                 TenantId = factory.TenantId,
                 ObjectId = Guid.NewGuid(),
                 DisplayName = "Second duplicate",
-                Email = " duplicate@microsoft.com "
+                Email = " duplicate@microsoft.cz "
             });
         var service = CreateService(factory, gateway, settings);
 
@@ -156,9 +159,11 @@ public sealed class MagicCodeAuthenticationTests(SqlTestDatabase database) : ICl
         var principal = await service.VerifyAsync(challengeId, "000000", default);
         Assert.NotNull(principal);
         Assert.Equal(existing.ObjectId.ToString(), principal.FindFirst("oid")?.Value);
-        Assert.Equal("vaclav.pekarek@microsoft.com", principal.FindFirst("preferred_username")?.Value);
+        Assert.Equal("vaclav.pekarek@microsoft.cz", principal.FindFirst("preferred_username")?.Value);
         Assert.Null(await service.VerifyAsync(challengeId, "000000", default));
         await using var read = database.CreateContext();
+        Assert.Equal("vaclav.pekarek@microsoft.cz",
+            (await read.Users.SingleAsync(user => user.Id == existing.Id)).Email);
         Assert.True(await read.Administrators.AnyAsync(
             administrator => administrator.UserId == existing.Id));
     }
