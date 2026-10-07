@@ -10,15 +10,15 @@
     </div>
 }
 <header class="site-header">
-    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">S</span>Sidequest</a>
-    <nav aria-label="Main navigation">
+    <BrandLockup Class="site-brand" />
+    <nav class="site-navigation" aria-label="Main navigation">
         <NavLink href="/" Match="NavLinkMatch.All">Home</NavLink>
         <AuthorizeView>
             <Authorized>
                 <NavLink href="/quests">Quests</NavLink>
                 <NavLink href="/events">Events</NavLink>
                 <NavLink href="/notifications">Notifications</NavLink>
-                <NavLink href="/administration">Administration</NavLink>
+                <AdministrationNavLink @rendermode="InteractiveServer" />
                 <form action="/auth/logout" method="post" data-enhance="false" data-authentication-change>
                     <AntiforgeryToken />
                     <input type="hidden" name="experienceClearFailed" value="true" />
@@ -54,7 +54,7 @@
 </main>
 <footer>
     <div class="footer-links">
-        <span>Sidequest · Make time for a Quest.</span>
+        <span>Sidequest · Make time for what connects us.</span>
         <a href="/install">Install and device privacy</a>
     </div>
     <ConnectionStatus @rendermode="InteractiveServer" />
