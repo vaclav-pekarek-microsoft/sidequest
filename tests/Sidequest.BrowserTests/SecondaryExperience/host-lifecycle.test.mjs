@@ -41,11 +41,16 @@ async function host({ clear = async () => "attempt-epoch", complete = async () =
     };
     const accountProvider = provider === undefined ? null : { dataset: { accountProvider: provider } };
     class Form {
+        attributes = new Map([["data-authentication-change", ""]]);
         dataset = {};
         inputs = new Map();
         submitted = 0;
-        hasAttribute(name) { return name === "data-authentication-change"; }
-        querySelector(selector) { return this.inputs.get(selector.match(/name="([^"]+)"/)[1]); }
+        hasAttribute(name) { return this.attributes.has(name); }
+        setAttribute(name, value) { this.attributes.set(name, value); }
+        querySelector(selector) {
+            if (selector === 'button[type="submit"]') return this.submitButton;
+            return this.inputs.get(selector.match(/name="([^"]+)"/)[1]);
+        }
         append(input) { this.inputs.set(input.name, input); }
         requestSubmit() {
             throw new Error("A reentrant requestSubmit can be ignored by the native submission algorithm.");
@@ -88,13 +93,23 @@ test("The native auth POST waits for clearing and preserves antiforgery form and
     const state = await host({ clear: () => new Promise(resolve => { release = resolve; }) });
     await state.module.beforeWebStart();
     const form = new state.Form();
-    const submitter = { name: "operation", value: "sign-out" };
+    form.attributes.set("data-submit-progress", "");
+    const submitter = {
+        name: "operation",
+        value: "sign-out",
+        disabled: false,
+        dataset: { submittingLabel: "Signing in..." },
+        textContent: "Sign in"
+    };
     form.inputs.set("__RequestVerificationToken", { value: "synthetic-antiforgery" });
     form.submit = { name: "submit" };
     let prevented = false;
     const pending = state.listeners.get("submit")({ target: form, submitter, preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
     assert.equal(form.submitted, 0);
+    assert.equal(form.attributes.get("aria-busy"), "true");
+    assert.equal(submitter.disabled, true);
+    assert.equal(submitter.textContent, "Signing in...");
     release("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     await pending;
     assert.equal(form.submitted, 1);
@@ -105,6 +120,30 @@ test("The native auth POST waits for clearing and preserves antiforgery form and
     assert.equal(state.completions.length, 0);
     await state.listeners.get("submit")({ target: form, submitter, preventDefault() {} });
     assert.equal(form.submitted, 1);
+});
+
+test("Native magic-code requests disable the button and expose progress without changing the post", async () => {
+    const state = await host();
+    await state.module.beforeWebStart();
+    const form = new state.Form();
+    form.attributes.delete("data-authentication-change");
+    form.attributes.set("data-submit-progress", "");
+    const submitter = {
+        disabled: false,
+        dataset: { submittingLabel: "Sending code..." },
+        textContent: "Send magic code"
+    };
+    let prevented = false;
+    await state.listeners.get("submit")({
+        target: form,
+        submitter,
+        preventDefault() { prevented = true; }
+    });
+    assert.equal(prevented, false);
+    assert.equal(form.dataset.submitPending, "true");
+    assert.equal(form.attributes.get("aria-busy"), "true");
+    assert.equal(submitter.disabled, true);
+    assert.equal(submitter.textContent, "Sending code...");
 });
 
 test("Submission before initializer installation stays native; missing completion generation never auto-activates or navigates", async () => {

@@ -36,7 +36,7 @@ else
             <p class="validation-message" role="alert">Enter a valid Microsoft alias without @@microsoft.com.</p>
         }
         <form class="section-box magic-code-form" method="post" action="/auth/magic/request"
-              data-enhance="false">
+              data-enhance="false" data-submit-progress>
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
             <input type="hidden" name="experienceEpoch" value="@ExperienceEpoch" />
@@ -46,7 +46,7 @@ else
                        placeholder="alias" required maxlength="64" />
                 <span>@@microsoft.com</span>
             </div>
-            <button type="submit">Send magic code</button>
+            <button type="submit" data-submitting-label="Sending code...">Send magic code</button>
         </form>
     }
     else
@@ -57,7 +57,7 @@ else
             <p class="validation-message" role="alert">The code is invalid or expired. Request a new code and try again.</p>
         }
         <form class="section-box magic-code-form" method="post" action="/auth/magic/verify"
-              data-enhance="false" data-authentication-change>
+              data-enhance="false" data-authentication-change data-submit-progress>
             <AntiforgeryToken />
             <input type="hidden" name="challenge" value="@Challenge" />
             <input type="hidden" name="returnUrl" value="@AuthenticationEndpoints.LocalReturnUrl(ReturnUrl)" />
@@ -65,7 +65,7 @@ else
             <label for="code">Magic code</label>
             <input id="code" name="code" autocomplete="one-time-code" inputmode="numeric"
                    pattern="[0-9]{6}" minlength="6" maxlength="6" required />
-            <button type="submit">Sign in</button>
+            <button type="submit" data-submitting-label="Signing in...">Sign in</button>
         </form>
         <p><a href="@NewCodeUrl" data-enhance-nav="false">Request a new code</a></p>
     }

@@ -26,25 +26,36 @@ public sealed class MagicCodeAuthenticationService(
     private const int MaximumRequestsPerHour = 5;
     private const int MaximumAttempts = 5;
     private const int HashIterations = 100_000;
+    private const string LocalDevelopmentCode = "000000";
     private static readonly TimeSpan ChallengeLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MinimumRequestInterval = TimeSpan.FromMinutes(1);
 
     /// <summary>Creates and attempts to deliver a one-time code for a normalized Microsoft alias.</summary>
     /// <param name="alias">User-entered alias without the fixed Microsoft domain.</param>
+    /// <param name="useLocalDevelopmentCode">Whether to persist the fixed localhost-only development code and skip delivery.</param>
     /// <param name="cancellationToken">Cancels SQL or provider work.</param>
-    /// <returns>A random challenge identifier. Throttled or failed delivery returns an indistinguishable decoy identifier.</returns>
+    /// <returns>A random challenge identifier. Throttled or non-local failed delivery returns an indistinguishable decoy identifier.</returns>
     /// <exception cref="ArgumentException">The alias cannot form an exact Microsoft mailbox.</exception>
     /// <exception cref="OperationCanceledException">The operation is canceled.</exception>
-    public async Task<Guid> RequestAsync(string? alias, CancellationToken cancellationToken)
+    public async Task<Guid> RequestAsync(
+        string? alias, bool useLocalDevelopmentCode, CancellationToken cancellationToken)
     {
         var email = MagicAlias.Normalize(alias);
         var now = clock.GetUtcNow();
         await DeleteExpiredChallengesAsync(now, cancellationToken).ConfigureAwait(false);
-        var challenge = await CreateChallengeAsync(email, now, cancellationToken).ConfigureAwait(false);
+        var challenge = await CreateChallengeAsync(
+            email, now, useLocalDevelopmentCode ? LocalDevelopmentCode : null, cancellationToken)
+            .ConfigureAwait(false);
         if (challenge is null)
         {
             logger.LogInformation("Magic-code request was throttled.");
             return Guid.NewGuid();
+        }
+
+        if (useLocalDevelopmentCode)
+        {
+            logger.LogInformation("Local loopback magic-code challenge created without provider delivery.");
+            return challenge.Value.Id;
         }
 
         var code = challenge.Value.Code;
@@ -183,7 +194,7 @@ public sealed class MagicCodeAuthenticationService(
     }
 
     private async Task<(Guid Id, string Code)?> CreateChallengeAsync(
-        string email, DateTimeOffset now, CancellationToken cancellationToken)
+        string email, DateTimeOffset now, string? fixedCode, CancellationToken cancellationToken)
     {
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await db.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
@@ -197,7 +208,8 @@ public sealed class MagicCodeAuthenticationService(
             return null;
         }
 
-        var code = RandomNumberGenerator.GetInt32(1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+        var code = fixedCode ??
+            RandomNumberGenerator.GetInt32(1_000_000).ToString("D6", CultureInfo.InvariantCulture);
         var salt = RandomNumberGenerator.GetBytes(16);
         var challenge = new MagicSignInChallenge
         {

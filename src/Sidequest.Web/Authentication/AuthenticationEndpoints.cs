@@ -14,6 +14,16 @@ public static class AuthenticationEndpoints
     public static bool IsLoopback(HttpContext context) =>
         context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
 
+    /// <summary>Checks whether a development request is connected entirely through loopback addresses.</summary>
+    /// <param name="context">The request whose direct peer and local listener addresses are inspected.</param>
+    /// <param name="environment">The host environment that must be Development.</param>
+    /// <returns><see langword="true"/> only for a Development host with known loopback peer and listener addresses.</returns>
+    public static bool IsLocalDevelopment(HttpContext context, IHostEnvironment environment) =>
+        environment.IsDevelopment() &&
+        IsLoopback(context) &&
+        context.Connection.LocalIpAddress is { } localAddress &&
+        IPAddress.IsLoopback(localAddress);
+
     /// <summary>Accepts a local absolute path or substitutes the application root for an unsafe redirect.</summary>
     /// <param name="value">The untrusted return URL from a query string or form.</param>
     /// <returns>A root-relative path without backslashes or control characters; <c>/</c> when rejected.</returns>
@@ -63,6 +73,7 @@ public static class AuthenticationEndpoints
             app.MapPost("/auth/magic/request", async (
                 HttpContext context,
                 IAntiforgery antiforgery,
+                IHostEnvironment environment,
                 MagicCodeAuthenticationService magicCodes) =>
             {
                 await antiforgery.ValidateRequestAsync(context);
@@ -70,7 +81,8 @@ public static class AuthenticationEndpoints
                 Guid challenge;
                 try
                 {
-                    challenge = await magicCodes.RequestAsync(form["alias"], context.RequestAborted);
+                    challenge = await magicCodes.RequestAsync(
+                        form["alias"], IsLocalDevelopment(context, environment), context.RequestAborted);
                 }
                 catch (ArgumentException)
                 {
