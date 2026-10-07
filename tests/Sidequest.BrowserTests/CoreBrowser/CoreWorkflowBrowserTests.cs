@@ -42,17 +42,17 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         }
         """;
 
-    /// <summary>Proves membership consent, persisted public Quest creation, exclusive participation and recipient-only HTTP calendar recovery.</summary>
+    /// <summary>Proves direct Event joining, persisted public Quest creation, exclusive participation and recipient-only HTTP calendar recovery.</summary>
     /// <returns>A task completing after the independently authenticated owner and member finish the workflow.</returns>
     [Fact]
-    public async Task MembershipApprovalPublicQuestParticipationAndCalendarRecovery()
+    public async Task DirectEventJoinPublicQuestParticipationAndCalendarRecovery()
     {
         await using var ownerContext = await fixture.CreateContextAsync();
         await using var memberContext = await fixture.CreateContextAsync();
         var owner = await SignedInAsync(ownerContext, "Alice");
         var member = await SignedInAsync(memberContext, "Bob");
         var eventId = await CreateEventAsync(owner);
-        await BecomeMemberAsync(owner, member, eventId, "Bob");
+        await BecomeMemberAsync(member, eventId);
         var questId = await CreateQuestAsync(owner, eventId);
         await Expect(owner.GetByRole(AriaRole.Heading, new() { Name = "Your participation: None", Exact = true })).ToBeVisibleAsync();
 
@@ -100,8 +100,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var questOwner = await SignedInAsync(questOwnerContext, "Bob");
         var invitee = await SignedInAsync(inviteeContext, "Carol");
         var eventId = await CreateEventAsync(eventOwner);
-        await BecomeMemberAsync(eventOwner, questOwner, eventId, "Bob");
-        await BecomeMemberAsync(eventOwner, invitee, eventId, "Carol");
+        await BecomeMemberAsync(questOwner, eventId);
+        await BecomeMemberAsync(invitee, eventId);
         var questId = await CreateQuestAsync(questOwner, eventId, isPrivate: true);
         var title = await questOwner.GetByRole(AriaRole.Heading, new() { Level = 1 }).InnerTextAsync();
 
@@ -230,7 +230,6 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
             await Expect(reason).ToBeEditableAsync();
             await Expect(reason).ToHaveValueAsync(enteredReason);
             await Expect(owner.GetByText("Active", new() { Exact = true })).ToBeVisibleAsync();
-            await owner.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await owner.GetByRole(AriaRole.Button, new() { Name = "Confirm: Cancel Quest", Exact = true }).ClickAsync();
             await Expect(owner.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
             await Expect(owner.Locator(".management-confirmation")).ToHaveCountAsync(0);
@@ -286,7 +285,7 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var manager = await SignedInAsync(managerContext, "Alice");
         var editor = await SignedInAsync(editorContext, "Bob");
         var eventId = await CreateEventAsync(manager);
-        await BecomeMemberAsync(manager, editor, eventId, "Bob");
+        await BecomeMemberAsync(editor, eventId);
         var questId = await CreateQuestAsync(editor, eventId, isPrivate: true);
         var originalTitle = await editor.GetByRole(AriaRole.Heading, new() { Level = 1 }).InnerTextAsync();
         if (competingChange != "suspension")
@@ -580,26 +579,20 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var start = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7));
         await page.GetByLabel("Start date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Create Event", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Publish Event", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Quests", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Create Quest", Exact = true })).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Alert)).ToHaveCountAsync(0);
         return id;
     }
 
-    private static async Task BecomeMemberAsync(IPage owner, IPage member, Guid eventId, string persona)
+    private static async Task BecomeMemberAsync(IPage member, Guid eventId)
     {
         await member.GotoAsync($"/events/{eventId}");
         await Expect(member.GetByText("Member-only browser acceptance description.", new() { Exact = true })).ToHaveCountAsync(0);
-        await member.GetByRole(AriaRole.Button, new() { Name = "Request membership", Exact = true }).ClickAsync();
-        await Expect(member.GetByText("Your request is pending.", new() { Exact = false })).ToBeVisibleAsync();
-        await owner.GotoAsync($"/events/{eventId}/requests");
-        var request = owner.Locator("article").Filter(new() { HasTextRegex = new($"\\b{Regex.Escape(persona)}\\b") });
-        await request.GetByRole(AriaRole.Button, new() { Name = "Approve membership", Exact = true }).ClickAsync();
-        await Expect(request.GetByText(new Regex("\\bApproved\\b"))).ToBeVisibleAsync();
-        await member.ReloadAsync();
+        await member.GetByRole(AriaRole.Button, new() { Name = "Join Event", Exact = true }).ClickAsync();
         await Expect(member.GetByText("Member-only browser acceptance description.", new() { Exact = true })).ToBeVisibleAsync();
     }
 
@@ -650,7 +643,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         {
             if (needsReason)
                 await reason.FillWhenActionableAsync("Browser acceptance action.");
-            await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
+            if (action is not ("Cancel Quest" or "Delete draft" or "Remove owner access" or "Revoke invitation" or "Remove attendee"))
+                await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = moderation ? action : $"Confirm: {action}", Exact = true }).ClickAsync();
             if (moderation)
                 await Expect(reason).ToHaveValueAsync("");

@@ -89,10 +89,10 @@ internal static class ExperienceBrowserSupport
         await page.GetByLabel("End date, inclusive", new() { Exact = true }).FillWhenActionableAsync(start.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         if (timeZoneId is not null)
             await page.GetByRole(AriaRole.Combobox, new() { Name = "Time zone", Exact = true }).SelectOptionAsync(timeZoneId);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Save Draft", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Create Event", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(new Regex("/events/[0-9a-f-]{36}$"));
         var id = Guid.Parse(new Uri(page.Url).Segments[^1]);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Publish Event", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Quests", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Create Quest", Exact = true })).ToBeVisibleAsync();
         return id;
     }
@@ -122,7 +122,8 @@ internal static class ExperienceBrowserSupport
             var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
             if (action is "Cancel Quest" or "Revoke invitation" or "Remove attendee")
                 await reason.FillWhenActionableAsync("Synthetic offline acceptance.");
-            await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
+            if (action is not ("Cancel Quest" or "Delete draft" or "Remove owner access" or "Revoke invitation" or "Remove attendee"))
+                await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true }).ClickAsync();
             await Expect(page.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
             await Expect(page.Locator(".management-confirmation")).ToHaveCountAsync(0);

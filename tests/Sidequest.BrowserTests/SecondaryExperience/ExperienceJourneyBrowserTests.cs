@@ -191,7 +191,7 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
     }
 
     /// <summary>A private invitation without joining is not saved, and revocation by the real owner removes previously joined basics on the next authorized HTTP query.</summary>
-    /// <returns>Completion after two real cookie identities, membership approval, invitation, join and revocation.</returns>
+    /// <returns>Completion after two real cookie identities, direct Event joining, invitation, Quest joining and revocation.</returns>
     [Fact]
     public async Task PrivateInvitedOnlyNeverLeaksAndOnlineRevocationRemovesJoinedBasics()
     {
@@ -201,12 +201,8 @@ public sealed class ExperienceJourneyBrowserTests(FoundationBrowserFixture fixtu
         var member = await ExperienceBrowserSupport.SignInAsync(memberContext, "Bob");
         var eventId = await ExperienceBrowserSupport.CreateEventAsync(owner);
         await member.GotoAsync($"/events/{eventId}");
-        await member.GetByRole(AriaRole.Button, new() { Name = "Request membership", Exact = true }).ClickAsync();
-        await Expect(member.GetByText("Your request is pending.", new() { Exact = false })).ToBeVisibleAsync();
-        await owner.GotoAsync($"/events/{eventId}/requests");
-        var request = owner.Locator("article").Filter(new() { HasTextRegex = new("\\bBob\\b") });
-        await request.GetByRole(AriaRole.Button, new() { Name = "Approve membership", Exact = true }).ClickAsync();
-        await Expect(request.GetByText(new Regex("\\bApproved\\b"))).ToBeVisibleAsync();
+        await member.GetByRole(AriaRole.Button, new() { Name = "Join Event", Exact = true }).ClickAsync();
+        await Expect(member.GetByRole(AriaRole.Button, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
         var quest = await ExperienceBrowserSupport.CreateQuestAsync(owner, eventId, $"Revocation {Guid.NewGuid():N}", privateQuest: true);
         await ExperienceBrowserSupport.SelectQuestActionAsync(owner, "Invite (immediate access)");
         var select = owner.GetByRole(AriaRole.Combobox, new() { NameRegex = new("^Event member\\b") });
