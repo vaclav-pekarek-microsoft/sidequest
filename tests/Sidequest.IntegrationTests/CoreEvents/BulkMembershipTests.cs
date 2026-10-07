@@ -130,8 +130,12 @@ public sealed class BulkMembershipTests(SqlTestDatabase database) : IClassFixtur
         Assert.Equal((2, 1, 0, 1), (summary.Total, summary.Applied, summary.Skipped, summary.Failed));
         Assert.Equal(BulkStatus.Completed, summary.Status);
         Assert.Contains("1 individuals", summary.Error);
+        var ordinaryMember = FoundationSeed.NewUser();
+        ordinaryMember.TenantId = seed.User.TenantId;
+        await FoundationSeed.PersistAsync(database, ordinaryMember);
+        await FoundationSeed.PersistAsync(database, seed.Membership(ordinaryMember.Id));
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            context.Service(seed.Other).GetBulkAsync(operation.Id))).Code);
+            context.Service(ordinaryMember).GetBulkAsync(operation.Id))).Code);
     }
 
     /// <summary>Preserves explicit removals and newer invitation revocations instead of allowing stale bulk work to resurrect access.</summary>

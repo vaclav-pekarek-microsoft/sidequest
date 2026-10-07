@@ -273,7 +273,11 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task OwnerRevalidationPreservesSelectedPersonAndExactRevocationReason()
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true }, Invitees = [new(member.Id, member.DisplayName)] };
+        detail = detail with
+        {
+            Summary = detail.Summary with { IsOwner = true, CanManage = true },
+            Invitees = [new(member.Id, member.DisplayName)]
+        };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
         page.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();
@@ -375,7 +379,14 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task NoDraftVersionChangeDoesNotInventConflict(string viewer, bool versionChanged)
     {
         moderation = viewer == "moderator";
-        detail = detail with { Summary = detail.Summary with { IsOwner = viewer == "owner" } };
+        detail = detail with
+        {
+            Summary = detail.Summary with
+            {
+                IsOwner = viewer == "owner",
+                CanManage = viewer == "owner"
+            }
+        };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters
             .Add(component => component.Id, detail.Summary.Id).Add(component => component.Moderation, moderation));
@@ -410,7 +421,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task OwnershipLossDiscardsDraftWithoutFencingParticipation(bool versionChanged)
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true } };
+        detail = detail with { Summary = detail.Summary with { IsOwner = true, CanManage = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
         page.FindAll("button").Single(button => button.TextContent == "Cancel Quest").Click();
@@ -418,7 +429,8 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         await experience.ReportConnectionAsync(false, null);
         detail = detail with { Summary = detail.Summary with
         {
-            IsOwner = false, Version = versionChanged ? "ownership-changed" : detail.Summary.Version
+            IsOwner = false, CanManage = false,
+            Version = versionChanged ? "ownership-changed" : detail.Summary.Version
         } };
         await experience.ReportConnectionAsync(true, null);
         Assert.Empty(page.FindComponents<QuestManagement>());
@@ -428,7 +440,13 @@ public sealed class QuestManagementLifecycleTests : BunitContext
         await page.InvokeAsync(() => participation.Change.InvokeAsync(ParticipationCommand.Join));
         Assert.Single(participations);
         await experience.ReportConnectionAsync(false, null);
-        detail = detail with { Summary = detail.Summary with { IsOwner = true, Version = "ownership-restored" } };
+        detail = detail with
+        {
+            Summary = detail.Summary with
+            {
+                IsOwner = true, CanManage = true, Version = "ownership-restored"
+            }
+        };
         await experience.ReportConnectionAsync(true, null);
         Assert.False(page.FindComponent<QuestManagement>().Instance.Busy);
         Assert.Empty(page.FindComponents<FluentTextArea>());
@@ -452,7 +470,10 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task OverlappingReconnectsAwaitNewestAuthorization(string stage, string outcome)
     {
         moderation = stage != "members";
-        detail = detail with { Summary = detail.Summary with { IsOwner = !moderation } };
+        detail = detail with
+        {
+            Summary = detail.Summary with { IsOwner = !moderation, CanManage = !moderation }
+        };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters
             .Add(component => component.Id, detail.Summary.Id).Add(component => component.Moderation, moderation));
@@ -542,7 +563,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task LateParticipationCannotClearReplacementQuestDraft()
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true } };
+        detail = detail with { Summary = detail.Summary with { IsOwner = true, CanManage = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
         var originalId = detail.Summary.Id;
@@ -576,7 +597,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task OldPagingAndDraftCallbacksCannotAffectReplacementView(string replacement)
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true } };
+        detail = detail with { Summary = detail.Summary with { IsOwner = true, CanManage = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
         var old = page.FindComponent<QuestManagement>().Instance;
@@ -622,7 +643,7 @@ public sealed class QuestManagementLifecycleTests : BunitContext
     public async Task ClearedDraftAndPersonOnlyIntentionHaveDistinctVersionSemantics(bool retainSelection)
     {
         moderation = false;
-        detail = detail with { Summary = detail.Summary with { IsOwner = true } };
+        detail = detail with { Summary = detail.Summary with { IsOwner = true, CanManage = true } };
         await experience.ReportConnectionAsync(true, null);
         var page = Render<QuestDetails>(parameters => parameters.Add(component => component.Id, detail.Summary.Id));
         page.FindAll("button").Single(button => button.TextContent == "Revoke invitation").Click();

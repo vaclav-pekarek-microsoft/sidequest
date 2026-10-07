@@ -93,9 +93,9 @@ public sealed class EventService : IEventService, IEventManagementQueries
             ?? throw EventTransactions.Unavailable();
         await RequireTenantAsync(db, item, actor, cancellationToken).ConfigureAwait(false);
         var summary = await EventQueries.SummaryAsync(db, item, actor.Id, clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        if (summary.IsMember)
+        if (summary.IsMember || summary.CanManage)
             await access.RequireEventAsync(db, id, actor.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return new(summary, summary.IsMember ? item.Description : null);
+        return new(summary, summary.IsMember || summary.CanManage ? item.Description : null);
     }
 
     /// <inheritdoc />
@@ -664,15 +664,19 @@ public sealed class EventService : IEventService, IEventManagementQueries
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var item = await EventTransactions.LockAsync(db, eventId, cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
+        var administrator = await db.Administrators.AnyAsync(
+            x => x.UserId == actor.Id, cancellationToken).ConfigureAwait(false);
         if (ownerOnly is { } requireOwner)
         {
             await access.RequireEventAsync(db, eventId, actor.Id, requireOwner, cancellationToken).ConfigureAwait(false);
-            await RequireMembershipAsync(db, eventId, actor.Id, cancellationToken).ConfigureAwait(false);
+            if (!administrator)
+                await RequireMembershipAsync(db, eventId, actor.Id, cancellationToken).ConfigureAwait(false);
         }
         else if (item.Status == EventStatus.Draft)
         {
             await access.RequireEventAsync(db, eventId, actor.Id, true, cancellationToken).ConfigureAwait(false);
-            await RequireMembershipAsync(db, eventId, actor.Id, cancellationToken).ConfigureAwait(false);
+            if (!administrator)
+                await RequireMembershipAsync(db, eventId, actor.Id, cancellationToken).ConfigureAwait(false);
         }
         await RequireTenantAsync(db, item, actor, cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow();

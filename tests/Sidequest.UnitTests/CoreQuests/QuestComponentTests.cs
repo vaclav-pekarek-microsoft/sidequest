@@ -176,7 +176,11 @@ public sealed class QuestComponentTests : BunitContext
     public async Task Management_ActionSectionsShowOnlyRequiredInputsAndContactLabels()
     {
         var person = new PersonSummary(Guid.NewGuid(), "Example Person", "example@sample.invalid");
-        var detail = new QuestDetail(Summary() with { Status = QuestStatus.Draft, IsOwner = true, Visibility = QuestVisibility.Private },
+        var detail = new QuestDetail(Summary() with
+            {
+                Status = QuestStatus.Draft, IsOwner = true, CanManage = true,
+                Visibility = QuestVisibility.Private
+            },
             "", "", [], [], [], [new(person.Id, person.DisplayName)]);
         var requests = new List<QuestActionRequest>();
         var cut = Render<QuestManagement>(p => p.Add(x => x.Detail, detail).Add(x => x.Members, new[] { person })

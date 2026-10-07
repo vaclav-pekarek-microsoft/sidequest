@@ -56,22 +56,18 @@ public sealed class QuestInvitationTests(SqlTestDatabase database) : IClassFixtu
     public async Task Invitation_DoesNotGrantOwnershipOrModeration()
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
-        await using (var setup = database.CreateContext())
-        {
-            setup.EventOwners.Remove(await setup.EventOwners.SingleAsync(x => x.EventId == scenario.Seed.Event.Id));
-            await setup.SaveChangesAsync();
-        }
-        await scenario.Service().InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.Other.Id);
+        var guest = await AddOrdinaryMemberAsync(scenario);
+        await scenario.Service().InviteAsync(scenario.Seed.Quest.Id, guest.Id);
         var gate = new InvitationReadGate();
         gate.Release.TrySetResult();
-        var guest = new QuestService(new ObservedContextFactory(database, gate),
-            new ResourceAccess(StubCurrentUser.For(scenario.Seed.Other)), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
-        Assert.False((await guest.GetAsync(scenario.Seed.Quest.Id)).Summary.IsOwner);
-        var denied = await Assert.ThrowsAsync<DomainException>(() => guest.InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.User.Id));
+        var guestService = new QuestService(new ObservedContextFactory(database, gate),
+            new ResourceAccess(StubCurrentUser.For(guest)), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
+        Assert.False((await guestService.GetAsync(scenario.Seed.Quest.Id)).Summary.IsOwner);
+        var denied = await Assert.ThrowsAsync<DomainException>(() => guestService.InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.User.Id));
         Assert.Equal(ErrorCode.NotFound, denied.Code);
         Assert.False(gate.Started.Task.IsCompleted);
         Assert.Equal(ErrorCode.NotFound,
-            (await Assert.ThrowsAsync<DomainException>(() => guest.GetAsync(scenario.Seed.Quest.Id, true))).Code);
+            (await Assert.ThrowsAsync<DomainException>(() => guestService.GetAsync(scenario.Seed.Quest.Id, true))).Code);
     }
 
     /// <summary>Failure or cancellation after all invitation SQL writes rolls back the grant, audit, outbox and Quest update together.</summary>
@@ -83,6 +79,7 @@ public sealed class QuestInvitationTests(SqlTestDatabase database) : IClassFixtu
     public async Task PostSaveFailure_RollsBackGrantAndIntent(bool cancel)
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var guest = await AddOrdinaryMemberAsync(scenario);
         Exception failure = cancel ? new OperationCanceledException("Controlled invitation cancellation.") :
             new InvalidOperationException("Controlled invitation failure.");
         var observer = new FailAfterInvitationSave(failure);
@@ -90,7 +87,7 @@ public sealed class QuestInvitationTests(SqlTestDatabase database) : IClassFixtu
             new ResourceAccess(StubCurrentUser.For(scenario.Seed.User)), new ChangeWriter(), scenario.Clock, scenario.Reconciler);
         var id = scenario.Seed.Quest.Id;
         var version = (await scenario.Service().GetAsync(id)).Summary.Version;
-        Assert.Same(failure, await Record.ExceptionAsync(() => service.InviteAsync(id, scenario.Seed.Other.Id)));
+        Assert.Same(failure, await Record.ExceptionAsync(() => service.InviteAsync(id, guest.Id)));
         Assert.True(observer.Saved);
         await using (var read = database.CreateContext())
         {
@@ -100,9 +97,17 @@ public sealed class QuestInvitationTests(SqlTestDatabase database) : IClassFixtu
             Assert.Equal(version, Convert.ToBase64String((await read.Quests.SingleAsync(x => x.Id == id)).Version));
         }
         Assert.Equal(ErrorCode.NotFound,
-            (await Assert.ThrowsAsync<DomainException>(() => scenario.Service(scenario.Seed.Other).GetAsync(id))).Code);
-        await scenario.Service().InviteAsync(id, scenario.Seed.Other.Id);
-        Assert.Equal(id, (await scenario.Service(scenario.Seed.Other).GetAsync(id)).Summary.Id);
+            (await Assert.ThrowsAsync<DomainException>(() => scenario.Service(guest).GetAsync(id))).Code);
+        await scenario.Service().InviteAsync(id, guest.Id);
+        Assert.Equal(id, (await scenario.Service(guest).GetAsync(id)).Summary.Id);
+    }
+
+    private static async Task<UserAccount> AddOrdinaryMemberAsync(QuestScenario scenario)
+    {
+        var user = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(scenario.Database, user);
+        await FoundationSeed.PersistAsync(scenario.Database, scenario.Seed.Membership(user.Id));
+        return user;
     }
 
     private sealed class FailAfterInvitationSave(Exception failure) : SaveChangesInterceptor

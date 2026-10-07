@@ -260,7 +260,8 @@ Basic name similarity + date overlap is sufficient.
 Each Event has one or more equal owners. The creator starts as the first owner;
 additional owners have the same permissions. There is no primary-owner/co-owner distinction.
 
-Only those users can modify Event configuration.
+The creator, assigned owners, and Administrators can modify Event configuration.
+Creator and Administrator access does not add an owner-list row.
 
 Normal users cannot modify the Event.
 
@@ -398,7 +399,7 @@ Accept/Decline action for private Quest invitations, and invitation alone is not
 
 Every Quest has one or more equal owners. The creator starts as the first owner.
 
-Only the Quest owners may:
+The Quest creator, assigned Quest owners, and Administrators may:
 
 - edit it
 - cancel it
@@ -1196,9 +1197,13 @@ name remain mutable contact/display data after linking and never grant applicati
 roles or resource access. Authentication proves control of the addressed Microsoft
 mailbox at sign-in time; persisted eligibility and departure checks still fail closed.
 
-**Roles:** Event manager means any Event owner; Quest manager means any Quest owner.
-All owners of a resource have equal permissions. Roles are additive, but lifecycle restrictions still apply. An Administrator
-has no implicit Event membership, private Quest access, or content-editing privilege.
+**Roles:** Event manager means the Event creator, any assigned Event owner, or an
+Administrator. Quest manager means the Quest creator, any assigned Quest owner, or an
+Administrator. All assigned owners of a resource have equal permissions, and creator
+or Administrator management does not manufacture an owner assignment. Roles are
+additive, but lifecycle restrictions still apply. An Administrator has no implicit
+Event membership or participation, but may read and manage Event and Quest content
+without joining.
 All resource reads and commands authorize server-side, including Interactive Server
 callbacks, jobs, images, search results, counts, and exports. Hiding a button is insufficient.
 
@@ -1206,18 +1211,18 @@ callbacks, jobs, images, search results, counts, and exports. Hiding a button is
 |--------|----------------------|--------------|---------------|---------------|--------------------|
 | Create Event | Yes | Yes | Yes | Yes | Yes |
 | View discoverable Event summary / join | Yes, subject to discovery/state | Yes | Yes | Yes | Yes |
-| View full Event / public non-draft Quests | No | Yes | Yes | Yes, with membership | No |
-| Configure Event / manage audience / decide requests | No | No | Yes | No | No |
-| Create Quest | No | Yes, in Active Event | Yes, in Active Event | Yes, with membership | No |
-| View private non-draft Quest | No | Only with valid invitation | Moderation view only unless separately invited/owning | Yes, with membership | No |
-| View draft Quest | No | No | No, unless also Quest manager | Yes | No |
-| Edit / publish / cancel Quest | No | No | No, unless also Quest manager | Yes | No |
-| Invite / revoke invite / remove attendee | No | No | No, unless also Quest manager | Yes | No |
-| Join / leave / follow / unfollow | No | Own participation, with Quest access and allowed state | Same member rules | Same member rules | No |
-| Suspend / reinstate Quest | No | No | Yes, with reason | No, unless also Event manager | No |
-| View moderation history | No | Status and participant-facing reason only | Own Event moderation records | Own Quest moderation records | No |
-| Add / remove equal owners | No | No | Yes, for their Event; retain at least one eligible owner | Yes, for their Quest; retain at least one eligible owner | Audited last-owner departure recovery only |
-| Cancel / archive Event | No | No | Yes, with lifecycle guards | No | No |
+| View full Event / public non-draft Quests | No | Yes | Yes | Yes, with membership | Yes |
+| Configure Event / manage audience / decide requests | No | No | Yes | No | Yes |
+| Create Quest | No | Yes, in Active Event | Yes, in Active Event | Yes, with membership | Yes, in Active Event |
+| View private non-draft Quest | No | Only with valid invitation | Moderation view only unless separately invited/owning | Yes, with membership | Yes |
+| View draft Quest | No | No | No, unless also Quest manager | Yes | Yes |
+| Edit / publish / cancel Quest | No | No | No, unless also Quest manager | Yes | Yes |
+| Invite / revoke invite / remove attendee | No | No | No, unless also Quest manager | Yes | Yes |
+| Join / leave / follow / unfollow | No | Own participation, with Quest access and allowed state | Same member rules | Same member rules | Same member rules; management does not imply participation |
+| Suspend / reinstate Quest | No | No | Yes, with reason | No, unless also Event manager | Yes |
+| View moderation history | No | Status and participant-facing reason only | Own Event moderation records | Own Quest moderation records | Yes |
+| Add / remove equal owners | No | No | Yes, for their Event; retain at least one eligible owner | Yes, for their Quest; retain at least one eligible owner | Yes, with the same continuity guards |
+| Cancel / archive Event | No | No | Yes, with lifecycle guards | No | Yes, with lifecycle guards |
 | Manage global settings / templates / administrators | No | No | No | No | Yes |
 
 The last column describes privileges from the Administrator role alone, not a ban
@@ -1251,7 +1256,10 @@ Every Event and Quest has one or more equal owners. Creation atomically assigns 
 creator as the first owner. Any owner may add/remove owners, including themselves,
 but ordinary owner-list changes must retain at least one eligible owner. Targets must
 be eligible users and, for Quests, current Event members. There is no primary owner,
-co-owner rank, transfer command, or special creator privilege after creation.
+co-owner rank, or transfer command. The immutable creator ID is also an effective
+management fallback if its owner relation is absent; this does not recreate that
+relation, present the creator as an assigned owner, or satisfy the last-eligible-owner
+invariant.
 A Quest ownership assignment also grants named private Quest access;
 removing that role removes role-derived access, not any separate invitation.
 Assignment never automatically joins or follows the Quest.
@@ -1270,8 +1278,10 @@ do not keep a departed account authorized merely to satisfy an ownership invaria
 If the last eligible owner departs, an Administrator performs narrowly scoped ownership
 recovery with a resource ID, verified departure, eligible replacement, and mandatory reason.
 Recovery may remove departed owners and create required individual Event membership.
-It is audited and notifies the replacement and any remaining eligible owners, but grants
-no general content-reading/editing rights to the Administrator.
+It is audited and notifies the replacement and any remaining eligible owners.
+Administrators already have general content-reading and management rights, but recovery
+does not create membership, participation, or owner assignments beyond its explicit
+replacement operation.
 V1 does not automatically detect departures or reassign ownership. A Graph outage, mere
 absence, or an unanswered message is not evidence that someone left the organization.
 The operational process for verifying departure must be approved before live recovery.
@@ -1549,7 +1559,7 @@ Completed/Cancelled/Archived Events are not candidates. No AI or hidden Event hi
 | Home / Quests | Home is the unfiltered Quest overview in section 20; the Quests page retains joined/following/organizing/discover/invited views, Event/date filters, board/list layouts, 12-Quest pages and separate history actions |
 | Discover | Public Active Quests in the user's Events; Event/date filters; no private items or private-count hints |
 | Events | All Active Events with joined/not-joined state, direct Join action, separate retained history, create Event action and duplicate warning |
-| Event detail | Discovery or member context with direct Join/Leave; reusable Overview, Quests, Members, Invitations, and manager-only Settings tabs rather than separate management pages |
+| Event detail | Discovery or member context with direct Join/Leave; managers receive reusable Overview, Quests, Members, Invitations, and Settings tabs rather than separate management pages; non-managers receive the overview without a management tab strip |
 | Quest detail | Status, time in the inherited Event zone and user-local equivalent, location, owners' contacts, advisory capacity, accessible cover, attendees; Join replaces Following; Joined state offers Leave, not Follow; leaving never restores Following |
 | Quest editor | Draft/save/publish flow, inherited Event time zone shown read-only, private-moderation disclosure, validation, pending upload indicators; no AI controls |
 | Invitations | Pending Event invitations with accept/decline/expiry; private Quest invitations link directly to details with Join/Follow, never Accept/Decline; private cards require current access |
@@ -1608,11 +1618,11 @@ outbox, and schedule changes transactionally in Azure SQL through EF Core.
 |---------|--------------------------------|
 | User, Administrator | Unique tenant/object pair; verified Microsoft contact data, first sign-in and last resolution times; unique administrator user ID |
 | MagicSignInChallenge | Random challenge ID, normalized Microsoft address, salted code hash, creation/expiry/consumption times and bounded attempt count; no plaintext code |
-| Event, EventOwner | Creator ID for audit only, dates, zone, discovery summary, status, rowversion; unique Event/owner pair in owner relation; no primary-owner or discovery-mode field |
+| Event, EventOwner | Immutable creator ID with management fallback, dates, zone, discovery summary, status, rowversion; unique Event/owner pair in owner relation; no primary-owner or discovery-mode field |
 | EventMembership | Unique Event/user pair, Active/Removed status, concurrency version, activation/removal timestamps and actor; no group-based access |
 | BulkMembershipOperation, BulkMembershipRecipient | Event, actor, add/invite mode, operational source group ID, expansion state, frozen recipient IDs, per-recipient outcome/idempotency key, progress/failure details; no authorization role |
 | EventMembershipRequest, EventInvitation | Recipient, status, decision actor/reason, timestamps/expiry; at most one pending record per Event/user/type |
-| Quest, QuestOwner | Event ID, creator ID for audit only, fields, UTC interval, visibility/status, rowversion, calendar UID/version; zone inherited through Event ID; unique Quest/owner pair in owner relation; no primary-owner or independent time-zone field |
+| Quest, QuestOwner | Event ID, immutable creator ID with management fallback, fields, UTC interval, visibility/status, rowversion, calendar UID/version; zone inherited through Event ID; unique Quest/owner pair in owner relation; no primary-owner or independent time-zone field |
 | QuestInvitation | Unique Quest/recipient pair, Active/Revoked state and timestamps; no acceptance/expiry fields; reinvitation/revocation cycles retained in history |
 | QuestParticipation | Unique Quest/user pair with None/Following/Joined state, concurrency version, and state-change timestamps; history retained; no simultaneous follow and attendance rows |
 | EventStatusHistory, QuestStatusHistory, AuditEntry | Immutable lifecycle/actions; actor (user/system), resource IDs, safe change summary, reason, correlation ID |
@@ -1626,8 +1636,9 @@ outbox, and schedule changes transactionally in Azure SQL through EF Core.
 directory groups. Group expansion is a bulk command input only. Do not add group grants,
 membership-assertion caches, exclusion precedence, or periodic membership synchronization.
 `EventOwner` and `QuestOwner` relations are the ownership source of truth. Do not store
-a competing primary `OwnerId` on Event/Quest. Creator IDs are historical metadata only,
-not authorization grants. Enforce creation and last-eligible-owner guards transactionally.
+a competing primary `OwnerId` on Event/Quest. Creator IDs are immutable management
+fallback grants but are not owner-list rows and do not satisfy owner-continuity guards.
+Enforce creation and last-eligible-owner guards transactionally.
 Foreign keys must not cascade-delete user content when identity/contact records change.
 Use filtered unique indexes for pending records and database uniqueness for repeat-safe
 participation; application prechecks alone are insufficient.
@@ -2336,6 +2347,7 @@ not V1 release requirements.
 | D46 | 2026-10-07 | Simplify Event participation for the internal tool: every eligible signed-in user can list all Active Events and join one directly without owner approval. Event creation is one step and immediately Active; Draft publication remains only for legacy records. Joined Event members can read that Event's authorized Quests. Event detail owns tabbed Overview, Quests, Members, Invitations, and Settings management instead of separate product navigation. Event cancel/delete/leave/member-owner removal/invitation-revocation actions require modal confirmation. Empty Quest results direct users to find and join an Event. Events expose only attendance membership (joined or not joined), with no Event-follow action. This supersedes D01/D14 and the Event portions of sections 7–8, 48–52 that require membership requests or Draft-first creation; it does not remove Quest-level Following. |
 | D47 | 2026-10-07 | Deployed authentication is magic-code-only for `alias@microsoft.cz`; no interactive Entra/OpenID handler or fallback is registered. Retain loopback-only synthetic Development personas for automated and local testing. Normalize a unique eligible legacy `alias@microsoft.com` account by alias for continuity, update its stored contact to `alias@microsoft.cz` after successful verification, and fail closed on cross-domain ambiguity. Never deliver a code to the legacy domain. Microsoft Graph and Azure managed identity remain separate directory and infrastructure integrations, not user sign-in methods. This supersedes the authentication-domain and direct-Entra-entry portions of D42, D44 and D45. |
 | D48 | 2026-10-07 | Replace the signed-in Home board from D41 with a lightweight, unfiltered Quest overview: upcoming joined/total, active-now and past counts; every active-now Quest; top three upcoming joined and followed Quests; and active invitation rows with Event, linked Quest, Event-local date and direct Join. Keep filtering, layout selection and category navigation exclusively on the Quests page, which uses 12-item pagination for every view. Home has no dashboard shortcuts. |
+| D49 | 2026-10-07 | Treat the immutable creator, every assigned owner, and every persisted Administrator as effective managers for Event and Quest edit, cancellation, deletion, ownership, and related management actions, subject to existing lifecycle and continuity guards. Creator and Administrator management does not manufacture an explicit owner assignment or participation row. Administrators may manage without Event membership. Hide the complete Event management tab strip and all management panels from non-managers; managers receive Overview, Quests, Members, Invitations, and Settings. Keep `IsOwner` as the explicit relation fact and expose effective management separately. Correct management-tab hover styles so unselected tabs retain readable dark text and selected tabs retain their gradient. This supersedes the audit-only creator and recovery-only Administrator authorization portions of sections 10, 17, 29, 39, 40, and 53. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.

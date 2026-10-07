@@ -134,22 +134,19 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(2, scenario.Storage.Blobs.Count);
     }
 
-    /// <summary>Unauthorized upload does not read input, create metadata or call a provider, including administrator-only callers.</summary>
+    /// <summary>Unauthorized upload does not read input, create metadata or call a provider.</summary>
     /// <param name="grant">The absent eligibility, ownership or individual membership boundary.</param>
     /// <returns>Completion after access rejection before touching an intentionally unreadable stream.</returns>
     [Theory]
     [InlineData("moderator")]
-    [InlineData("administrator")]
     [InlineData("membership")]
     [InlineData("disabled")]
     public async Task UnauthorizedUpload_DoesNotReadOrStageResources(string grant)
     {
         var scenario = await MediaScenario.CreateAsync(database, privateQuest: true);
-        var user = grant is "moderator" or "administrator" ? scenario.Seed.Other : scenario.Seed.User;
+        var user = grant == "moderator" ? await AddOrdinaryMemberAsync(scenario) : scenario.Seed.User;
         await using (var edit = database.CreateContext())
         {
-            if (grant == "administrator")
-                edit.Administrators.Add(new Administrator { UserId = user.Id });
             if (grant == "membership")
                 (await edit.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == user.Id)).Status = MembershipStatus.Removed;
             if (grant == "disabled")
@@ -166,6 +163,24 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(0, scenario.Storage.Writes);
     }
 
+    /// <summary>A persisted administrator can manage a private Quest cover without creator or explicit owner rows.</summary>
+    /// <returns>Completion after a ready cover is attached and provider bytes are stored.</returns>
+    [Fact]
+    public async Task AdministratorUpload_UsesEffectiveManagementWithoutExplicitOwnership()
+    {
+        var scenario = await MediaScenario.CreateAsync(database, privateQuest: true);
+        var administrator = await AddOrdinaryMemberAsync(scenario);
+        await FoundationSeed.PersistAsync(database, new Administrator { UserId = administrator.Id });
+        using var input = MediaScenario.Image();
+        var result = await scenario.Service(administrator).UploadCoverAsync(
+            scenario.Seed.Quest.Id, await scenario.VersionAsync(), input);
+        Assert.NotNull(result.AssetId);
+        await using var db = database.CreateContext();
+        Assert.Equal(result.AssetId, (await db.Quests.SingleAsync(x => x.Id == scenario.Seed.Quest.Id)).CoverAssetId);
+        Assert.Equal(MediaStatus.Ready, (await db.MediaAssets.SingleAsync(x => x.Id == result.AssetId)).Status);
+        Assert.Equal(1, scenario.Storage.Writes);
+    }
+
     /// <summary>Private moderation is explicit and audited; Draft and retained-unpublished covers are never disclosed through it.</summary>
     /// <param name="state">Published, Draft or retained cancelled-unpublished state.</param>
     /// <returns>Completion after direct-read denial and the exact audited moderation result.</returns>
@@ -176,10 +191,13 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
     public async Task PrivateReads_RequireExplicitModerationAndExcludeUnpublished(string state)
     {
         var scenario = await MediaScenario.CreateAsync(database, draft: state != "active", privateQuest: true);
+        var moderatorUser = await AddOrdinaryMemberAsync(scenario);
+        await FoundationSeed.PersistAsync(database,
+            new EventOwner { EventId = scenario.Seed.Event.Id, UserId = moderatorUser.Id });
         var uploaded = await scenario.UploadAsync();
         if (state == "retained")
             await scenario.Quests.ChangeStatusAsync(scenario.Seed.Quest.Id, uploaded.Version, QuestStatus.Cancelled, "");
-        var moderator = scenario.Service(scenario.Seed.Other);
+        var moderator = scenario.Service(moderatorUser);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.ReadAsync(uploaded.AssetId!.Value))).Code);
         if (state == "active")
         {
@@ -204,10 +222,11 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
     public async Task ReadRace_DiscardsBytesAfterRevocation(string change)
     {
         var scenario = await MediaScenario.CreateAsync(database, privateQuest: true);
+        var reader = await AddOrdinaryMemberAsync(scenario);
         var uploaded = await scenario.UploadAsync();
         await FoundationSeed.PersistAsync(database, new QuestInvitation
         {
-            QuestId = scenario.Seed.Quest.Id, UserId = scenario.Seed.Other.Id, InvitedById = scenario.Seed.User.Id,
+            QuestId = scenario.Seed.Quest.Id, UserId = reader.Id, InvitedById = scenario.Seed.User.Id,
             Status = QuestInvitationStatus.Active, ChangedUtc = scenario.Clock.Now
         });
         scenario.Storage.AfterRead = async () =>
@@ -218,13 +237,13 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
             if (change == "assignment")
                 (await db.Quests.SingleAsync(x => x.Id == scenario.Seed.Quest.Id)).CoverAssetId = null;
             if (change == "membership")
-                (await db.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == scenario.Seed.Other.Id)).Status = MembershipStatus.Removed;
+                (await db.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == reader.Id)).Status = MembershipStatus.Removed;
             if (change == "invitation")
                 (await db.QuestInvitations.SingleAsync(x => x.QuestId == scenario.Seed.Quest.Id)).Status = QuestInvitationStatus.Revoked;
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
         };
-        var failure = await Assert.ThrowsAsync<DomainException>(() => scenario.Service(scenario.Seed.Other).ReadAsync(uploaded.AssetId!.Value));
+        var failure = await Assert.ThrowsAsync<DomainException>(() => scenario.Service(reader).ReadAsync(uploaded.AssetId!.Value));
         Assert.Equal(ErrorCode.NotFound, failure.Code);
         Assert.Equal(1, scenario.Storage.Reads);
     }
@@ -314,7 +333,7 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(2, await db.ScheduledWork.CountAsync(x => x.QuestId == scenario.Seed.Quest.Id));
     }
 
-    /// <summary>Administrator roles, stale owner membership and disabled accounts do not grant image access.</summary>
+    /// <summary>Media reads retain their individual-membership and eligibility gate even for effective resource managers.</summary>
     /// <param name="denial">The current persisted access boundary that is absent.</param>
     /// <returns>Completion after both relevant read paths fail before fetching private bytes.</returns>
     [Theory]
@@ -325,15 +344,16 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
     {
         var scenario = await MediaScenario.CreateAsync(database, privateQuest: true);
         var result = await scenario.UploadAsync();
-        var user = denial == "administrator" ? scenario.Seed.Other : scenario.Seed.User;
+        var user = denial == "administrator" ? await AddOrdinaryMemberAsync(scenario) : scenario.Seed.User;
         await using (var edit = database.CreateContext())
         {
             if (denial == "administrator")
             {
                 edit.Administrators.Add(new Administrator { UserId = user.Id });
-                edit.EventOwners.Remove(await edit.EventOwners.SingleAsync(x => x.EventId == scenario.Seed.Event.Id));
+                (await edit.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == user.Id)).Status =
+                    MembershipStatus.Removed;
             }
-            if (denial is "administrator" or "membership")
+            if (denial == "membership")
                 (await edit.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == user.Id)).Status = MembershipStatus.Removed;
             if (denial == "disabled")
                 (await edit.Users.SingleAsync(x => x.Id == user.Id)).IsEligible = false;
@@ -401,5 +421,13 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
         /// <inheritdoc />
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Authorization must precede reading input.");
+    }
+
+    private static async Task<UserAccount> AddOrdinaryMemberAsync(MediaScenario scenario)
+    {
+        var user = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(scenario.Database, user);
+        await FoundationSeed.PersistAsync(scenario.Database, scenario.Seed.Membership(user.Id));
+        return user;
     }
 }

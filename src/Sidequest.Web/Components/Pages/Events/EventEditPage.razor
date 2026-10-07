@@ -51,7 +51,7 @@
         if (Id is { } id)
         {
             var current = await Events.GetAsync(id, token);
-            if (!current.Summary.IsOwner)
+            if (!current.Summary.CanManage)
                 throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.NotFound, "Unavailable.");
             if (current.Summary.Status is not (EventStatus.Draft or EventStatus.Active) ||
                 detail is not null && current.Summary.Version != detail.Summary.Version)
@@ -71,7 +71,7 @@
         {
             var loaded = await Events.GetAsync(id, token);
             token.ThrowIfCancellationRequested();
-            if (!loaded.Summary.IsOwner)
+            if (!loaded.Summary.CanManage)
                 throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.NotFound, "Unavailable.");
             detail = loaded;
             var item = loaded.Summary;

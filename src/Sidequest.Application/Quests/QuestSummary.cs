@@ -17,11 +17,15 @@ namespace Sidequest.Application.Quests;
 /// <param name="FollowerCount">Current Following count, or null when privacy suppresses counts; null is not zero.</param>
 /// <param name="SuggestedCapacity">Optional advisory attendance count, not a joining limit.</param>
 /// <param name="Participation">Current actor's exclusive None/Following/Joined state.</param>
-/// <param name="IsOwner">Whether the current actor is an equal Quest owner.</param>
+/// <param name="IsOwner">Whether the current actor has an explicit equal Quest owner assignment.</param>
 /// <param name="CanModerate">Whether the actor can use the separate Event-owner moderation path, not a content-editing grant.</param>
 /// <param name="Version">Opaque Base64 SQL rowversion for concurrency checks, not a timestamp.</param>
 /// <param name="CoverAssetId">Internal private media identifier, or null without a cover; possession does not authorize retrieval.</param>
 public sealed record QuestSummary(Guid Id, Guid EventId, string EventName, string Title, string Location,
     DateTimeOffset StartUtc, DateTimeOffset EndUtc, string TimeZoneId, QuestStatus Status, QuestVisibility Visibility,
     int? AttendeeCount, int? FollowerCount, int? SuggestedCapacity, ParticipationStatus Participation,
-    bool IsOwner, bool CanModerate, string Version, Guid? CoverAssetId);
+    bool IsOwner, bool CanModerate, string Version, Guid? CoverAssetId)
+{
+    /// <summary>Whether the actor may manage the Quest as its creator, an assigned equal owner, or an administrator.</summary>
+    public bool CanManage { get; init; } = IsOwner;
+}

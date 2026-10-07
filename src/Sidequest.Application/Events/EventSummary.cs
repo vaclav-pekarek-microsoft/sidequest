@@ -12,9 +12,13 @@ namespace Sidequest.Application.Events;
 /// <param name="Status">Lifecycle state presented by the authorized query.</param>
 /// <param name="Owners">Equal owners' directory contacts; no primary-owner rank.</param>
 /// <param name="IsMember">Whether the current actor has active individual membership.</param>
-/// <param name="IsOwner">Whether the current actor is an Event owner.</param>
+/// <param name="IsOwner">Whether the current actor has an explicit Event owner assignment.</param>
 /// <param name="Version">Opaque Base64 SQL rowversion for optimistic concurrency, not a time value.</param>
 /// <remarks>The owner list is not defensively copied; its producer must keep the published snapshot stable during concurrent reads.</remarks>
 public sealed record EventSummary(Guid Id, string Name, string DiscoverySummary, DateOnly StartDate,
     DateOnly EndDate, string TimeZoneId, EventStatus Status, IReadOnlyList<OwnerSummary> Owners,
-    bool IsMember, bool IsOwner, string Version);
+    bool IsMember, bool IsOwner, string Version)
+{
+    /// <summary>Whether the actor may manage the Event as its creator, an assigned equal owner, or an administrator.</summary>
+    public bool CanManage { get; init; } = IsOwner;
+}

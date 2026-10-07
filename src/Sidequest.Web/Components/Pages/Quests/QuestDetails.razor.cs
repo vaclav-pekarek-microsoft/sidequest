@@ -131,7 +131,7 @@ public partial class QuestDetails : IAsyncDisposable
         if (!IsCurrent(requestVersion, checkVersion))
             return;
         PageResult<MembershipSummary>? nextMembers = null;
-        if (next.Summary.IsOwner && !moderation)
+        if (next.Summary.CanManage && !moderation)
         {
             nextMembers = await Events.ListMembersAsync(next.Summary.EventId, new PageRequest(memberPage), cancellationToken);
             if (!IsCurrent(requestVersion, checkVersion))
@@ -140,7 +140,7 @@ public partial class QuestDetails : IAsyncDisposable
         detail = next;
         history = nextHistory;
         ApplyMembers(nextMembers);
-        if (!moderation && !next.Summary.IsOwner)
+        if (!moderation && !next.Summary.CanManage)
         {
             if (HasManagementIntention)
                 conflict = false;
@@ -211,7 +211,7 @@ public partial class QuestDetails : IAsyncDisposable
 
     private Task LoadMembersAsync(int requestVersion, int checkVersion, int page) =>
         !IsCurrent(requestVersion, checkVersion) || ControlsDisabled || conflict || draftConflict || detail is null ||
-        !detail.Summary.IsOwner || Moderation ? Task.CompletedTask : RunAsync(async () =>
+        !detail.Summary.CanManage || Moderation ? Task.CompletedTask : RunAsync(async () =>
     {
         memberPage = page;
         await FetchMembersAsync();

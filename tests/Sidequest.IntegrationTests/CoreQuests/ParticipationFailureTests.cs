@@ -24,25 +24,28 @@ public sealed class ParticipationFailureTests(SqlTestDatabase database) : IClass
     public async Task UnauthorizedActor_DoesNotReachParticipationReservation(string denial)
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var actor = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(database, actor);
+        await FoundationSeed.PersistAsync(database, scenario.Seed.Membership(actor.Id));
         var gate = new ParticipationMutationGate();
-        var service = ParticipationTestServices.Service(scenario, scenario.Seed.Other, gate.Commands);
+        var service = ParticipationTestServices.Service(scenario, actor, gate.Commands);
         await using (var setup = database.CreateContext())
         {
             if (denial != "missing-invitation")
                 setup.QuestInvitations.Add(new QuestInvitation
                 {
                     QuestId = scenario.Seed.Quest.Id,
-                    UserId = scenario.Seed.Other.Id,
+                    UserId = actor.Id,
                     InvitedById = scenario.Seed.User.Id,
                     Status = denial == "revoked-invitation" ? QuestInvitationStatus.Revoked : QuestInvitationStatus.Active
                 });
             if (denial == "removed-membership")
-                (await setup.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == scenario.Seed.Other.Id))
+                (await setup.EventMemberships.SingleAsync(x => x.EventId == scenario.Seed.Event.Id && x.UserId == actor.Id))
                     .Status = MembershipStatus.Removed;
             if (denial == "disabled")
-                (await setup.Users.SingleAsync(x => x.Id == scenario.Seed.Other.Id)).IsEligible = false;
+                (await setup.Users.SingleAsync(x => x.Id == actor.Id)).IsEligible = false;
             if (denial == "departed")
-                (await setup.Users.SingleAsync(x => x.Id == scenario.Seed.Other.Id)).DepartureVerifiedUtc = scenario.Clock.GetUtcNow();
+                (await setup.Users.SingleAsync(x => x.Id == actor.Id)).DepartureVerifiedUtc = scenario.Clock.GetUtcNow();
             await setup.SaveChangesAsync();
         }
         await using var before = database.CreateContext();

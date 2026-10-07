@@ -73,10 +73,13 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
     public async Task PrivateModeration_RedactsEveryRosterAndCount_WithoutGrantingOrdinaryAccess()
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var moderatorUser = await AddOrdinaryMemberAsync(scenario);
+        await FoundationSeed.PersistAsync(database,
+            new EventOwner { EventId = scenario.Seed.Event.Id, UserId = moderatorUser.Id });
         var id = scenario.Seed.Quest.Id;
         var owner = scenario.Service();
         await owner.ParticipateAsync(id, ParticipationCommand.Join);
-        var moderator = scenario.Service(scenario.Seed.Other);
+        var moderator = scenario.Service(moderatorUser);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.GetAsync(id))).Code);
         var detail = await moderator.GetAsync(id, true);
         Assert.Equal(scenario.Seed.Quest.Title, detail.Summary.Title);
@@ -93,7 +96,7 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.DoesNotContain(history, h => h.Action.Contains(scenario.Seed.User.Id.ToString("N"), StringComparison.Ordinal));
         var page = await moderator.ListAsync(QuestListKind.Moderation, scenario.Seed.Event.Id, new());
         Assert.Null(Assert.Single(page.Items).AttendeeCount);
-        await owner.AddOwnerAsync(id, scenario.Seed.Other.Id);
+        await owner.AddOwnerAsync(id, moderatorUser.Id);
         Assert.Null((await moderator.GetAsync(id, true)).Attendees);
         await using var db = database.CreateContext();
         Assert.Equal(2, await db.AuditEntries.CountAsync(a => a.ResourceId == id && a.Action == "ModerationDetailRead"));
@@ -123,28 +126,29 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
     public async Task InviteRevokeReinvite_PreservesIndependentOwnerAccess_AndNeverRestoresParticipation()
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var guestUser = await AddOrdinaryMemberAsync(scenario);
         var service = scenario.Service();
-        var guest = scenario.Service(scenario.Seed.Other);
+        var guest = scenario.Service(guestUser);
         var id = scenario.Seed.Quest.Id;
-        await service.InviteAsync(id, scenario.Seed.Other.Id);
-        await service.InviteAsync(id, scenario.Seed.Other.Id);
+        await service.InviteAsync(id, guestUser.Id);
+        await service.InviteAsync(id, guestUser.Id);
         var invited = await guest.GetAsync(id);
         Assert.Equal(ParticipationStatus.None, invited.Summary.Participation);
         Assert.Null(invited.Followers);
         Assert.Null(invited.Invitees);
         Assert.Single((await guest.ListAsync(QuestListKind.Invited, null, new())).Items);
         await guest.ParticipateAsync(id, ParticipationCommand.Join);
-        await service.AddOwnerAsync(id, scenario.Seed.Other.Id);
-        await service.RevokeInvitationAsync(id, scenario.Seed.Other.Id, "The access list changed.");
+        await service.AddOwnerAsync(id, guestUser.Id);
+        await service.RevokeInvitationAsync(id, guestUser.Id, "The access list changed.");
         var stillOwner = await guest.GetAsync(id);
         Assert.True(stillOwner.Summary.IsOwner);
         Assert.Equal(ParticipationStatus.None, stillOwner.Summary.Participation);
         await guest.ParticipateAsync(id, ParticipationCommand.Join);
-        await service.RevokeInvitationAsync(id, scenario.Seed.Other.Id, "The access list changed.");
+        await service.RevokeInvitationAsync(id, guestUser.Id, "The access list changed.");
         Assert.Equal(ParticipationStatus.Joined, (await guest.GetAsync(id)).Summary.Participation);
-        await service.RemoveOwnerAsync(id, scenario.Seed.Other.Id);
+        await service.RemoveOwnerAsync(id, guestUser.Id);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => guest.GetAsync(id))).Code);
-        await service.InviteAsync(id, scenario.Seed.Other.Id);
+        await service.InviteAsync(id, guestUser.Id);
         Assert.Equal(ParticipationStatus.None, (await guest.GetAsync(id)).Summary.Participation);
         await using var db = database.CreateContext();
         Assert.Single(await db.QuestInvitations.Where(x => x.QuestId == id).ToListAsync());
@@ -152,7 +156,7 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
             .Select(x => JsonSerializer.Deserialize<ChangeEnvelope>(x.PayloadJson)!).ToArray();
         Assert.Equal(2, changes.Count(x => x.Kind == NotificationKind.QuestInvitation));
         var withdrawal = changes.First(x => x.Kind == NotificationKind.AccessRemoved);
-        Assert.Equal(new[] { scenario.Seed.Other.Id }, withdrawal.PreviousAttendeeIds);
+        Assert.Equal(new[] { guestUser.Id }, withdrawal.PreviousAttendeeIds);
         Assert.True(withdrawal.CalendarChanged);
     }
 
@@ -520,14 +524,14 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Empty(await db.QuestStatusHistory.Where(x => x.QuestId == id).ToListAsync());
     }
 
-    /// <summary>Every service call rechecks persisted actor eligibility and membership, including a privileged administrator.</summary>
+    /// <summary>Every service call rechecks persisted actor eligibility while administrators intentionally remain managers without membership.</summary>
     /// <param name="loss">Eligibility, departure, or membership loss partition.</param>
     /// <returns>Completion after all public query and representative command denials.</returns>
     [Theory]
     [InlineData("eligibility")]
     [InlineData("departure")]
     [InlineData("membership")]
-    public async Task CurrentActorLoss_DeniesQueriesAndCommands_DespiteOwnershipAndAdministrator(string loss)
+    public async Task CurrentActorLoss_DeniesIneligibleAdministrator_ButMembershipLossRetainsManagement(string loss)
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
         var service = scenario.Service();
@@ -542,20 +546,22 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
                 (await db.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == user.Id)).Status = MembershipStatus.Removed;
             await db.SaveChangesAsync();
         }
-        var expected = loss == "membership" ? ErrorCode.NotFound : ErrorCode.Forbidden;
+        if (loss == "membership")
+        {
+            Assert.Equal(scenario.Seed.Quest.Id, (await service.GetAsync(scenario.Seed.Quest.Id)).Summary.Id);
+            Assert.Empty(await service.HistoryAsync(scenario.Seed.Quest.Id));
+            await service.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join);
+            Assert.Equal(ParticipationStatus.Joined, (await service.GetAsync(scenario.Seed.Quest.Id)).Summary.Participation);
+            Assert.Equal(scenario.Seed.Quest.Id, Assert.Single(await service.GetOfflineJoinedAsync()).Id);
+            Assert.Single((await service.ListAsync(QuestListKind.Organizing, scenario.Seed.Event.Id, new())).Items);
+            return;
+        }
+        const ErrorCode expected = ErrorCode.Forbidden;
         Assert.Equal(expected, (await Assert.ThrowsAsync<DomainException>(() => service.GetAsync(scenario.Seed.Quest.Id))).Code);
         Assert.Equal(expected, (await Assert.ThrowsAsync<DomainException>(() => service.HistoryAsync(scenario.Seed.Quest.Id))).Code);
         Assert.Equal(expected, (await Assert.ThrowsAsync<DomainException>(() => service.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join))).Code);
-        if (loss == "membership")
-        {
-            Assert.Empty(await service.GetOfflineJoinedAsync());
-            Assert.Empty((await service.ListAsync(QuestListKind.Organizing, null, new())).Items);
-        }
-        else
-        {
-            Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => service.GetOfflineJoinedAsync())).Code);
-            Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => service.ListAsync(QuestListKind.Organizing, null, new()))).Code);
-        }
+        Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => service.GetOfflineJoinedAsync())).Code);
+        Assert.Equal(ErrorCode.Forbidden, (await Assert.ThrowsAsync<DomainException>(() => service.ListAsync(QuestListKind.Organizing, null, new()))).Code);
     }
 
     /// <summary>Owner-only and invited/followed-only resources never enter the minimal joined snapshot.</summary>
@@ -657,21 +663,30 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
     public async Task ArchivedOwnership_RemainsRevocable_WithoutAllowingNewOwnerGrants()
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var additionalOwner = await AddOrdinaryMemberAsync(scenario);
         var service = scenario.Service();
         var id = scenario.Seed.Quest.Id;
-        await service.AddOwnerAsync(id, scenario.Seed.Other.Id);
-        await scenario.Service(scenario.Seed.Other).ParticipateAsync(id, ParticipationCommand.Join);
+        await service.AddOwnerAsync(id, additionalOwner.Id);
+        await scenario.Service(additionalOwner).ParticipateAsync(id, ParticipationCommand.Join);
         await service.ChangeStatusAsync(id, (await service.GetAsync(id)).Summary.Version, QuestStatus.Cancelled, "The session is cancelled.");
         await service.ChangeStatusAsync(id, (await service.GetAsync(id)).Summary.Version, QuestStatus.Archived, "");
-        await service.RemoveOwnerAsync(id, scenario.Seed.Other.Id);
+        await service.RemoveOwnerAsync(id, additionalOwner.Id);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            scenario.Service(scenario.Seed.Other).GetAsync(id))).Code);
+            scenario.Service(additionalOwner).GetAsync(id))).Code);
         Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() =>
-            service.AddOwnerAsync(id, scenario.Seed.Other.Id))).Code);
+            service.AddOwnerAsync(id, additionalOwner.Id))).Code);
         var detail = await service.GetAsync(id);
         Assert.Equal(QuestStatus.Archived, detail.Summary.Status);
         Assert.Equal(scenario.Seed.User.Id, Assert.Single(detail.Owners).Id);
         await using var db = database.CreateContext();
         Assert.Equal(ParticipationStatus.None, (await db.Participations.SingleAsync(p => p.QuestId == id)).Status);
+    }
+
+    private static async Task<UserAccount> AddOrdinaryMemberAsync(QuestScenario scenario)
+    {
+        var user = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(scenario.Database, user);
+        await FoundationSeed.PersistAsync(scenario.Database, scenario.Seed.Membership(user.Id));
+        return user;
     }
 }

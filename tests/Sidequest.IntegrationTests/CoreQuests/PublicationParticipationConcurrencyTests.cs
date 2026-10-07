@@ -27,6 +27,9 @@ public sealed class PublicationParticipationConcurrencyTests
             await database.InitializeAsync();
             var publishing = await QuestScenario.CreateAsync(database, privatePublication);
             var joining = await QuestScenario.CreateAsync(database);
+            var joiner = FoundationSeed.NewUser();
+            await FoundationSeed.PersistAsync(database, joiner);
+            await FoundationSeed.PersistAsync(database, joining.Seed.Membership(joiner.Id));
             string version;
             await using (var setup = database.CreateContext())
             {
@@ -42,7 +45,7 @@ public sealed class PublicationParticipationConcurrencyTests
             var joinGate = new CrossResourceSaveGate();
             Task PublishAsync() => ParticipationTestServices.Service(publishing, publishing.Seed.User, publicationGate)
                 .ChangeStatusAsync(publishing.Seed.Quest.Id, version, QuestStatus.Active, "", deadline.Token);
-            Task JoinAsync() => ParticipationTestServices.Service(joining, joining.Seed.Other, joinGate)
+            Task JoinAsync() => ParticipationTestServices.Service(joining, joiner, joinGate)
                 .ParticipateAsync(joining.Seed.Quest.Id, ParticipationCommand.Join, deadline.Token);
             Task publication = Task.CompletedTask;
             Task join = Task.CompletedTask;
@@ -74,7 +77,8 @@ public sealed class PublicationParticipationConcurrencyTests
                 deadline.Cancel();
                 await Record.ExceptionAsync(() => Task.WhenAll(publication, join));
             }
-            await ParticipationTestServices.Service(joining).ParticipateAsync(joining.Seed.Quest.Id, ParticipationCommand.Join);
+            await ParticipationTestServices.Service(joining, joiner).ParticipateAsync(
+                joining.Seed.Quest.Id, ParticipationCommand.Join);
             await using var read = database.CreateContext();
             var quest = await read.Quests.SingleAsync(x => x.Id == publishing.Seed.Quest.Id);
             await ParticipationTestServices.Service(publishing, publishing.Seed.User)
@@ -106,7 +110,7 @@ public sealed class PublicationParticipationConcurrencyTests
             }
             var participant = Assert.Single(await read.Participations.ToListAsync());
             Assert.Equal(joining.Seed.Quest.Id, participant.QuestId);
-            Assert.Equal(joining.Seed.Other.Id, participant.UserId);
+            Assert.Equal(joiner.Id, participant.UserId);
             Assert.Equal(ParticipationStatus.Joined, participant.Status);
             var joinAudit = await read.AuditEntries.SingleAsync(x => x.ResourceId == participant.QuestId);
             Assert.Equal($"Participation:{participant.UserId:N}:None->Joined", joinAudit.Action);

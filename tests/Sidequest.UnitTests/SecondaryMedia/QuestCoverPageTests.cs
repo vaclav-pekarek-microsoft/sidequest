@@ -205,7 +205,10 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         SetRendererInfo(new("Server", true));
         var page = Render<QuestEdit>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
         await experience.ReportConnectionAsync(false, null);
-        quests.Detail = quests.Detail with { Summary = quests.Detail.Summary with { IsOwner = false } };
+        quests.Detail = quests.Detail with
+        {
+            Summary = quests.Detail.Summary with { IsOwner = false, CanManage = false }
+        };
         var refreshed = 0;
         experience.SnapshotRefreshRequested += () => { refreshed++; return Task.CompletedTask; };
         await experience.ReportConnectionAsync(true, null);
@@ -302,7 +305,8 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         {
             Summary = quests.Detail.Summary with
             {
-                Status = QuestStatus.Active, IsOwner = !moderation, CanModerate = moderation,
+                Status = QuestStatus.Active, IsOwner = !moderation, CanManage = !moderation,
+                CanModerate = moderation,
                 AttendeeCount = moderation ? null : 0, FollowerCount = moderation ? null : 0
             },
             Attendees = moderation ? null : [], Followers = moderation ? null : [], Invitees = moderation ? null : []
