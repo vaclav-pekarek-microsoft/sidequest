@@ -572,9 +572,17 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
         background: transparent;
         border-color: transparent;
         box-shadow: none;
+
+        &:hover:not(:disabled) {
+            color: var(--sq-ink);
+            background: color-mix(in srgb, var(--sq-blue) 12%, white);
+            filter: none;
+            box-shadow: none;
+        }
     }
 
-    button.selected {
+    button.selected,
+    button.selected:hover:not(:disabled) {
         color: white;
         background: linear-gradient(135deg, var(--sq-blue), var(--sq-violet));
         border-color: transparent;

@@ -11,6 +11,68 @@ namespace Sidequest.IntegrationTests.CoreQuests;
 /// <param name="database">Existing real migrated-SQL fixture with independent scenario rows.</param>
 public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
+    /// <summary>Creator, assigned-owner, and administrator principals can edit, cancel, and delete Quests under ordinary lifecycle guards.</summary>
+    /// <param name="principal">Creator without an owner row, assigned owner, or administrator without Event membership.</param>
+    /// <returns>Completion after management projection, content, lifecycle, deletion, and audit persistence checks.</returns>
+    [Theory]
+    [InlineData("creator")]
+    [InlineData("assigned owner")]
+    [InlineData("administrator")]
+    public async Task ManagementPrincipal_CanEditCancelAndDeleteQuestUnderLifecycleRules(string principal)
+    {
+        var editable = await CreateManagementScenarioAsync(principal);
+        var service = editable.Scenario.Service(editable.Actor);
+        var before = await service.GetAsync(editable.Scenario.Seed.Quest.Id);
+        Assert.True(before.Summary.CanManage);
+        Assert.Equal(principal == "assigned owner", before.Summary.IsOwner);
+        Assert.False(string.IsNullOrWhiteSpace(before.Summary.Version));
+        Assert.NotNull(before.Followers);
+        Assert.NotNull(before.Invitees);
+
+        var editedInput = editable.Scenario.Input() with { Title = $"{principal} managed Quest" };
+        await service.EditAsync(editable.Scenario.Seed.Quest.Id, before.Summary.Version, editedInput);
+        var edited = await service.GetAsync(editable.Scenario.Seed.Quest.Id);
+        Assert.Equal($"{principal} managed Quest", edited.Summary.Title);
+        Assert.NotEqual(before.Summary.Version, edited.Summary.Version);
+        await service.ChangeStatusAsync(editable.Scenario.Seed.Quest.Id, edited.Summary.Version,
+            QuestStatus.Cancelled, $"{principal} cancellation");
+        var cancelled = await service.GetAsync(editable.Scenario.Seed.Quest.Id);
+        Assert.Equal(QuestStatus.Cancelled, cancelled.Summary.Status);
+        var invalidDelete = await Assert.ThrowsAsync<DomainException>(() =>
+            service.DeleteDraftAsync(editable.Scenario.Seed.Quest.Id, cancelled.Summary.Version));
+        Assert.Equal(ErrorCode.Conflict, invalidDelete.Code);
+
+        await using (var read = database.CreateContext())
+        {
+            var saved = await read.Quests.SingleAsync(x => x.Id == editable.Scenario.Seed.Quest.Id);
+            Assert.Equal($"{principal} managed Quest", saved.Title);
+            Assert.Equal(QuestStatus.Cancelled, saved.Status);
+            var history = await read.QuestStatusHistory.SingleAsync(x => x.QuestId == saved.Id);
+            Assert.Equal(QuestStatus.Active, history.Previous);
+            Assert.Equal(QuestStatus.Cancelled, history.Next);
+            Assert.Equal($"{principal} cancellation", history.Reason);
+            Assert.Equal(editable.Actor.Id, history.ActorId);
+            var actions = await read.AuditEntries.Where(x => x.ResourceId == saved.Id).Select(x => x.Action).ToArrayAsync();
+            Assert.Contains("ContentEdited", actions);
+            Assert.DoesNotContain("DraftDeleted", actions);
+        }
+
+        var deletable = await CreateManagementScenarioAsync(principal, draft: true);
+        var deleteService = deletable.Scenario.Service(deletable.Actor);
+        var draft = await deleteService.GetAsync(deletable.Scenario.Seed.Quest.Id);
+        Assert.Equal(QuestStatus.Draft, draft.Summary.Status);
+        Assert.True(draft.Summary.CanManage);
+        Assert.Equal(principal == "assigned owner", draft.Summary.IsOwner);
+        await deleteService.DeleteDraftAsync(deletable.Scenario.Seed.Quest.Id, draft.Summary.Version);
+
+        await using var deleted = database.CreateContext();
+        Assert.False(await deleted.Quests.AnyAsync(x => x.Id == deletable.Scenario.Seed.Quest.Id));
+        Assert.False(await deleted.QuestOwners.AnyAsync(x => x.QuestId == deletable.Scenario.Seed.Quest.Id));
+        var deletionAudit = await deleted.AuditEntries.SingleAsync(x =>
+            x.ResourceId == deletable.Scenario.Seed.Quest.Id && x.Action == "DraftDeleted");
+        Assert.Equal(deletable.Actor.Id, deletionAudit.ActorId);
+    }
+
     /// <summary>Every public Quest command and detail/history query rejects a departed actor, without creator/owner/admin exceptions.</summary>
     /// <returns>Completion after all command surfaces return Forbidden and persisted state is unchanged.</returns>
     [Fact]
@@ -58,7 +120,8 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
     public async Task EventOwner_CannotUseAnyOrdinaryQuestManagementCommand()
     {
         var scenario = await QuestScenario.CreateAsync(database);
-        var service = scenario.Service(scenario.Seed.Other);
+        var eventOwner = await CreateEventMemberAsync(scenario, eventOwner: true);
+        var service = scenario.Service(eventOwner);
         var id = scenario.Seed.Quest.Id;
         var detail = await service.GetAsync(id);
         Func<Task>[] calls =
@@ -66,10 +129,10 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
             () => service.EditAsync(id, detail.Summary.Version, scenario.Input()),
             () => service.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Cancelled, "Cancellation reason."),
             () => service.DeleteDraftAsync(id, detail.Summary.Version),
-            () => service.InviteAsync(id, scenario.Seed.Other.Id),
-            () => service.RevokeInvitationAsync(id, scenario.Seed.Other.Id, "Revocation reason."),
+            () => service.InviteAsync(id, eventOwner.Id),
+            () => service.RevokeInvitationAsync(id, eventOwner.Id, "Revocation reason."),
             () => service.RemoveAttendeeAsync(id, scenario.Seed.User.Id, "Attendee removal reason."),
-            () => service.AddOwnerAsync(id, scenario.Seed.Other.Id),
+            () => service.AddOwnerAsync(id, eventOwner.Id),
             () => service.RemoveOwnerAsync(id, scenario.Seed.User.Id)
         ];
         foreach (var call in calls)
@@ -94,7 +157,8 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
     public async Task PrivateRead_RequiresInvitationAndMembershipAcrossRetainedStates(QuestStatus status)
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
-        var viewer = scenario.Service(scenario.Seed.Other);
+        var viewerAccount = await CreateEventMemberAsync(scenario);
+        var viewer = scenario.Service(viewerAccount);
         await using (var db = database.CreateContext())
         {
             (await db.Quests.SingleAsync(q => q.Id == scenario.Seed.Quest.Id)).Status = status;
@@ -104,7 +168,7 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         await FoundationSeed.PersistAsync(database, new QuestInvitation
         {
             QuestId = scenario.Seed.Quest.Id,
-            UserId = scenario.Seed.Other.Id,
+            UserId = viewerAccount.Id,
             InvitedById = scenario.Seed.User.Id,
             ChangedUtc = scenario.Clock.Now,
             Status = QuestInvitationStatus.Active
@@ -115,7 +179,7 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         Assert.Null(detail.Invitees);
         await using (var db = database.CreateContext())
         {
-            (await db.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == scenario.Seed.Other.Id)).Status = MembershipStatus.Removed;
+            (await db.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == viewerAccount.Id)).Status = MembershipStatus.Removed;
             await db.SaveChangesAsync();
         }
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => viewer.GetAsync(scenario.Seed.Quest.Id))).Code);
@@ -129,18 +193,19 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
     {
         var scenario = await QuestScenario.CreateAsync(database);
         var owner = scenario.Service();
-        var viewer = scenario.Service(scenario.Seed.Other);
+        var viewerAccount = await CreateEventMemberAsync(scenario);
+        var viewer = scenario.Service(viewerAccount);
         await owner.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Follow);
         await viewer.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join);
         var detail = await viewer.GetAsync(scenario.Seed.Quest.Id);
-        Assert.Equal(scenario.Seed.Other.Id, Assert.Single(detail.Attendees!).Id);
-        Assert.Equal(scenario.Seed.Other.DisplayName, Assert.Single(detail.Attendees!).DisplayName);
+        Assert.Equal(viewerAccount.Id, Assert.Single(detail.Attendees!).Id);
+        Assert.Equal(viewerAccount.DisplayName, Assert.Single(detail.Attendees!).DisplayName);
         Assert.Equal(1, detail.Summary.AttendeeCount);
         Assert.Equal(1, detail.Summary.FollowerCount);
         Assert.Null(detail.Followers);
         Assert.Null(detail.Invitees);
         Assert.Equal(new[] { "DisplayName", "Id" }, typeof(QuestRosterPersonSummary).GetProperties().Select(p => p.Name).Order().ToArray());
-        Assert.DoesNotContain(scenario.Seed.Other.Email, System.Text.Json.JsonSerializer.Serialize(detail.Attendees));
+        Assert.DoesNotContain(viewerAccount.Email, System.Text.Json.JsonSerializer.Serialize(detail.Attendees));
         var ownerDetail = await owner.GetAsync(scenario.Seed.Quest.Id);
         Assert.Equal(scenario.Seed.User.Id, Assert.Single(ownerDetail.Followers!).Id);
         Assert.Equal(scenario.Seed.User.DisplayName, Assert.Single(ownerDetail.Followers!).DisplayName);
@@ -150,12 +215,12 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         Assert.Null(ordinaryHistory.Actor);
         var history = await owner.HistoryAsync(scenario.Seed.Quest.Id);
         Assert.Equal(2, history.Count);
-        Assert.Contains(history, item => item.Action.Contains($"{scenario.Seed.Other.Email} ({scenario.Seed.Other.DisplayName})", StringComparison.Ordinal));
+        Assert.Contains(history, item => item.Action.Contains($"{viewerAccount.Email} ({viewerAccount.DisplayName})", StringComparison.Ordinal));
         Assert.Contains(history, item => item.Actor == $"{scenario.Seed.User.Email} ({scenario.Seed.User.DisplayName})");
         Assert.All(history, item =>
         {
             Assert.DoesNotContain(scenario.Seed.User.Id.ToString("N"), item.Action);
-            Assert.DoesNotContain(scenario.Seed.Other.Id.ToString("N"), item.Action);
+            Assert.DoesNotContain(viewerAccount.Id.ToString("N"), item.Action);
         });
     }
 
@@ -209,7 +274,8 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         Assert.Equal("OwnerRemoved:Unavailable person", history.Action);
         Assert.Equal($"{scenario.Seed.User.Email} ({scenario.Seed.User.DisplayName})", history.Actor);
         Assert.DoesNotContain(unresolved.ToString("N"), history.Action);
-        var ordinary = Assert.Single(await scenario.Service(scenario.Seed.Other).HistoryAsync(scenario.Seed.Quest.Id));
+        var ordinaryViewer = await CreateEventMemberAsync(scenario);
+        var ordinary = Assert.Single(await scenario.Service(ordinaryViewer).HistoryAsync(scenario.Seed.Quest.Id));
         Assert.Equal("Active", ordinary.Action);
         Assert.Null(ordinary.Actor);
     }
@@ -338,5 +404,49 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
             viewer.ListAsync(QuestListKind.Discover, null, new(0)))).Code);
         Assert.Equal(ErrorCode.Validation, (await Assert.ThrowsAsync<DomainException>(() =>
             viewer.ListAsync((QuestListKind)999, null, new()))).Code);
+    }
+
+    private async Task<(QuestScenario Scenario, UserAccount Actor)> CreateManagementScenarioAsync(
+        string principal, bool draft = false)
+    {
+        var scenario = await QuestScenario.CreateAsync(database);
+        UserAccount actor;
+        switch (principal)
+        {
+            case "creator":
+                actor = scenario.Seed.Other;
+                break;
+            case "assigned owner":
+                actor = scenario.Seed.User;
+                break;
+            case "administrator":
+                actor = FoundationSeed.NewUser();
+                actor.TenantId = scenario.Seed.User.TenantId;
+                await FoundationSeed.PersistAsync(database, actor,
+                    new Administrator { UserId = actor.Id });
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(principal), principal, "Unknown management principal.");
+        }
+
+        if (draft)
+        {
+            await using var setup = database.CreateContext();
+            (await setup.Quests.SingleAsync(x => x.Id == scenario.Seed.Quest.Id)).Status = QuestStatus.Draft;
+            await setup.SaveChangesAsync();
+        }
+
+        return (scenario, actor);
+    }
+
+    private async Task<UserAccount> CreateEventMemberAsync(QuestScenario scenario, bool eventOwner = false)
+    {
+        var actor = FoundationSeed.NewUser();
+        actor.TenantId = scenario.Seed.Other.TenantId;
+        var rows = new List<Entity> { actor, scenario.Seed.Membership(actor.Id) };
+        if (eventOwner)
+            rows.Add(new EventOwner { EventId = scenario.Seed.Event.Id, UserId = actor.Id });
+        await FoundationSeed.PersistAsync(database, rows.ToArray());
+        return actor;
     }
 }

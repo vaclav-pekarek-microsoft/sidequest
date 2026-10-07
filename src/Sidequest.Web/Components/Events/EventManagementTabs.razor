@@ -1,22 +1,23 @@
-<nav class="management-tabs" aria-label="Event detail tabs">
-    @foreach (var tab in Tabs)
-    {
-        <button @key="tab.Id" type="button" role="tab" aria-selected="@(Selected == tab.Id)"
-                class="@(Selected == tab.Id ? "selected" : null)" disabled="@Disabled"
-                @onclick="() => SelectedChanged.InvokeAsync(tab.Id)">@tab.Label</button>
-    }
-</nav>
+@if (CanManage)
+{
+    <nav class="management-tabs" aria-label="Event management tabs">
+        @foreach (var tab in Tabs)
+        {
+            <button @key="tab.Id" type="button" role="tab" aria-selected="@(Selected == tab.Id)"
+                    class="@(Selected == tab.Id ? "selected" : null)" disabled="@Disabled"
+                    @onclick="() => SelectedChanged.InvokeAsync(tab.Id)">@tab.Label</button>
+        }
+    </nav>
+}
 
 @code {
-    private IReadOnlyList<(string Id, string Label)> Tabs =>
-        IsOwner
-            ? [("overview", "Overview"), ("quests", "Quests"), ("members", "Members"), ("invitations", "Invitations"), ("settings", "Settings")]
-            : [("overview", "Overview"), ("quests", "Quests"), ("members", "Members")];
+    private static readonly IReadOnlyList<(string Id, string Label)> Tabs =
+        [("overview", "Overview"), ("quests", "Quests"), ("members", "Members"), ("invitations", "Invitations"), ("settings", "Settings")];
 
     /// <summary>Identifier of the tab currently owned by the Event detail page.</summary>
     [Parameter, EditorRequired] public string Selected { get; set; } = "overview";
-    /// <summary>Whether owner-only management tabs are available.</summary>
-    [Parameter] public bool IsOwner { get; set; }
+    /// <summary>Whether the actor is the creator, an assigned owner, or an administrator permitted to see management tabs.</summary>
+    [Parameter] public bool CanManage { get; set; }
     /// <summary>Whether tab changes are temporarily unavailable.</summary>
     [Parameter] public bool Disabled { get; set; }
     /// <summary>Notifies the Event detail page when the user selects a tab.</summary>

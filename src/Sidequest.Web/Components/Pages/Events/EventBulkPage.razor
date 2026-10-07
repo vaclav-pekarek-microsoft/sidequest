@@ -50,7 +50,7 @@
         authorized = false;
         var item = await Events.GetAsync(Id, token);
         token.ThrowIfCancellationRequested();
-        if (!item.Summary.IsOwner || item.Summary.Status != EventStatus.Active)
+        if (!item.Summary.CanManage || item.Summary.Status != EventStatus.Active)
             throw new Sidequest.Domain.Rules.DomainException(Sidequest.Domain.Rules.ErrorCode.NotFound, "Unavailable.");
         authorized = true;
     });

@@ -24,7 +24,7 @@ public sealed class CancelledUnpublishedEventAccessTests(SqlTestDatabase databas
         }
     }
 
-    /// <summary>Checks retained unpublished Events are owner-only while published history retains ordinary member access.</summary>
+    /// <summary>Checks retained unpublished Events are manager-only while published history retains ordinary member access.</summary>
     /// <param name="status">Retained Event lifecycle status.</param>
     /// <param name="unpublished">Whether history contains direct Draft-to-Cancelled rather than publication.</param>
     /// <param name="role">The caller's additional grant, beyond individual membership.</param>
@@ -38,7 +38,7 @@ public sealed class CancelledUnpublishedEventAccessTests(SqlTestDatabase databas
         var current = StubCurrentUser.For(seed.User);
         var access = new ResourceAccess(current);
         await using var db = database.CreateContext();
-        var allowed = !unpublished || role == "eventOwner";
+        var allowed = !unpublished || role is "eventOwner" or "administrator";
         if (allowed)
         {
             var result = await access.RequireEventAsync(db, seed.Event.Id, seed.User.Id);
@@ -53,7 +53,7 @@ public sealed class CancelledUnpublishedEventAccessTests(SqlTestDatabase databas
             // The deliberately retained child cannot bypass parent privacy through a public, owner, or invitation grant.
             await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id));
         }
-        if (role == "eventOwner")
+        if (role is "eventOwner" or "administrator")
             Assert.Equal(seed.Event.Id, (await access.RequireEventAsync(db, seed.Event.Id, seed.User.Id, ownerOnly: true)).Id);
         else
             await DeniedAsync(() => access.RequireEventAsync(db, seed.Event.Id, seed.User.Id, ownerOnly: true));

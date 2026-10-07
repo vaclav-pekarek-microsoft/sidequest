@@ -3,7 +3,7 @@
 <section class="section-box" aria-labelledby="event-members-title">
     <h2 id="event-members-title" class="section-heading">Members and owners</h2>
     <EventFeedback Busy="Busy" Error="@Error" />
-    @if (detail?.Summary.IsOwner == true)
+    @if (detail?.Summary.CanManage == true)
     {
         <section aria-label="Add members and owners">
             <h3>Add people</h3>
@@ -35,7 +35,7 @@
             {
                 <li @key="member.User.Id">
                     <span><strong>@member.User.Label</strong> · @member.Status · @(member.IsOwner ? "Equal owner" : "Member")</span>
-                    @if (detail?.Summary.IsOwner == true)
+                    @if (detail?.Summary.CanManage == true)
                     {
                         @if (member.IsOwner)
                         {

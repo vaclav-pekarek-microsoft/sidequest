@@ -40,10 +40,16 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
             throw Unavailable();
         var eligible = current.IsEligible;
         var item = await db.Events.SingleOrDefaultAsync(x => x.Id == eventId, cancellationToken).ConfigureAwait(false);
-        var owner = await db.EventOwners.AnyAsync(x => x.EventId == eventId && x.UserId == userId, cancellationToken).ConfigureAwait(false);
+        var administrator = await db.Administrators.AnyAsync(
+            x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
+        var owner = item is not null && (item.CreatorId == userId ||
+            await db.EventOwners.AnyAsync(x => x.EventId == eventId && x.UserId == userId, cancellationToken).ConfigureAwait(false) ||
+            administrator);
         var member = await db.EventMemberships.AnyAsync(
             x => x.EventId == eventId && x.UserId == userId && x.Status == MembershipStatus.Active, cancellationToken).ConfigureAwait(false);
-        if (item is null || !AccessRules.CanReadEvent(eligible, member, owner, item.Status) || (ownerOnly && !owner))
+        if (item is null ||
+            (!administrator && !AccessRules.CanReadEvent(eligible, member, owner, item.Status)) ||
+            (ownerOnly && !owner))
             throw Unavailable();
         if (!owner && await db.EventStatusHistory.AnyAsync(x => x.EventId == eventId &&
             x.Previous == EventStatus.Draft && x.Next == EventStatus.Cancelled, cancellationToken).ConfigureAwait(false))
@@ -59,15 +65,18 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         if (item is null)
             throw Unavailable();
         var parent = await RequireEventAsync(db, item.EventId, userId, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var owner = await db.QuestOwners.AnyAsync(x => x.QuestId == questId && x.UserId == userId, cancellationToken).ConfigureAwait(false);
+        var administrator = await db.Administrators.AnyAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
+        var owner = item.CreatorId == userId || administrator ||
+            await db.QuestOwners.AnyAsync(x => x.QuestId == questId && x.UserId == userId, cancellationToken).ConfigureAwait(false);
         if ((moderation || !owner) && await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
             x.Previous == QuestStatus.Draft && x.Next == QuestStatus.Cancelled, cancellationToken).ConfigureAwait(false))
             throw Unavailable();
         // An invitation cannot authorize an owner-only or moderation request, and owners already have access.
         var invited = !owner && !ownerOnly && !moderation && await db.QuestInvitations.AnyAsync(
             x => x.QuestId == questId && x.UserId == userId && x.Status == QuestInvitationStatus.Active, cancellationToken).ConfigureAwait(false);
-        var eventOwner = moderation && await db.EventOwners.AnyAsync(
-            x => x.EventId == parent.Id && x.UserId == userId, cancellationToken).ConfigureAwait(false);
+        var eventOwner = moderation && (administrator || parent.CreatorId == userId ||
+            await db.EventOwners.AnyAsync(
+                x => x.EventId == parent.Id && x.UserId == userId, cancellationToken).ConfigureAwait(false));
         var allowed = moderation
             ? AccessRules.CanModerate(true, true, eventOwner, item.Status)
             : AccessRules.CanReadQuest(true, true, owner, invited, parent.Status, item.Status, item.Visibility);

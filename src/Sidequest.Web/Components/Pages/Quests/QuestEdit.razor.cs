@@ -63,7 +63,7 @@ public partial class QuestEdit : IAsyncDisposable
                 var current = (await Quests.GetAsync(id, cancellationToken: lifetime.Token)).Summary;
                 if (generation != editorGeneration || lifetime.IsCancellationRequested)
                     return;
-                if (!current.IsOwner)
+                if (!current.CanManage)
                     throw new DomainException(ErrorCode.NotFound, "This Quest is unavailable.");
                 if (current.Version != version || current.Status is not (QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended))
                     throw new DomainException(ErrorCode.Conflict, "The Quest changed while disconnected. Your text is kept; reload the current version before saving.");
@@ -107,7 +107,7 @@ public partial class QuestEdit : IAsyncDisposable
                 var detail = await Quests.GetAsync(Id.Value, cancellationToken: lifetime.Token);
                 if (requestVersion != navigationVersion || lifetime.IsCancellationRequested)
                     return;
-                if (!detail.Summary.IsOwner)
+                if (!detail.Summary.CanManage)
                     throw new DomainException(ErrorCode.NotFound, "This resource is unavailable.");
                 var summary = detail.Summary;
                 if (summary.Status is not (QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended))

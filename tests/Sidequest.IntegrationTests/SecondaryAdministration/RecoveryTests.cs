@@ -12,7 +12,7 @@ namespace Sidequest.IntegrationTests.SecondaryAdministration;
 /// <summary>Verifies narrowly scoped recovery against migrated SQL with external evidence, privacy, atomicity and concurrency guards.</summary>
 public sealed class RecoveryTests
 {
-    /// <summary>Verified departure permits recovery without lifecycle edits or administrator content access, including private and terminal resources.</summary>
+    /// <summary>Verified departure preserves lifecycle while the administrator retains intentional management access to non-Draft resources.</summary>
     /// <param name="kind">Exact resource namespace under recovery.</param>
     /// <param name="eventStatus">Parent lifecycle state that recovery must preserve.</param>
     /// <param name="questStatus">Private child lifecycle state that recovery must preserve.</param>
@@ -23,7 +23,7 @@ public sealed class RecoveryTests
     [InlineData(ResourceKind.Quest, EventStatus.Cancelled, QuestStatus.Cancelled)]
     [InlineData(ResourceKind.Quest, EventStatus.Completed, QuestStatus.Completed)]
     [InlineData(ResourceKind.Quest, EventStatus.Draft, QuestStatus.Draft)]
-    public async Task VerifiedRecoveryPreservesContentLifecycleAndNoAdminBypass(ResourceKind kind, EventStatus eventStatus, QuestStatus questStatus)
+    public async Task VerifiedRecoveryPreservesContentLifecycleAndAdministratorManagement(ResourceKind kind, EventStatus eventStatus, QuestStatus questStatus)
     {
         await using var s = await AdministrationScenario.CreateAsync();
         await using (var setup = s.Database.CreateContext())
@@ -93,8 +93,11 @@ public sealed class RecoveryTests
         Assert.Equal(s.Seed.Event.Id, envelope.EventId);
         Assert.Equal(kind == ResourceKind.Quest ? s.Seed.Quest.Id : null, envelope.QuestId);
         Assert.Equal(0, envelope.CalendarRevision);
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            s.Access.RequireQuestAsync(db, quest.Id, s.Seed.User.Id))).Code);
+        if (questStatus == QuestStatus.Draft)
+            Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
+                s.Access.RequireQuestAsync(db, quest.Id, s.Seed.User.Id))).Code);
+        else
+            Assert.Equal(quest.Id, (await s.Access.RequireQuestAsync(db, quest.Id, s.Seed.User.Id, ownerOnly: true)).Id);
         Assert.False(await db.EventMemberships.AnyAsync(x => x.UserId == s.Seed.User.Id));
         Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() =>
             s.Service.RecoverAsync(preview, s.Replacement.Id, s.Replacement.Version, "Repeated recovery must not duplicate."))).Code);

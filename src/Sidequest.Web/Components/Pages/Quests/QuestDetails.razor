@@ -89,7 +89,7 @@ else if (reauthorizationRequired && error is null)
             <p><a href="@($"/quests/{Id}?moderation=true")">Open dedicated audited moderation view</a></p>
         }
     }
-    @if (Moderation || detail.Summary.IsOwner)
+    @if (Moderation || detail.Summary.CanManage)
     {
         <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(ControlsDisabled || conflict || draftConflict)" Members="members"
                          MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="page => LoadMembersAsync(requestVersion, checkVersion, page)"

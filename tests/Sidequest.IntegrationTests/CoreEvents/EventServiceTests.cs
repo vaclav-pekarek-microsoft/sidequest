@@ -13,6 +13,69 @@ namespace Sidequest.IntegrationTests.CoreEvents;
 /// <param name="database">Uniquely owned migrated database, shared only by this sequential test class.</param>
 public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
+    /// <summary>Creator, assigned-owner, and administrator principals can edit, cancel, and delete without relying on an unrelated grant.</summary>
+    /// <param name="principal">Creator without an owner row, assigned owner, or administrator without membership.</param>
+    /// <returns>A task completing after projection, content, lifecycle, deletion, and audit persistence checks.</returns>
+    [Theory]
+    [InlineData("creator")]
+    [InlineData("assigned owner")]
+    [InlineData("administrator")]
+    public async Task ManagementPrincipal_CanEditCancelAndDeleteEventUnderLifecycleRules(string principal)
+    {
+        var editable = await CreateManagementScenarioAsync(principal);
+        var service = editable.Context.Service(editable.Actor);
+        var before = await service.GetAsync(editable.Seed.Event.Id);
+        Assert.True(before.Summary.CanManage);
+        Assert.Equal(principal == "assigned owner", before.Summary.IsOwner);
+        Assert.Equal(principal != "administrator", before.Summary.IsMember);
+        Assert.False(string.IsNullOrWhiteSpace(before.Summary.Version));
+        Assert.Equal("Private event details", before.Description);
+
+        await service.EditAsync(editable.Seed.Event.Id, before.Summary.Version,
+            EventTestContext.Input($"{principal} managed Event"));
+        var edited = await service.GetAsync(editable.Seed.Event.Id);
+        Assert.Equal($"{principal} managed Event", edited.Summary.Name);
+        Assert.NotEqual(before.Summary.Version, edited.Summary.Version);
+        await service.ChangeStatusAsync(editable.Seed.Event.Id, edited.Summary.Version,
+            EventStatus.Cancelled, $"{principal} cancellation");
+        var cancelled = await service.GetAsync(editable.Seed.Event.Id);
+        Assert.Equal(EventStatus.Cancelled, cancelled.Summary.Status);
+        var invalidDelete = await Assert.ThrowsAsync<DomainException>(() =>
+            service.DeleteDraftAsync(editable.Seed.Event.Id, cancelled.Summary.Version));
+        Assert.Equal(ErrorCode.Conflict, invalidDelete.Code);
+
+        await using (var read = database.CreateContext())
+        {
+            var saved = await read.Events.SingleAsync(x => x.Id == editable.Seed.Event.Id);
+            Assert.Equal($"{principal} managed Event", saved.Name);
+            Assert.Equal(EventStatus.Cancelled, saved.Status);
+            var history = await read.EventStatusHistory.SingleAsync(x => x.EventId == saved.Id);
+            Assert.Equal(EventStatus.Active, history.Previous);
+            Assert.Equal(EventStatus.Cancelled, history.Next);
+            Assert.Equal($"{principal} cancellation", history.Reason);
+            Assert.Equal(editable.Actor.Id, history.ActorId);
+            Assert.Contains(await read.AuditEntries.Where(x => x.ResourceId == saved.Id).Select(x => x.Action).ToArrayAsync(),
+                action => action == "Event.Edited");
+            Assert.DoesNotContain(await read.AuditEntries.Where(x => x.ResourceId == saved.Id).Select(x => x.Action).ToArrayAsync(),
+                action => action == "Event.Deleted");
+        }
+
+        var deletable = await CreateManagementScenarioAsync(principal, draft: true);
+        var deleteService = deletable.Context.Service(deletable.Actor);
+        var draft = await deleteService.GetAsync(deletable.Seed.Event.Id);
+        Assert.Equal(EventStatus.Draft, draft.Summary.Status);
+        Assert.True(draft.Summary.CanManage);
+        Assert.Equal(principal == "assigned owner", draft.Summary.IsOwner);
+        await deleteService.DeleteDraftAsync(deletable.Seed.Event.Id, draft.Summary.Version);
+
+        await using var deleted = database.CreateContext();
+        Assert.False(await deleted.Events.AnyAsync(x => x.Id == deletable.Seed.Event.Id));
+        Assert.False(await deleted.EventOwners.AnyAsync(x => x.EventId == deletable.Seed.Event.Id));
+        var deletionAudit = await deleted.AuditEntries.SingleAsync(x =>
+            x.ResourceId == deletable.Seed.Event.Id && x.Action == "Event.Deleted");
+        Assert.Equal(deletable.Actor.Id, deletionAudit.ActorId);
+    }
+
     /// <summary>Coalesces registered members and affected unregistered child audiences before the cascade, without duplicating overlapping roles.</summary>
     /// <returns>A task completing after exact eligible-recipient, privacy, and persisted parent/child cancellation checks.</returns>
     [Fact]
@@ -195,12 +258,15 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
     {
         var context = new EventTestContext(database);
         var seed = await context.SeedAsync();
+        var visitor = FoundationSeed.NewUser();
+        visitor.TenantId = seed.User.TenantId;
+        await FoundationSeed.PersistAsync(database, visitor);
         var draft = FoundationSeed.NewEvent(seed.User.Id);
         draft.Status = EventStatus.Draft;
         var history = FoundationSeed.NewEvent(seed.User.Id);
         history.Status = EventStatus.Completed;
         await FoundationSeed.PersistAsync(database, draft, history);
-        var sut = context.Service(seed.Other);
+        var sut = context.Service(visitor);
         var detail = await sut.GetAsync(seed.Event.Id);
         Assert.Equal(seed.Event.DiscoverySummary, detail.Summary.DiscoverySummary);
         Assert.Equal(seed.User.Id, Assert.Single(detail.Summary.Owners).Id);
@@ -501,5 +567,42 @@ public sealed class EventServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(outboxCount, await read.OutboxMessages.CountAsync());
         Assert.Equal(scheduledWorkCount, await read.ScheduledWork.CountAsync());
         Assert.Empty(context.Quests.Calls);
+    }
+
+    private async Task<(EventTestContext Context, FoundationSeed Seed, UserAccount Actor)> CreateManagementScenarioAsync(
+        string principal, bool draft = false)
+    {
+        var context = new EventTestContext(database);
+        var seed = await context.SeedAsync();
+        UserAccount actor;
+        switch (principal)
+        {
+            case "creator":
+                actor = seed.Other;
+                await FoundationSeed.PersistAsync(database, seed.Membership(actor.Id));
+                break;
+            case "assigned owner":
+                actor = seed.User;
+                break;
+            case "administrator":
+                actor = FoundationSeed.NewUser();
+                actor.TenantId = seed.User.TenantId;
+                await FoundationSeed.PersistAsync(database, actor,
+                    new Administrator { UserId = actor.Id });
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(principal), principal, "Unknown management principal.");
+        }
+
+        if (draft)
+        {
+            await using var setup = database.CreateContext();
+            var item = await setup.Events.SingleAsync(x => x.Id == seed.Event.Id);
+            item.Status = EventStatus.Draft;
+            setup.Quests.RemoveRange(setup.Quests.Where(x => x.EventId == seed.Event.Id));
+            await setup.SaveChangesAsync();
+        }
+
+        return (context, seed, actor);
     }
 }

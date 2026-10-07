@@ -217,9 +217,12 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
     public async Task MembershipLoss_AtomicallyRevokesInvitationsAndParticipation(bool commit)
     {
         var scenario = await QuestScenario.CreateAsync(database, true);
+        var member = FoundationSeed.NewUser();
+        await FoundationSeed.PersistAsync(database, member);
+        await FoundationSeed.PersistAsync(database, scenario.Seed.Membership(member.Id));
         var owner = scenario.Service();
-        var recipient = scenario.Service(scenario.Seed.Other);
-        await owner.InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.Other.Id);
+        var recipient = scenario.Service(member);
+        await owner.InviteAsync(scenario.Seed.Quest.Id, member.Id);
         await recipient.ParticipateAsync(scenario.Seed.Quest.Id, ParticipationCommand.Join);
         var second = FoundationSeed.NewQuest(scenario.Seed.Event.Id, scenario.Seed.User.Id);
         await FoundationSeed.PersistAsync(database, second);
@@ -229,11 +232,11 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
         {
             await using var transaction = await db.BeginTransactionAsync();
             await db.LockEventAsync(scenario.Seed.Event.Id);
-            var member = await db.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == scenario.Seed.Other.Id);
-            member.Status = MembershipStatus.Removed;
-            await lifecycle.RemoveMemberParticipationAsync(db, scenario.Seed.Event.Id, scenario.Seed.Other.Id,
+            var membership = await db.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == member.Id);
+            membership.Status = MembershipStatus.Removed;
+            await lifecycle.RemoveMemberParticipationAsync(db, scenario.Seed.Event.Id, member.Id,
                 scenario.Seed.User.Id, "Event membership was removed.", scenario.Clock.Now);
-            await lifecycle.RemoveMemberParticipationAsync(db, scenario.Seed.Event.Id, scenario.Seed.Other.Id,
+            await lifecycle.RemoveMemberParticipationAsync(db, scenario.Seed.Event.Id, member.Id,
                 scenario.Seed.User.Id, "Event membership was removed.", scenario.Clock.Now);
             Assert.Same(transaction, db.Database.CurrentTransaction);
             await db.SaveChangesAsync();
@@ -252,11 +255,11 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
         Assert.Equal(commit ? 2 : 0, changes.Length);
         if (commit)
         {
-            Assert.Equal(new[] { scenario.Seed.Other.Id }, Assert.Single(changes, c => c.QuestId == scenario.Seed.Quest.Id).PreviousAttendeeIds);
-            Assert.All(changes, change => Assert.Equal(new[] { scenario.Seed.Other.Id }, change.AffectedUserIds));
+            Assert.Equal(new[] { member.Id }, Assert.Single(changes, c => c.QuestId == scenario.Seed.Quest.Id).PreviousAttendeeIds);
+            Assert.All(changes, change => Assert.Equal(new[] { member.Id }, change.AffectedUserIds));
             Assert.Empty(Assert.Single(changes, c => c.QuestId == second.Id).PreviousAttendeeIds!);
-            Assert.Equal(new[] { scenario.Seed.Other.Id }, Assert.Single(changes, c => c.QuestId == second.Id).RecipientIds);
-            var membership = await read.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == scenario.Seed.Other.Id);
+            Assert.Equal(new[] { member.Id }, Assert.Single(changes, c => c.QuestId == second.Id).RecipientIds);
+            var membership = await read.EventMemberships.SingleAsync(m => m.EventId == scenario.Seed.Event.Id && m.UserId == member.Id);
             membership.Status = MembershipStatus.Active;
             await read.SaveChangesAsync();
             Assert.Equal(ParticipationStatus.None, (await recipient.GetAsync(second.Id)).Summary.Participation);

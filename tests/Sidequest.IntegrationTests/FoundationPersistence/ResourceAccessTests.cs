@@ -309,11 +309,11 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
         Assert.Equal(status, (await read.Quests.SingleAsync(x => x.Id == seed.Quest.Id)).Status);
     }
 
-    /// <summary>Checks that Event ownership or creation alone cannot edit a Quest, including through the moderation flag.</summary>
+    /// <summary>Checks that Event management alone cannot edit a Quest while Quest creation is an independent management grant.</summary>
     /// <param name="visibility">The Quest visibility.</param>
     /// <param name="moderation">Whether the request uses dedicated Event moderation.</param>
-    /// <param name="creator">Whether to test creator-only provenance instead of Event ownership.</param>
-    /// <returns>A task completing after denied editing and explicit Quest-owner positive-control assertions.</returns>
+    /// <param name="creator">Whether the actor created both resources, including the Quest, instead of holding only Event ownership.</param>
+    /// <returns>A task completing after Event-only denial, Quest-creator permission, and explicit-owner positive-control assertions.</returns>
     [Theory]
     [InlineData(QuestVisibility.Public, false, false)]
     [InlineData(QuestVisibility.Public, true, false)]
@@ -323,7 +323,8 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
     [InlineData(QuestVisibility.Public, true, true)]
     [InlineData(QuestVisibility.Private, false, true)]
     [InlineData(QuestVisibility.Private, true, true)]
-    public async Task RequireQuest_EventOwnershipNeverGrantsQuestEditing(QuestVisibility visibility, bool moderation, bool creator)
+    public async Task RequireQuest_EventManagementAloneDoesNotGrantEditing_ButQuestCreatorDoes(
+        QuestVisibility visibility, bool moderation, bool creator)
     {
         var seed = await FoundationSeed.CreateAsync(database);
         await ConfigureAsync(seed, visibility: visibility);
@@ -339,14 +340,20 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
         var service = new ResourceAccess(StubCurrentUser.For(seed.User));
         await using (var db = database.CreateContext())
         {
-            await DeniedAsync(() => service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, true, moderation), ErrorCode.NotFound, Unavailable);
             if (creator)
-                await DeniedAsync(() => service.RequireEventAsync(db, seed.Event.Id, seed.User.Id, true), ErrorCode.NotFound, Unavailable);
+            {
+                Assert.Equal(seed.Event.Id, (await service.RequireEventAsync(db, seed.Event.Id, seed.User.Id, true)).Id);
+                Assert.Equal(seed.Quest.Id,
+                    (await service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, true, moderation)).Id);
+            }
+            else
+                await DeniedAsync(() => service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, true, moderation),
+                    ErrorCode.NotFound, Unavailable);
         }
         await FoundationSeed.PersistAsync(database, new QuestOwner { QuestId = seed.Quest.Id, UserId = seed.User.Id });
         await using var read = database.CreateContext();
         await CheckResourceAsync(() => service.RequireQuestAsync(read, seed.Quest.Id, seed.User.Id, true, moderation),
-            !creator || !moderation, seed.Quest.Id);
+            true, seed.Quest.Id);
         Assert.Equal(1, await read.QuestOwners.CountAsync(x => x.QuestId == seed.Quest.Id && x.UserId == seed.User.Id));
         Assert.False(read.ChangeTracker.HasChanges());
     }
@@ -448,29 +455,27 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
         // a defensive ordinary-read predicate test, not proof of a supported row-creation route.
     }
 
-    /// <summary>Checks that administrator status confers no Event/Quest content, editing, or moderation permission.</summary>
-    /// <returns>A task completing after denied privileged routes and explicit ordinary-grant controls.</returns>
+    /// <summary>Checks that an administrator can manage Event and Quest content without membership or owner rows.</summary>
+    /// <returns>A task completing after every privileged route succeeds without creating ordinary grants.</returns>
     [Fact]
-    public async Task AdministratorRow_DoesNotGrantContentAccess()
+    public async Task AdministratorRow_GrantsEventAndQuestManagementWithoutMembership()
     {
         var seed = await FoundationSeed.CreateAsync(database);
         await ConfigureAsync(seed, visibility: QuestVisibility.Private);
         await FoundationSeed.PersistAsync(database, new Administrator { UserId = seed.User.Id });
         var service = new ResourceAccess(StubCurrentUser.For(seed.User));
-        await using (var db = database.CreateContext())
-        {
-            Assert.Equal(seed.User.Id, (await service.RequireAdministratorAsync(db)).Id);
-            await DeniedAsync(() => service.RequireEventAsync(db, seed.Event.Id, seed.User.Id), ErrorCode.NotFound, Unavailable);
-            await DeniedAsync(() => service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id), ErrorCode.NotFound, Unavailable);
-        }
-        await GrantAsync(seed, invitation: "Active");
-        await using var read = database.CreateContext();
-        Assert.Equal(seed.Event.Id, (await service.RequireEventAsync(read, seed.Event.Id, seed.User.Id)).Id);
-        Assert.Equal(seed.Quest.Id, (await service.RequireQuestAsync(read, seed.Quest.Id, seed.User.Id)).Id);
-        await DeniedAsync(() => service.RequireEventAsync(read, seed.Event.Id, seed.User.Id, true), ErrorCode.NotFound, Unavailable);
-        await DeniedAsync(() => service.RequireQuestAsync(read, seed.Quest.Id, seed.User.Id, true), ErrorCode.NotFound, Unavailable);
-        await DeniedAsync(() => service.RequireQuestAsync(read, seed.Quest.Id, seed.User.Id, moderation: true), ErrorCode.NotFound, Unavailable);
-        Assert.False(read.ChangeTracker.HasChanges());
+        await using var db = database.CreateContext();
+        Assert.Equal(seed.User.Id, (await service.RequireAdministratorAsync(db)).Id);
+        Assert.Equal(seed.Event.Id, (await service.RequireEventAsync(db, seed.Event.Id, seed.User.Id)).Id);
+        Assert.Equal(seed.Event.Id, (await service.RequireEventAsync(db, seed.Event.Id, seed.User.Id, true)).Id);
+        Assert.Equal(seed.Quest.Id, (await service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id)).Id);
+        Assert.Equal(seed.Quest.Id, (await service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, true)).Id);
+        Assert.Equal(seed.Quest.Id, (await service.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, moderation: true)).Id);
+        Assert.False(await db.EventMemberships.AnyAsync(x => x.EventId == seed.Event.Id && x.UserId == seed.User.Id));
+        Assert.False(await db.EventOwners.AnyAsync(x => x.EventId == seed.Event.Id && x.UserId == seed.User.Id));
+        Assert.False(await db.QuestOwners.AnyAsync(x => x.QuestId == seed.Quest.Id && x.UserId == seed.User.Id));
+        Assert.False(await db.QuestInvitations.AnyAsync(x => x.QuestId == seed.Quest.Id && x.UserId == seed.User.Id));
+        Assert.False(db.ChangeTracker.HasChanges());
     }
 
     /// <summary>Checks immediate eligibility loss on the same tracked service/context despite retained administrator and owner rows.</summary>
@@ -656,10 +661,10 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
         Assert.Null(denial.Field);
     }
 
-    /// <summary>Checks equal Event/Quest owner permissions while creation provenance alone grants neither ownership nor participation.</summary>
-    /// <returns>A task completing after both owners' access, creator denial, and relation/count assertions.</returns>
+    /// <summary>Checks equal assigned-owner permissions and creator management without manufacturing owner or participation rows.</summary>
+    /// <returns>A task completing after both assigned owners' and the creator's access plus exact relation/count assertions.</returns>
     [Fact]
-    public async Task EqualOwnerRows_GiveEqualOwnerOnlyAccess_WithoutCreatorPrivilege()
+    public async Task AssignedOwnersAndCreatorHaveEqualManagementWithoutChangingExplicitOwnerFacts()
     {
         var seed = await FoundationSeed.CreateAsync(database);
         var secondOwner = FoundationSeed.NewUser();
@@ -676,11 +681,15 @@ public sealed class ResourceAccessTests(SqlTestDatabase database) : IClassFixtur
             Assert.Equal(seed.Quest.Id, (await service.RequireQuestAsync(db, seed.Quest.Id, user.Id, true)).Id);
         }
         var creator = new ResourceAccess(StubCurrentUser.For(seed.Other));
-        await DeniedAsync(() => creator.RequireEventAsync(db, seed.Event.Id, seed.Other.Id, true), ErrorCode.NotFound, Unavailable);
-        await DeniedAsync(() => creator.RequireQuestAsync(db, seed.Quest.Id, seed.Other.Id, true), ErrorCode.NotFound, Unavailable);
+        Assert.Equal(seed.Event.Id, (await creator.RequireEventAsync(db, seed.Event.Id, seed.Other.Id, true)).Id);
+        Assert.Equal(seed.Quest.Id, (await creator.RequireQuestAsync(db, seed.Quest.Id, seed.Other.Id, true)).Id);
         Assert.False(await db.Participations.AnyAsync(x => x.QuestId == seed.Quest.Id));
         Assert.Equal(2, await db.EventOwners.CountAsync(x => x.EventId == seed.Event.Id));
         Assert.Equal(2, await db.QuestOwners.CountAsync(x => x.QuestId == seed.Quest.Id));
+        Assert.DoesNotContain(await db.EventOwners.Where(x => x.EventId == seed.Event.Id).Select(x => x.UserId).ToArrayAsync(),
+            id => id == seed.Other.Id);
+        Assert.DoesNotContain(await db.QuestOwners.Where(x => x.QuestId == seed.Quest.Id).Select(x => x.UserId).ToArrayAsync(),
+            id => id == seed.Other.Id);
         Assert.False(db.ChangeTracker.HasChanges());
     }
 

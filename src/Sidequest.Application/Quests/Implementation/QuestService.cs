@@ -53,7 +53,10 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                 p.UserId == actor.Id && p.Status == ParticipationStatus.Joined)),
             QuestListKind.Following => query.Where(q => db.Participations.Any(p => p.QuestId == q.Id &&
                 p.UserId == actor.Id && p.Status == ParticipationStatus.Following)),
-            QuestListKind.Organizing => query.Where(q => db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor.Id)),
+            QuestListKind.Organizing => query.Where(q =>
+                q.CreatorId == actor.Id ||
+                db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor.Id) ||
+                db.Administrators.Any(a => a.UserId == actor.Id)),
             QuestListKind.Invited => query.Where(q => q.Visibility == QuestVisibility.Private &&
                 db.QuestInvitations.Any(i => i.QuestId == q.Id && i.UserId == actor.Id && i.Status == QuestInvitationStatus.Active)),
             QuestListKind.Discover => query.Where(q => q.Visibility == QuestVisibility.Public && q.Status == QuestStatus.Active &&
@@ -123,9 +126,9 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                             select new OwnerSummary(user.Id, user.DisplayName, user.Email))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var attendees = moderation ? null : await RosterAsync(db, id, ParticipationStatus.Joined, cancellationToken).ConfigureAwait(false);
-        var followers = moderation || !summary.IsOwner ? null :
+        var followers = moderation || !summary.CanManage ? null :
             await RosterAsync(db, id, ParticipationStatus.Following, cancellationToken).ConfigureAwait(false);
-        var invitees = moderation || !summary.IsOwner ? null :
+        var invitees = moderation || !summary.CanManage ? null :
             await (from invitation in db.QuestInvitations
                    join user in db.Users on invitation.UserId equals user.Id
                    where invitation.QuestId == id && invitation.Status == QuestInvitationStatus.Active &&
@@ -374,7 +377,9 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             await db.LockEventAsync(parentId.Value, cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
         var quest = await RequireAsync(db, id, actor.Id, false, moderation, cancellationToken).ConfigureAwait(false);
-        var owner = await db.QuestOwners.AnyAsync(x => x.QuestId == id && x.UserId == actor.Id, cancellationToken).ConfigureAwait(false);
+        var owner = quest.CreatorId == actor.Id ||
+            await db.QuestOwners.AnyAsync(x => x.QuestId == id && x.UserId == actor.Id, cancellationToken).ConfigureAwait(false) ||
+            await db.Administrators.AnyAsync(x => x.UserId == actor.Id, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<QuestHistoryItem> history;
         if (owner || moderation)
         {
@@ -536,17 +541,26 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
     private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation, bool ownerOnly = false) =>
         db.Quests.Where(q =>
             db.Events.Any(e => e.Id == q.EventId && e.Status != EventStatus.Draft &&
-                (db.EventOwners.Any(o => o.EventId == e.Id && o.UserId == actor) ||
+                (db.Administrators.Any(a => a.UserId == actor) ||
+                 e.CreatorId == actor ||
+                 db.EventOwners.Any(o => o.EventId == e.Id && o.UserId == actor) ||
                  !db.EventStatusHistory.Any(h => h.EventId == e.Id &&
                      h.Previous == EventStatus.Draft && h.Next == EventStatus.Cancelled))) &&
-            db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active) &&
+            (db.Administrators.Any(a => a.UserId == actor) ||
+             db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active)) &&
             (ownerOnly && !moderation
-                ? db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
+                ? db.Administrators.Any(a => a.UserId == actor) ||
+                  q.CreatorId == actor ||
+                  db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
                 : moderation
                 ? q.Status != QuestStatus.Draft &&
                     !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
-                    db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor)
-                : db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor) ||
+                    (db.Administrators.Any(a => a.UserId == actor) ||
+                     db.Events.Any(e => e.Id == q.EventId && e.CreatorId == actor) ||
+                     db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor))
+                : db.Administrators.Any(a => a.UserId == actor) ||
+                    q.CreatorId == actor ||
+                    db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor) ||
                     q.Status != QuestStatus.Draft &&
                     !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
                     (q.Visibility == QuestVisibility.Public ||
@@ -569,8 +583,15 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             moderation ? ParticipationStatus.None : db.Participations.Where(p => p.QuestId == quest.Id && p.UserId == actor)
                 .Select(p => p.Status).FirstOrDefault(),
             db.QuestOwners.Any(o => o.QuestId == quest.Id && o.UserId == actor),
-            db.EventOwners.Any(o => o.EventId == parent.Id && o.UserId == actor),
-            Convert.ToBase64String(quest.Version), quest.CoverAssetId);
+            db.Administrators.Any(a => a.UserId == actor) ||
+                parent.CreatorId == actor ||
+                db.EventOwners.Any(o => o.EventId == parent.Id && o.UserId == actor),
+            Convert.ToBase64String(quest.Version), quest.CoverAssetId)
+        {
+            CanManage = db.Administrators.Any(a => a.UserId == actor) ||
+                quest.CreatorId == actor ||
+                db.QuestOwners.Any(o => o.QuestId == quest.Id && o.UserId == actor)
+        };
 
     private static async Task<List<QuestRosterPersonSummary>> RosterAsync(ISidequestDbContext db, Guid id,
         ParticipationStatus status, CancellationToken token) =>

@@ -22,8 +22,8 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
                 ("member", false, true, false, false, false),
                 ("invitee", false, false, true, true, false),
                 ("invitee", false, true, false, false, false),
-                ("admin", false, false, true, false, false),
-                ("admin", false, true, false, false, false),
+                ("admin", false, false, true, true, true),
+                ("admin", false, true, true, true, false),
                 ("eventOwner", false, false, true, false, false),
                 ("eventOwner", false, true, true, true, false),
                 ("questOwner", false, false, true, true, true),
@@ -221,7 +221,6 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
         {
             db.QuestOwners.Add(new QuestOwner { QuestId = seed.Quest.Id, UserId = seed.User.Id });
             db.QuestInvitations.Add(seed.Invitation());
-            db.Administrators.Add(new Administrator { UserId = seed.User.Id });
         }
         if (role == "admin")
             db.Administrators.Add(new Administrator { UserId = seed.User.Id });

@@ -281,13 +281,21 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var editor = await SignedInAsync(editorContext, "Bob");
         var eventId = await CreateEventAsync(manager);
         await BecomeMemberAsync(editor, eventId);
-        var questId = await CreateQuestAsync(editor, eventId, isPrivate: true);
-        var originalTitle = await editor.GetByRole(AriaRole.Heading, new() { Level = 1 }).InnerTextAsync();
-        if (competingChange != "suspension")
+        var questId = competingChange == "ownership-revocation"
+            ? await CreateQuestAsync(manager, eventId, isPrivate: true)
+            : await CreateQuestAsync(editor, eventId, isPrivate: true);
+        if (competingChange == "ownership-revocation")
+        {
+            await ChooseMemberAsync(manager, "Bob", "Add equal owner");
+            await ConfirmQuestActionAsync(manager, "Add equal owner");
+            await editor.GotoAsync($"/quests/{questId}");
+        }
+        else if (competingChange == "content-edit")
         {
             await ChooseMemberAsync(editor, "Alice", "Add equal owner");
             await ConfirmQuestActionAsync(editor, "Add equal owner");
         }
+        var originalTitle = await editor.GetByRole(AriaRole.Heading, new() { Level = 1 }).InnerTextAsync();
         var originalTimes = editor.Locator("main p time");
         await Expect(originalTimes).ToHaveCountAsync(2);
         var originalStartUtc = await originalTimes.Nth(0).GetAttributeAsync("datetime");

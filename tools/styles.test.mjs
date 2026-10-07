@@ -50,6 +50,16 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 
+test("Event management tabs keep neutral hover and preserve selected gradient on hover", () => {
+    const styles = compile(join(web, "wwwroot", "app.scss")).css;
+    assert.match(
+        styles,
+        /\.management-tabs button:hover:not\(:disabled\)\s*\{[^}]*color: var\(--sq-ink\);[^}]*background: color-mix\(in srgb, var\(--sq-blue\) 12%, white\);[^}]*filter: none;[^}]*box-shadow: none;/s);
+    assert.match(
+        styles,
+        /\.management-tabs button\.selected,\s*\.management-tabs button\.selected:hover:not\(:disabled\)\s*\{[^}]*color: white;[^}]*background: linear-gradient\(135deg, var\(--sq-blue\), var\(--sq-violet\)\);[^}]*border-color: transparent;/s);
+});
+
 test("Only the requested NuGet proxy is enabled and local settings are excluded from publishing", async () => {
     const config = await readFile(join(root, "NuGet.Config"), "utf8");
     assert.match(config, /https:\/\/packagefeedproxy\.microsoft\.io\/nuget\/v3\/index\.json/);

@@ -17,24 +17,24 @@
 @if (detail is not null)
 {
     <EventCard Item="detail.Summary" />
-    @if (detail.Summary.IsMember)
+    @if (detail.Summary.IsMember || detail.Summary.CanManage)
     {
-        <EventManagementTabs Selected="selectedTab" IsOwner="detail.Summary.IsOwner" Disabled="Busy"
+        <EventManagementTabs Selected="selectedTab" CanManage="detail.Summary.CanManage" Disabled="Busy"
                              SelectedChanged="SelectTabAsync" />
         @switch (selectedTab)
         {
-            case "quests":
+            case "quests" when detail.Summary.CanManage:
                 <EventQuestsPanel EventId="Id"
                                   CanCreate="@(detail.Summary.Status == EventStatus.Active)"
-                                  CanModerate="detail.Summary.IsOwner" />
+                                  CanModerate="detail.Summary.CanManage" />
                 break;
-            case "members":
+            case "members" when detail.Summary.CanManage:
                 <EventMembersPanel EventId="Id" Changed="LoadAsync" />
                 break;
-            case "invitations" when detail.Summary.IsOwner:
+            case "invitations" when detail.Summary.CanManage:
                 <EventInvitationsPanel EventId="Id" />
                 break;
-            case "settings" when detail.Summary.IsOwner:
+            case "settings" when detail.Summary.CanManage:
                 <EventSettingsPanel Detail="detail" Changed="LoadAsync" />
                 break;
             default:
@@ -43,16 +43,16 @@
                     <p class="description">@detail.Description</p>
                     <div class="page-actions">
                         <a href="@($"/notifications/preferences/{Id}")">Notification preferences</a>
-                        @if (detail.Summary.IsOwner && detail.Summary.Status == EventStatus.Active)
+                        @if (detail.Summary.CanManage && detail.Summary.Status == EventStatus.Active)
                         {
                             <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a>
                         }
-                        @if (!detail.Summary.IsOwner)
+                        @if (detail.Summary.IsMember && !detail.Summary.CanManage)
                         {
                             <FluentButton Disabled="@Busy" OnClick="@(() => leaveDialogOpen = true)">Leave Event…</FluentButton>
                         }
                     </div>
-                    @if (!detail.Summary.IsOwner)
+                    @if (detail.Summary.IsMember && !detail.Summary.CanManage)
                     {
                         <p class="text-muted">Owners must remove all Event and child Quest ownership assignments before leaving.</p>
                     }
@@ -96,7 +96,7 @@
         var loaded = await Events.GetAsync(Id, token);
         token.ThrowIfCancellationRequested();
         detail = loaded;
-        if (!loaded.Summary.IsOwner && selectedTab is "invitations" or "settings")
+        if (!loaded.Summary.CanManage)
             selectedTab = "overview";
     });
 
@@ -110,6 +110,8 @@
 
     private Task SelectTabAsync(string tab)
     {
+        if (detail?.Summary.CanManage != true)
+            return Task.CompletedTask;
         selectedTab = tab;
         return Task.CompletedTask;
     }

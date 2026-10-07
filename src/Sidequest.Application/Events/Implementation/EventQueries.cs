@@ -19,14 +19,20 @@ internal static class EventQueries
                             select new OwnerSummary(user.Id, user.DisplayName, user.Email))
                             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var ownerAccess = member && owners.Any(x => x.Id == userId);
+        var canManage = item.CreatorId == userId || ownerAccess ||
+            await db.Administrators.AnyAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
         var status = EventTransactions.Effective(item, now);
         var unpublished = item.Status == EventStatus.Draft ||
             await db.EventStatusHistory.AnyAsync(x => x.EventId == item.Id &&
                 x.Previous == EventStatus.Draft && x.Next == EventStatus.Cancelled, cancellationToken).ConfigureAwait(false);
-        if (unpublished ? !ownerAccess : !member && status != EventStatus.Active)
+        if (unpublished ? !canManage : !member && !canManage && status != EventStatus.Active)
             throw EventTransactions.Unavailable();
         return new EventSummary(item.Id, item.Name, item.DiscoverySummary, item.StartDate, item.EndDate,
-            item.TimeZoneId, status, owners, member, ownerAccess, member ? Convert.ToBase64String(item.Version) : "");
+            item.TimeZoneId, status, owners, member, ownerAccess,
+            member || canManage ? Convert.ToBase64String(item.Version) : "")
+        {
+            CanManage = canManage
+        };
     }
 
     internal static string Normalize(string name)

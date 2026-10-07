@@ -489,40 +489,54 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal(0, confirmed);
     }
 
-    /// <summary>A member who is not an owner sees exactly the three general Event-management tabs in stable order.</summary>
+    /// <summary>An ordinary Event member receives no management tab strip because membership alone is not a management grant.</summary>
     [Fact]
-    public void EventManagementTabsNonOwnerRendersExactlyOverviewQuestsAndMembers()
+    public void EventManagementTabsOrdinaryMemberRendersNoManagementNavigation()
     {
         var cut = Render<EventManagementTabs>();
 
-        Assert.Equal(["Overview", "Quests", "Members"],
-            cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
-        Assert.DoesNotContain("Invitations", cut.Markup);
-        Assert.DoesNotContain("Settings", cut.Markup);
+        Assert.Empty(cut.FindAll("nav"));
+        Assert.Empty(cut.FindAll("[role=tab]"));
+        Assert.DoesNotContain("Event management tabs", cut.Markup);
     }
 
-    /// <summary>An owner sees the three general tabs followed by exactly Invitations and Settings.</summary>
-    [Fact]
-    public void EventManagementTabsOwnerRendersOverviewQuestsMembersInvitationsAndSettings()
+    /// <summary>Every management projection receives the same complete five-tab surface in stable order.</summary>
+    /// <param name="principal">Management principal represented by the projection.</param>
+    [Theory]
+    [InlineData("creator")]
+    [InlineData("assigned owner")]
+    [InlineData("administrator")]
+    public void EventManagementTabsManagementPrincipalRendersCompleteFiveTabSurface(string principal)
     {
-        var cut = Render<EventManagementTabs>(parameters => parameters.Add(component => component.IsOwner, true));
+        var selected = principal switch
+        {
+            "creator" => "overview",
+            "assigned owner" => "quests",
+            _ => "settings"
+        };
+        var cut = Render<EventManagementTabs>(parameters => parameters
+            .Add(component => component.CanManage, true)
+            .Add(component => component.Selected, selected));
 
         Assert.Equal(["Overview", "Quests", "Members", "Invitations", "Settings"],
             cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        Assert.Equal("Event management tabs", cut.Find("nav").GetAttribute("aria-label"));
+        Assert.Equal(selected,
+            cut.FindAll("[role=tab]").Single(tab => tab.ClassList.Contains("selected"))
+                .TextContent.Trim().ToLowerInvariant());
     }
 
-    /// <summary>Selecting either a general or owner-only tab emits its stable identifier exactly once.</summary>
-    /// <param name="isOwner">Whether owner-only tabs are rendered.</param>
+    /// <summary>Selecting either an operational or settings tab emits its stable identifier exactly once.</summary>
     /// <param name="label">Visible tab label selected by the member.</param>
     /// <param name="expected">Stable identifier delivered to the owning page.</param>
     [Theory]
-    [InlineData(false, "Quests", "quests")]
-    [InlineData(true, "Settings", "settings")]
-    public void EventManagementTabsSelectionInvokesChangedOnceWithSelectedTab(bool isOwner, string label, string expected)
+    [InlineData("Quests", "quests")]
+    [InlineData("Settings", "settings")]
+    public void EventManagementTabsSelectionInvokesChangedOnceWithSelectedTab(string label, string expected)
     {
         var selected = new List<string>();
         var cut = Render<EventManagementTabs>(parameters => parameters
-            .Add(component => component.IsOwner, isOwner)
+            .Add(component => component.CanManage, true)
             .Add(component => component.SelectedChanged, value => selected.Add(value)));
 
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == label).Click();
@@ -735,10 +749,10 @@ public sealed class EventComponentTests : BunitContext
             element.TextContent.Contains("membership", StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>A discovery-only visitor joins directly with the route identifier and reloads into the three protected member tabs.</summary>
-    /// <returns>Completion after direct Join and the immediate authorized detail reload.</returns>
+    /// <summary>A discovery-only visitor joins directly but ordinary membership still exposes no management navigation.</summary>
+    /// <returns>Completion after direct Join and the immediate ordinary-member detail reload.</returns>
     [Fact]
-    public async Task EventDetailPageNonmemberJoinsDirectlyThenReloadsIntoMemberTabs()
+    public async Task EventDetailPageNonmemberJoinsDirectlyWithoutReceivingManagementTabs()
     {
         var eventId = Guid.Parse("63000000-0000-0000-0000-000000000031");
         var joins = new List<Guid>();
@@ -769,17 +783,18 @@ public sealed class EventComponentTests : BunitContext
 
         Assert.Equal(eventId, Assert.Single(joins));
         Assert.Equal(2, detailReads);
-        Assert.Equal(["Overview", "Quests", "Members"],
-            cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        Assert.Empty(cut.FindAll("[role=tab]"));
+        Assert.Empty(cut.FindComponents<EventQuestsPanel>());
+        Assert.Empty(cut.FindComponents<EventMembersPanel>());
         Assert.Contains("Protected member description", cut.Markup);
         Assert.DoesNotContain(cut.FindComponents<FluentButton>(),
             button => button.Find("fluent-button").TextContent.Trim() == "Join Event");
     }
 
-    /// <summary>A non-owner member receives exactly the general tabs and their real Event-scoped Quest and member contents.</summary>
-    /// <returns>Completion after selecting both non-overview protected tabs.</returns>
+    /// <summary>An ordinary member receives Overview content but no management strip or management panel.</summary>
+    /// <returns>Completion after the ordinary member projection is rendered without privileged components.</returns>
     [Fact]
-    public async Task EventDetailPageNonOwnerRendersExactlyOverviewQuestsAndMembers()
+    public async Task EventDetailPageOrdinaryMemberHidesManagementTabsAndPanels()
     {
         var eventId = Guid.Parse("64000000-0000-0000-0000-000000000041");
         await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
@@ -796,24 +811,27 @@ public sealed class EventComponentTests : BunitContext
         }));
         var cut = Render<EventDetailPage>(parameters => parameters.Add(component => component.Id, eventId));
 
-        Assert.Equal(["Overview", "Quests", "Members"],
-            cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        Assert.Empty(cut.FindAll("[role=tab]"));
+        Assert.Empty(cut.FindComponents<EventQuestsPanel>());
+        Assert.Empty(cut.FindComponents<EventMembersPanel>());
+        Assert.Empty(cut.FindComponents<EventInvitationsPanel>());
+        Assert.Empty(cut.FindComponents<EventSettingsPanel>());
+        Assert.Contains("Member description", cut.Markup);
+        Assert.Contains("Leave Event", cut.Markup);
         Assert.DoesNotContain("Invitations", cut.Markup);
         Assert.DoesNotContain("Settings", cut.Markup);
-        cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Quests").Click();
-        var quests = cut.FindComponent<EventQuestsPanel>();
-        Assert.Equal(eventId, quests.Instance.EventId);
-        Assert.False(quests.Instance.CanModerate);
-        Assert.Equal($"/quests?view=Discover&eventId={eventId}", quests.Find("a").GetAttribute("href"));
-        cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Members").Click();
-        Assert.Equal(eventId, cut.FindComponent<EventMembersPanel>().Instance.EventId);
-        Assert.Contains("No individual membership records in this view.", cut.Markup);
     }
 
-    /// <summary>An owner receives the exact five-tab set, with real invitation content and editor/lifecycle settings composition.</summary>
-    /// <returns>Completion after rendering both owner-only tab contents.</returns>
-    [Fact]
-    public async Task EventDetailPageOwnerRendersInvitationsAndSettingsInAdditionToMemberTabs()
+    /// <summary>Creator, assigned-owner, and administrator projections receive the complete five-tab management composition.</summary>
+    /// <param name="principal">Management principal represented by the service projection.</param>
+    /// <param name="explicitOwner">Whether the projection also reports an explicit owner assignment.</param>
+    /// <returns>Completion after rendering operational, invitation, and settings panel content.</returns>
+    [Theory]
+    [InlineData("creator", false)]
+    [InlineData("assigned owner", true)]
+    [InlineData("administrator", false)]
+    public async Task EventDetailPageManagementPrincipalRendersCompleteFiveTabSurface(
+        string principal, bool explicitOwner)
     {
         var eventId = Guid.Parse("65000000-0000-0000-0000-000000000051");
         await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
@@ -822,7 +840,10 @@ public sealed class EventComponentTests : BunitContext
             return method.Name switch
             {
                 nameof(IEventService.GetAsync) => Task.FromResult(new EventDetail(
-                    Summary(eventId, "Owner Event", EventStatus.Active, true, true), "Owner-only description")),
+                    Summary(eventId, $"{principal} Event", EventStatus.Active, explicitOwner, explicitOwner, true),
+                    "Management description")),
+                nameof(IEventService.ListMembersAsync) => Task.FromResult(
+                    new PageResult<MembershipSummary>([], 0, ((PageRequest)arguments[1]!).Page, 25)),
                 nameof(IEventService.ListInvitationsAsync) => Task.FromResult(
                     new PageResult<EventInvitationSummary>([], 0, ((PageRequest)arguments[1]!).Page, 25)),
                 _ => throw new NotSupportedException(method.Name)
@@ -832,43 +853,53 @@ public sealed class EventComponentTests : BunitContext
 
         Assert.Equal(["Overview", "Quests", "Members", "Invitations", "Settings"],
             cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Quests").Click();
+        var quests = cut.FindComponent<EventQuestsPanel>();
+        Assert.Equal(eventId, quests.Instance.EventId);
+        Assert.True(quests.Instance.CanModerate);
+        cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Members").Click();
+        Assert.Equal(eventId, cut.FindComponent<EventMembersPanel>().Instance.EventId);
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Invitations").Click();
         Assert.Equal(eventId, cut.FindComponent<EventInvitationsPanel>().Instance.EventId);
         Assert.Contains("No Event invitations.", cut.Markup);
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Settings").Click();
         var settings = cut.FindComponent<EventSettingsPanel>();
         Assert.Equal(eventId, settings.Instance.Detail.Summary.Id);
-        Assert.Equal("Owner-only description", settings.Instance.Detail.Description);
+        Assert.Equal("Management description", settings.Instance.Detail.Description);
+        Assert.Equal(explicitOwner, settings.Instance.Detail.Summary.IsOwner);
+        Assert.True(settings.Instance.Detail.Summary.CanManage);
         Assert.Single(settings.FindComponents<EventEditor>());
         Assert.Single(settings.FindComponents<EventLifecycle>());
         Assert.Contains("Save changes", settings.Markup);
         Assert.Contains("Event actions", settings.Markup);
     }
 
-    /// <summary>Losing ownership while Settings is selected resets the detail page to Overview and removes every owner-only surface.</summary>
-    /// <returns>Completion after the route reloads the downgraded member projection.</returns>
+    /// <summary>Losing management permission while Settings is selected resets to Overview and removes every management surface.</summary>
+    /// <returns>Completion after the route reloads a downgraded ordinary-member projection.</returns>
     [Fact]
-    public async Task EventDetailPageOwnerDowngradeWhileOwnerTabSelectedReturnsToOverview()
+    public async Task EventDetailPageManagementPermissionLossResetsToOverviewAndHidesAllManagementSurfaces()
     {
         var eventId = Guid.Parse("66000000-0000-0000-0000-000000000061");
-        var isOwner = true;
+        var canManage = true;
         await ConfigureEventPageAsync(SnapshotServiceProxy.Create<IEventService>((method, arguments) =>
         {
             Assert.Equal(nameof(IEventService.GetAsync), method.Name);
             Assert.Equal(eventId, (Guid)arguments![0]!);
             return Task.FromResult(new EventDetail(
-                Summary(eventId, "Ownership changed", EventStatus.Active, true, isOwner), "Current description"));
+                Summary(eventId, "Permission changed", EventStatus.Active, true, false, canManage), "Current description"));
         }));
         var cut = Render<EventDetailPage>(parameters => parameters.Add(component => component.Id, eventId));
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Settings").Click();
         Assert.Single(cut.FindComponents<EventSettingsPanel>());
 
-        isOwner = false;
+        canManage = false;
         cut.Render(parameters => parameters.Add(component => component.Id, eventId));
 
-        Assert.Equal(["Overview", "Quests", "Members"],
-            cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
+        Assert.Empty(cut.FindAll("[role=tab]"));
         Assert.Single(cut.FindAll("h2"), heading => heading.TextContent.Trim() == "About this Event");
+        Assert.Empty(cut.FindComponents<EventQuestsPanel>());
+        Assert.Empty(cut.FindComponents<EventMembersPanel>());
+        Assert.Empty(cut.FindComponents<EventInvitationsPanel>());
         Assert.Empty(cut.FindComponents<EventSettingsPanel>());
         Assert.DoesNotContain("Invitations", cut.Markup);
         Assert.DoesNotContain("Settings", cut.Markup);
@@ -1378,9 +1409,13 @@ public sealed class EventComponentTests : BunitContext
         string name,
         EventStatus status,
         bool isMember,
-        bool isOwner = false) =>
+        bool isOwner = false,
+        bool? canManage = null) =>
         new(id, name, $"{name} discovery", new(2026, 9, 10), new(2026, 9, 12),
-            "Europe/Prague", status, [], isMember, isOwner, $"{name}-version");
+            "Europe/Prague", status, [], isMember, isOwner, $"{name}-version")
+        {
+            CanManage = canManage ?? isOwner
+        };
 
     /// <summary>Confirming owner-role removal dispatches only the owner operation with the selected Event and user identifiers.</summary>
     /// <returns>Completion after the real dialog callback and subsequent panel refresh.</returns>
@@ -1741,7 +1776,7 @@ public sealed class EventComponentTests : BunitContext
     {
         var selections = new List<string>();
         var cut = Render<EventManagementTabs>(parameters => parameters
-            .Add(component => component.IsOwner, true)
+            .Add(component => component.CanManage, true)
             .Add(component => component.Selected, "overview")
             .Add(component => component.Disabled, true)
             .Add(component => component.SelectedChanged, value => selections.Add(value)));
