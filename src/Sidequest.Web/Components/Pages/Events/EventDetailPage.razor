@@ -23,7 +23,7 @@
         @switch (selectedTab)
         {
             case "detail":
-                <EventCard Item="detail.Summary" Description="detail.Description" DetailLayout="true"
+                <EventCard Item="detail.Summary" Description="@detail.Description" DetailLayout="true"
                            ShowParticipationActions="true" ShowNotificationPreferences="true"
                            JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync">
                     <AdditionalActions>
@@ -54,7 +54,7 @@
     }
     else
     {
-        <EventCard Item="detail.Summary" Description="detail.Description" DetailLayout="true"
+        <EventCard Item="detail.Summary" Description="@detail.Description" DetailLayout="true"
                    ShowParticipationActions="true" ShowNotificationPreferences="true"
                    JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync" />
     }

@@ -991,6 +991,7 @@ public sealed class EventComponentTests : BunitContext
         Assert.Empty(cut.FindComponents<EventInvitationsPanel>());
         Assert.Empty(cut.FindComponents<EventSettingsPanel>());
         Assert.Single(cut.FindComponents<EventCard>());
+        Assert.Contains("Member description", cut.Markup);
         Assert.Contains("Leave Event", cut.Markup);
         Assert.Contains("Notification preferences", cut.Markup);
         Assert.DoesNotContain("Invitations", cut.Markup);
@@ -1029,6 +1030,7 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal(["Detail", "Quests", "Members", "Invitations", "Settings"],
             cut.FindAll("[role=tab]").Select(tab => tab.TextContent.Trim()));
         Assert.Single(cut.FindComponents<EventCard>());
+        Assert.Contains("Management description", cut.Markup);
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Quests").Click();
         Assert.Empty(cut.FindComponents<EventCard>());
         var quests = cut.FindComponent<EventQuestsPanel>();
