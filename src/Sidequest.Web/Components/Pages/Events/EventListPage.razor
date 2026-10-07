@@ -40,17 +40,28 @@
     <div class="event-card-grid">
         @foreach (var item in result.Items)
         {
-            <EventCard @key="item.Id" Item="item" ShowJoinAction="@(kind == EventListKind.All)"
-                       Busy="Busy" JoinRequested="JoinAsync" />
+            <EventCard @key="item.Id" Item="item" ShowParticipationActions="true"
+                       Busy="Busy" JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync" />
         }
     </div>
     <EventPager Page="page" TotalCount="result.TotalCount" Busy="Busy" Changed="ChangePageAsync" />
 }
 
+<ConfirmActionDialog Open="@(leaveEventId is not null)"
+                     Title="Leave Event"
+                     ConfirmLabel="Leave Event"
+                     Busy="Busy"
+                     Error="@Error"
+                     Confirmed="LeaveAsync"
+                     Dismissed="DismissLeaveDialogAsync">
+    <p>Leaving removes your Quest invitations, attendance, follows, and applicable calendar entries for this Event.</p>
+</ConfirmActionDialog>
+
 @code {
     private EventListKind kind = EventListKind.All;
     private int page = 1;
     private PageResult<EventSummary>? result;
+    private Guid? leaveEventId;
     /// <inheritdoc />
     protected override Task OnInitializedAsync() => LoadAsync();
     /// <inheritdoc />
@@ -78,6 +89,27 @@
     private Task JoinAsync(Guid eventId) => RunMutationAsync(async token =>
     {
         await Events.JoinAsync(eventId, token);
+        await LoadPageAsync(token);
+    });
+
+    private Task OpenLeaveDialogAsync(Guid eventId)
+    {
+        leaveEventId = eventId;
+        return Task.CompletedTask;
+    }
+
+    private Task DismissLeaveDialogAsync()
+    {
+        leaveEventId = null;
+        return Task.CompletedTask;
+    }
+
+    private Task LeaveAsync() => RunMutationAsync(async token =>
+    {
+        if (leaveEventId is not { } eventId)
+            return;
+        await Events.LeaveAsync(eventId, token);
+        leaveEventId = null;
         await LoadPageAsync(token);
     });
 

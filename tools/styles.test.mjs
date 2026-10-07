@@ -50,14 +50,33 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 
-test("Event management tabs keep neutral hover and preserve selected gradient on hover", () => {
+test("Event management tabs use a bottom-border tab contract with a white selected surface", () => {
     const styles = compile(join(web, "wwwroot", "app.scss")).css;
     assert.match(
         styles,
-        /\.management-tabs button:hover:not\(:disabled\)\s*\{[^}]*color: var\(--sq-ink\);[^}]*background: color-mix\(in srgb, var\(--sq-blue\) 12%, white\);[^}]*filter: none;[^}]*box-shadow: none;/s);
+        /\.management-tabs\s*\{[^}]*background: transparent;[^}]*border: 0;[^}]*border-bottom: 1px solid var\(--sq-line\);[^}]*border-radius: 0;/s);
     assert.match(
         styles,
-        /\.management-tabs button\.selected,\s*\.management-tabs button\.selected:hover:not\(:disabled\)\s*\{[^}]*color: white;[^}]*background: linear-gradient\(135deg, var\(--sq-blue\), var\(--sq-violet\)\);[^}]*border-color: transparent;/s);
+        /\.management-tabs button\s*\{[^}]*background: transparent;[^}]*border-radius: 0\.8rem 0\.8rem 0 0;[^}]*box-shadow: none;[^}]*margin-bottom: -1px;/s);
+    const selected = styles.match(
+        /\.management-tabs button\.selected,\s*\.management-tabs button\.selected:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/s);
+    assert.ok(selected);
+    assert.match(selected.groups.body, /background: white;/);
+    assert.match(selected.groups.body, /border-bottom-color: white;/);
+    assert.doesNotMatch(selected.groups.body, /linear-gradient|border-radius:\s*(?:999|100%|50%)/);
+});
+
+test("Event detail cards keep equal columns, cap media to its column, and collapse at the mobile boundary", () => {
+    const styles = compile(join(web, "wwwroot", "app.scss")).css;
+    assert.match(
+        styles,
+        /main \.event-card\.event-card-detail\s*\{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\);[^}]*overflow: hidden;/s);
+    assert.match(
+        styles,
+        /main \.event-card\.event-card-detail \.event-card-media\s*\{[^}]*max-width: 100%;[^}]*min-height: 100%;/s);
+    assert.match(
+        styles,
+        /@media \(max-width: 640px\)\s*\{[\s\S]*?main \.event-card\.event-card-detail\s*\{[^}]*grid-template-columns: 1fr;/s);
 });
 
 test("Only the requested NuGet proxy is enabled and local settings are excluded from publishing", async () => {

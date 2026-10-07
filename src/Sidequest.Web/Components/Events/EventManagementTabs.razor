@@ -12,10 +12,10 @@
 
 @code {
     private static readonly IReadOnlyList<(string Id, string Label)> Tabs =
-        [("overview", "Overview"), ("quests", "Quests"), ("members", "Members"), ("invitations", "Invitations"), ("settings", "Settings")];
+        [("detail", "Detail"), ("quests", "Quests"), ("members", "Members"), ("invitations", "Invitations"), ("settings", "Settings")];
 
     /// <summary>Identifier of the tab currently owned by the Event detail page.</summary>
-    [Parameter, EditorRequired] public string Selected { get; set; } = "overview";
+    [Parameter, EditorRequired] public string Selected { get; set; } = "detail";
     /// <summary>Whether the actor is the creator, an assigned owner, or an administrator permitted to see management tabs.</summary>
     [Parameter] public bool CanManage { get; set; }
     /// <summary>Whether tab changes are temporarily unavailable.</summary>
