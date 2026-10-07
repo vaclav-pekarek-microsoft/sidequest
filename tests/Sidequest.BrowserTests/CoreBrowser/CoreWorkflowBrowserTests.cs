@@ -135,16 +135,23 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         }
         await eventOwner.GotoAsync($"/events/{eventId}");
         var releaseStartup = navigateDuringCircuitStartup ? await startup.Task.WaitAsync(TimeSpan.FromSeconds(15)) : null;
-        try
+        if (navigateDuringCircuitStartup)
         {
-            await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Quest moderation", Exact = true }).ClickAsync();
-            await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
-            await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
+            try
+            {
+                await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Back to Events", Exact = true }).ClickAsync();
+                await Expect(eventOwner).ToHaveURLAsync(new Regex("/events$"));
+            }
+            finally
+            {
+                releaseStartup?.Invoke();
+            }
+            await eventOwner.GotoAsync($"/events/{eventId}");
         }
-        finally
-        {
-            releaseStartup?.Invoke();
-        }
+        await eventOwner.GetByRole(AriaRole.Tab, new() { Name = "Quests", Exact = true }).ClickAsync();
+        await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Quest moderation", Exact = true }).ClickAsync();
+        await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
+        await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
         await Expect(eventOwner.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToBeEnabledAsync();
         await OpenModerationQuestAsync(eventOwner, eventId, title);
         await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
