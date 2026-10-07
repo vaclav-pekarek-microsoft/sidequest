@@ -400,6 +400,18 @@ main .event-card.event-card {
 }
 main .quest-card.quest-card { border-top-color: #b9c9e2; }
 main .quest-card.quest-card-joined { border-top-color: var(--sq-cyan); }
+.event-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 1rem;
+    margin-block: 1rem;
+
+    .event-card {
+        height: 100%;
+        margin-block: 0;
+    }
+}
 
 .section-heading { margin: 0 0 .75rem; font-size: 1.15rem; }
 .field-grid {
@@ -551,12 +563,14 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 
 @media (max-width: 900px) {
     .feature-grid { grid-template-columns: 1fr; margin-top: -2rem; }
+    .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .authentication-shell { grid-template-columns: 1fr; }
     .authentication-brand { min-height: 23rem; padding: 2rem; }
     .authentication-promise h2 { max-width: 18ch; font-size: clamp(2rem, 8vw, 3.5rem); }
 }
 
 @media (max-width: 640px) {
+    .event-card-grid { grid-template-columns: 1fr; }
     .site-header { position: static; align-items: flex-start; flex-direction: column; }
     .site-navigation { width: 100%; align-items: stretch; }
     .site-navigation a:not(.button-link) { flex: 1 1 auto; justify-content: center; }

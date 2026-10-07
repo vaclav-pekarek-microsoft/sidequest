@@ -101,7 +101,7 @@ test("bootstrap administrator alias matches the deployed Microsoft mailbox contr
         assert.equal(buildArmParameters(parameters({ bootstrapAdministratorAlias: value }), accountContext)
             .parameters.bootstrapAdministratorAlias.value, value);
     }
-    for (const value of ["", ".alias", "alias.", "-alias", "alias-", "alias@microsoft.com", "a b", "équipe", "A".repeat(65), 1, false]) {
+    for (const value of ["", ".alias", "alias.", "-alias", "alias-", "alias@microsoft.cz", "a b", "équipe", "A".repeat(65), 1, false]) {
         rejects(() => buildArmParameters(parameters({ bootstrapAdministratorAlias: value }), accountContext), "alias");
     }
 });
@@ -390,7 +390,7 @@ test("actual CLI invalid JSON UTF-8 shapes and unknown keys fail without sensiti
 test("actual CLI semantic failures emit only actionable errors and exit one", () => {
     cliFailure(JSON.stringify({ parameters: {}, accountContext }), "required");
     cliFailure(JSON.stringify(request({ workforceTenantId: "SECRET" })), "guid");
-    cliFailure(JSON.stringify(request({ bootstrapAdministratorAlias: "alias@microsoft.com" })), "alias");
+    cliFailure(JSON.stringify(request({ bootstrapAdministratorAlias: "alias@microsoft.cz" })), "alias");
     cliFailure(JSON.stringify({ ...request(), accountContext: {
         ...accountContext, tenantId: parameters().sqlAdministratorGroupObjectId
     } }), "tenant");

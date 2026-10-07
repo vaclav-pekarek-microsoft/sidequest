@@ -32,10 +32,10 @@ else
 {
     @if (!Sent)
     {
-        <p>Enter your Microsoft alias. We will send a one-time code to <strong>alias@microsoft.com</strong>.</p>
+        <p>Enter your Microsoft alias. We will send a one-time code to <strong>alias@microsoft.cz</strong>.</p>
         @if (InvalidAlias)
         {
-            <p class="validation-message" role="alert">Enter a valid Microsoft alias without @@microsoft.com.</p>
+            <p class="validation-message" role="alert">Enter a valid Microsoft alias without @@microsoft.cz.</p>
         }
         <form class="section-box magic-code-form" method="post" action="/auth/magic/request"
               data-enhance="false" data-submit-progress>
@@ -46,7 +46,7 @@ else
             <div class="alias-input">
                 <input id="alias" name="alias" autocomplete="username" inputmode="email"
                        placeholder="alias" required maxlength="64" />
-                <span>@@microsoft.com</span>
+                <span>@@microsoft.cz</span>
             </div>
             <button type="submit" data-submitting-label="Sending code...">Send magic code</button>
         </form>

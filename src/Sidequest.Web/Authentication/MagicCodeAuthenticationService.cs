@@ -27,7 +27,7 @@ public sealed class MagicCodeAuthenticationService(
     private const int MaximumAttempts = 5;
     private const int HashIterations = 100_000;
     private const string LocalDevelopmentCode = "000000";
-    private const string LocalDevelopmentAdministratorEmail = "vaclav.pekarek@microsoft.com";
+    private const string LocalDevelopmentAdministratorEmail = "vaclav.pekarek@microsoft.cz";
     private static readonly TimeSpan ChallengeLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MinimumRequestInterval = TimeSpan.FromMinutes(1);
 
@@ -168,6 +168,7 @@ public sealed class MagicCodeAuthenticationService(
             return null;
         }
 
+        user.Email = challenge.Email;
         user.LastSignedInUtc = now;
         challenge.ConsumedUtc = now;
         var configuredBootstrap = isNew &&

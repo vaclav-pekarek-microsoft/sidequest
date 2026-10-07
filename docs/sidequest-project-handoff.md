@@ -90,7 +90,7 @@ The application should therefore generally be **Quest-first rather than Event-fi
 The application is internal.
 
 Authentication uses a one-time **magic code** sent to a user-supplied Microsoft
-alias at `alias@microsoft.com`.
+alias at `alias@microsoft.cz`.
 
 Only a user who proves current control of that Microsoft mailbox may sign in.
 Codes are short-lived, single-use, attempt-limited, and request-throttled. Sidequest
@@ -100,15 +100,17 @@ Application-specific permissions should not depend directly on Microsoft Entra r
 
 Instead:
 
-- verified `@microsoft.com` mailbox control = authentication
+- verified `@microsoft.cz` mailbox control = authentication
 - a stable Sidequest tenant/object identity = identity and account continuity
 - Sidequest database = application roles and ownership
 
-The deployed magic-code flow replaces interactive Entra sign-in. Local Development
-retains the loopback-only synthetic persona flow. Existing accounts may be linked
-only when exactly one eligible account has the verified Microsoft address; ambiguous,
-disabled, or departed matches fail closed. Microsoft Graph remains a separate,
-optional directory integration and is not an authentication dependency.
+Deployed hosts register no interactive Entra/OpenID sign-in flow. Local Development
+retains the loopback-only synthetic persona flow. Existing accounts may be linked by
+normalized alias when exactly one eligible account has either the current
+`@microsoft.cz` address or the legacy `@microsoft.com` address; a successful legacy
+link updates the stored contact to `@microsoft.cz`. Ambiguous, disabled, or departed
+matches fail closed. Codes are never sent to the legacy domain. Microsoft Graph remains
+a separate, optional directory integration and is not an authentication dependency.
 
 ---
 
@@ -1177,9 +1179,10 @@ V1 UI and templates are English; dates and times respect user locale.
 ## 49. Authorization and Privacy Contract
 
 **Identity:** retain `(tenant ID, object ID)` as the stable external account key.
-For a verified alias, normalize stored valid `@microsoft.com` addresses before
-comparison and link an existing eligible account only when one normalized alias
-matches unambiguously; otherwise create a stable
+For a verified alias, normalize stored valid `@microsoft.cz` addresses and legacy
+`@microsoft.com` addresses to the current domain before comparison. Link an existing
+eligible account only when one normalized alias matches unambiguously and update a
+legacy stored contact to `@microsoft.cz`; otherwise create a stable
 application-issued object ID in the configured account namespace. Email and display
 name remain mutable contact/display data after linking and never grant application
 roles or resource access. Authentication proves control of the addressed Microsoft
@@ -2323,6 +2326,7 @@ not V1 release requirements.
 | D44 | 2026-10-05 | Replace deployed interactive Entra sign-in with a Microsoft-alias magic-code flow delivered through the existing Azure Communication Services Email adapter. Retain loopback-only synthetic Development sign-in. Codes expire after 10 minutes, are single-use six-digit cryptographic values, allow at most five verification attempts, and use generic request/verification responses with resend/request throttling. Persist only salted code hashes and challenge metadata in SQL. Preserve existing ownership by linking only a single eligible account whose stored address exactly matches the verified `alias@microsoft.com`; ambiguous, disabled, or departed matches fail closed. New aliases receive stable application-issued object IDs in the configured account namespace. Email control authenticates the user but grants no application role, membership, ownership, or administrator permission. |
 | D45 | 2026-10-06 | Select `vaclav.pekarek` as the initial administrator bootstrap alias. Normalize valid stored Microsoft mailboxes to their lower-case aliases before account-link comparison, so casing and surrounding storage whitespace do not create distinct identities. If multiple user records normalize to the verified alias, authentication fails closed rather than selecting an account. |
 | D46 | 2026-10-07 | Simplify Event participation for the internal tool: every eligible signed-in user can list all Active Events and join one directly without owner approval. Event creation is one step and immediately Active; Draft publication remains only for legacy records. Joined Event members can read that Event's authorized Quests. Event detail owns tabbed Overview, Quests, Members, Invitations, and Settings management instead of separate product navigation. Event cancel/delete/leave/member-owner removal/invitation-revocation actions require modal confirmation. Empty Quest results direct users to find and join an Event. Events expose only attendance membership (joined or not joined), with no Event-follow action. This supersedes D01/D14 and the Event portions of sections 7–8, 48–52 that require membership requests or Draft-first creation; it does not remove Quest-level Following. |
+| D47 | 2026-10-07 | Deployed authentication is magic-code-only for `alias@microsoft.cz`; no interactive Entra/OpenID handler or fallback is registered. Retain loopback-only synthetic Development personas for automated and local testing. Normalize a unique eligible legacy `alias@microsoft.com` account by alias for continuity, update its stored contact to `alias@microsoft.cz` after successful verification, and fail closed on cross-domain ambiguity. Never deliver a code to the legacy domain. Microsoft Graph and Azure managed identity remain separate directory and infrastructure integrations, not user sign-in methods. This supersedes the authentication-domain and direct-Entra-entry portions of D42, D44 and D45. |
 
 The full reconciled baseline is accepted in D34. Superseded decisions remain documented
 for traceability and must not be reintroduced as requirements.
@@ -2341,7 +2345,7 @@ implementation in this documentation session.
 
 | Gate | Needed by | Required evidence |
 |------|-----------|-------------------|
-| Microsoft alias policy and account namespace | Live authentication integration | Approved `@microsoft.com` mailbox-control policy, configured namespace ID and normalized account-link review; initial administrator bootstrap alias is `vaclav.pekarek` |
+| Microsoft alias policy and account namespace | Live authentication integration | Approved `@microsoft.cz` mailbox-control policy, configured namespace ID and normalized current/legacy account-link review; initial administrator bootstrap alias is `vaclav.pekarek` |
 | Organizational departure verification | Live last-owner recovery | Approved process/evidence for confirming the last eligible owner left Microsoft; outages or inactivity are not sufficient |
 | Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |
