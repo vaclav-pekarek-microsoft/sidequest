@@ -1,0 +1,23 @@
+<a class="brand-lockup @Class" href="/" aria-label="Sidequest home">
+    <span class="brand-symbol" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+    </span>
+    <span class="brand-copy">
+        <strong>Sidequest</strong>
+        @if (ShowTagline)
+        {
+            <small>Make time for what connects us.</small>
+        }
+    </span>
+</a>
+
+@code {
+    /// <summary>Gets or sets additional shared CSS classes applied to the brand link.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Gets or sets whether the compact product tagline is rendered beneath the product name.</summary>
+    [Parameter] public bool ShowTagline { get; set; }
+}

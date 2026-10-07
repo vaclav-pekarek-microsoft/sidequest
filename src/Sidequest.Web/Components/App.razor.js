@@ -22,6 +22,19 @@ function field(form, name, value) {
     input.value = value;
 }
 
+function beginSubmit(form, submitter) {
+    if (!form.hasAttribute("data-submit-progress")) return true;
+    if (form.dataset.submitPending === "true") return false;
+    form.dataset.submitPending = "true";
+    form.setAttribute("aria-busy", "true");
+    const button = submitter ?? form.querySelector('button[type="submit"]');
+    if (button) {
+        button.disabled = true;
+        if (button.dataset?.submittingLabel) button.textContent = button.dataset.submittingLabel;
+    }
+    return true;
+}
+
 async function changeAuthentication(target, submitter) {
     if (changingAuthentication) return;
     changingAuthentication = true;
@@ -76,7 +89,12 @@ function bindReconnect() {
 export async function beforeWebStart() {
     document.addEventListener("submit", async event => {
         const form = event.target;
-        if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-authentication-change")) return;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (!beginSubmit(form, event.submitter)) {
+            event.preventDefault();
+            return;
+        }
+        if (!form.hasAttribute("data-authentication-change")) return;
         event.preventDefault();
         await changeAuthentication(form, event.submitter);
     }, true);

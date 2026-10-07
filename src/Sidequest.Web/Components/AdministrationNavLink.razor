@@ -1,0 +1,16 @@
+@inject AdministrationService Administration
+
+@if (isAdministrator)
+{
+    <NavLink href="/administration">Administration</NavLink>
+}
+
+@code {
+    private bool isAdministrator;
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        isAdministrator = await Administration.CanAccessAsync();
+    }
+}
