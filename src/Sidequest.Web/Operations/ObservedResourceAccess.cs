@@ -22,7 +22,7 @@ internal sealed class ObservedResourceAccess(IResourceAccess inner, OperationalA
 
     /// <inheritdoc />
     public Task<Quest> RequireQuestAsync(ISidequestDbContext db, Guid questId, Guid userId,
-        bool ownerOnly = false, bool moderation = false, CancellationToken cancellationToken = default) =>
+        bool ownerOnly = false, CancellationToken cancellationToken = default) =>
         metrics.ObserveAsync(OperationalActivity.QuestAuthorization,
-            () => inner.RequireQuestAsync(db, questId, userId, ownerOnly, moderation, cancellationToken), cancellationToken);
+            () => inner.RequireQuestAsync(db, questId, userId, ownerOnly, cancellationToken), cancellationToken);
 }

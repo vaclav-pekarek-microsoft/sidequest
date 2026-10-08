@@ -29,7 +29,7 @@ else if (reauthorizationRequired && error is null)
     var checkVersion = authorizationVersion;
     <h1>@detail.Summary.Title</h1>
     <section class="section-box" aria-label="Quest details">
-        <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" Moderation="Moderation" />
+        <QuestCover AssetId="detail.Summary.CoverAssetId" QuestTitle="@detail.Summary.Title" />
         <p><a href="@($"/events/{detail.Summary.EventId}")">@detail.Summary.EventName</a></p>
         <p role="status"><strong>@detail.Summary.Status</strong> · @detail.Summary.Visibility · @detail.StatusReason</p>
         <QuestTimes ZoneId="@detail.Summary.TimeZoneId" StartUtc="@detail.Summary.StartUtc" EndUtc="@detail.Summary.EndUtc" />
@@ -45,9 +45,7 @@ else if (reauthorizationRequired && error is null)
             }
         </ul>
     </section>
-    @if (!Moderation)
-    {
-        <section class="section-box">
+    <section class="section-box">
             <h2 class="section-heading">Participation</h2>
             <p>@detail.Summary.AttendeeCount joined · @detail.Summary.FollowerCount following.
                 Suggested capacity: @(detail.Summary.SuggestedCapacity?.ToString() ?? "not set") (never a joining limit).</p>
@@ -61,37 +59,32 @@ else if (reauthorizationRequired && error is null)
             {
                 <p><a href="@($"/notifications/calendar/{Id}")" data-enhance-nav="false">Download my calendar entry</a></p>
             }
-        </section>
-        <section class="section-box">
+    </section>
+    <section class="section-box">
             <h2 class="section-heading">Attendees</h2>
             @if (detail.Attendees is { Count: > 0 })
             {
                 <ul>@foreach (var person in detail.Attendees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
             }
             else { <p>No current attendees.</p> }
-        </section>
-        @if (detail.Followers is not null)
-        {
-            <section class="section-box">
+    </section>
+    @if (detail.Followers is not null)
+    {
+        <section class="section-box">
                 <h2 class="section-heading">Followers (owners only)</h2>
                 <ul>@foreach (var person in detail.Followers) { <li @key="person.Id">@person.DisplayName</li> }</ul>
-            </section>
-        }
-        @if (detail.Invitees is not null)
-        {
-            <section class="section-box">
+        </section>
+    }
+    @if (detail.Invitees is not null)
+    {
+        <section class="section-box">
                 <h2 class="section-heading">Active private invitations (immediate access)</h2>
                 <ul>@foreach (var person in detail.Invitees) { <li @key="person.Id">@person.DisplayName</li> }</ul>
-            </section>
-        }
-        @if (detail.Summary.CanModerate)
-        {
-            <p><a href="@($"/quests/{Id}?moderation=true")">Open dedicated audited moderation view</a></p>
-        }
+        </section>
     }
-    @if (Moderation || detail.Summary.CanManage)
+    @if (detail.Summary.CanManage)
     {
-        <QuestManagement Detail="detail" Moderation="Moderation" Busy="@(ControlsDisabled || conflict || draftConflict)" Members="members"
+        <QuestManagement Detail="detail" Busy="@(ControlsDisabled || conflict || draftConflict)" Members="members"
                          MemberPage="memberPage" MoreMembers="moreMembers" PageChanged="page => LoadMembersAsync(requestVersion, checkVersion, page)"
                          Draft="managementDraft" DraftChanged="draft => SetManagementDraft(requestVersion, checkVersion, draft)"
                          Execute="request => ExecuteAsync(requestVersion, checkVersion, request)" />

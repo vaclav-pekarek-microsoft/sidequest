@@ -9,7 +9,7 @@ using Sidequest.Web.Experience;
 
 namespace Sidequest.Web.Components.Pages.Quests;
 
-/// <summary>Composes ordinary or audited moderation details and refreshes protected data after every command.</summary>
+/// <summary>Composes authorized Quest details and refreshes protected data after every command.</summary>
 public partial class QuestDetails : IAsyncDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
@@ -39,8 +39,6 @@ public partial class QuestDetails : IAsyncDisposable
 
     /// <summary>Quest route identifier, reauthorized for every load and command.</summary>
     [Parameter] public Guid Id { get; set; }
-    /// <summary>Explicit audited Event-owner view; it never grants ordinary private participation access.</summary>
-    [Parameter] public bool Moderation { get; set; }
     [Inject] private IQuestService Quests { get; set; } = default!;
     [Inject] private IEventService Events { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -120,18 +118,17 @@ public partial class QuestDetails : IAsyncDisposable
         var requestVersion = navigationVersion;
         var checkVersion = authorizationVersion;
         var questId = Id;
-        var moderation = Moderation;
         Clear(preserveDraft);
         if (preserveDraft)
             StateHasChanged();
-        var next = await Quests.GetAsync(questId, moderation, cancellationToken);
+        var next = await Quests.GetAsync(questId, cancellationToken);
         if (!IsCurrent(requestVersion, checkVersion))
             return;
-        var nextHistory = await Quests.HistoryAsync(questId, moderation, cancellationToken);
+        var nextHistory = await Quests.HistoryAsync(questId, cancellationToken);
         if (!IsCurrent(requestVersion, checkVersion))
             return;
         PageResult<MembershipSummary>? nextMembers = null;
-        if (next.Summary.CanManage && !moderation)
+        if (next.Summary.CanManage)
         {
             nextMembers = await Events.ListMembersAsync(next.Summary.EventId, new PageRequest(memberPage), cancellationToken);
             if (!IsCurrent(requestVersion, checkVersion))
@@ -140,7 +137,7 @@ public partial class QuestDetails : IAsyncDisposable
         detail = next;
         history = nextHistory;
         ApplyMembers(nextMembers);
-        if (!moderation && !next.Summary.CanManage)
+        if (!next.Summary.CanManage)
         {
             if (HasManagementIntention)
                 conflict = false;
@@ -176,9 +173,7 @@ public partial class QuestDetails : IAsyncDisposable
         var token = cancellationToken;
         switch (request.Action)
         {
-            case "publish":
-            case "reinstate": await Quests.ChangeStatusAsync(Id, version, QuestStatus.Active, request.Reason, token); break;
-            case "suspend": await Quests.ChangeStatusAsync(Id, version, QuestStatus.Suspended, request.Reason, token); break;
+            case "publish": await Quests.ChangeStatusAsync(Id, version, QuestStatus.Active, request.Reason, token); break;
             case "cancel": await Quests.ChangeStatusAsync(Id, version, QuestStatus.Cancelled, request.Reason, token); break;
             case "archive": await Quests.ChangeStatusAsync(Id, version, QuestStatus.Archived, request.Reason, token); break;
             case "delete":
@@ -211,7 +206,7 @@ public partial class QuestDetails : IAsyncDisposable
 
     private Task LoadMembersAsync(int requestVersion, int checkVersion, int page) =>
         !IsCurrent(requestVersion, checkVersion) || ControlsDisabled || conflict || draftConflict || detail is null ||
-        !detail.Summary.CanManage || Moderation ? Task.CompletedTask : RunAsync(async () =>
+        !detail.Summary.CanManage ? Task.CompletedTask : RunAsync(async () =>
     {
         memberPage = page;
         await FetchMembersAsync();
@@ -219,7 +214,7 @@ public partial class QuestDetails : IAsyncDisposable
 
     private async Task FetchMembersAsync()
     {
-        if (detail is null || Moderation)
+        if (detail is null)
             return;
         var requestVersion = navigationVersion;
         var checkVersion = authorizationVersion;

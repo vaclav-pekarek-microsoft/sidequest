@@ -1,6 +1,6 @@
 namespace Sidequest.Application.Quests;
 
-/// <summary>Authorized Quest action history, excluding protected moderation details from ordinary viewer projections.</summary>
+/// <summary>Authorized Quest action history, excluding protected management details from ordinary viewer projections.</summary>
 /// <param name="Action">Authorized action label with persisted people labels in place of internal account identifiers.</param>
 /// <param name="Reason">Safe explanation visible in the selected history view.</param>
 /// <param name="OccurredUtc">UTC action instant.</param>

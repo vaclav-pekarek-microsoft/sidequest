@@ -7,7 +7,7 @@ namespace Sidequest.Web.Operations;
 /// <summary>Maps mediated private image delivery; Blob names, URLs and SAS values never cross this boundary.</summary>
 public static class MediaEndpoints
 {
-    /// <summary>Maps authenticated GET /media/covers/{assetId}, with optional explicit audited moderation.</summary>
+    /// <summary>Maps authenticated GET /media/covers/{assetId}.</summary>
     /// <param name="endpoints">The host endpoint builder.</param>
     /// <returns>The mapped route for additional conventions.</returns>
     public static RouteHandlerBuilder MapSidequestMedia(this IEndpointRouteBuilder endpoints) =>
@@ -15,7 +15,7 @@ public static class MediaEndpoints
 
     private static async Task<IResult> ReadAsync(Guid assetId, HttpContext context,
         [FromServices] AuthenticationStateProvider authenticationState, [FromServices] IMediaService media,
-        CancellationToken cancellationToken, [FromQuery] bool moderation = false)
+        CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.XContentTypeOptions = "nosniff";
@@ -28,7 +28,7 @@ public static class MediaEndpoints
         if (authenticationState is not IHostEnvironmentAuthenticationStateProvider host)
             throw new InvalidOperationException("Media requests require a host-initialized authentication state provider.");
         host.SetAuthenticationState(Task.FromResult(new AuthenticationState(context.User)));
-        var image = await media.ReadAsync(assetId, moderation, cancellationToken);
+        var image = await media.ReadAsync(assetId, cancellationToken);
         return Results.File(image.Data, image.ContentType, enableRangeProcessing: false);
     }
 }

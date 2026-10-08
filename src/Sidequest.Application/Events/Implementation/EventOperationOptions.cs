@@ -1,14 +1,8 @@
 namespace Sidequest.Application.Events.Implementation;
 
-/// <summary>Conservative configurable resource limits for individual requests, invitations, and one-time bulk actions.</summary>
+/// <summary>Conservative configurable resource limits for individual requests and invitations.</summary>
 public sealed class EventOperationOptions
 {
-    /// <summary>Maximum deduplicated recipients in a complete group snapshot; exceeding this adds nobody.</summary>
-    public int MaximumBulkRecipients { get; init; } = 5000;
-
-    /// <summary>Maximum bulk starts by one actor in one hour.</summary>
-    public int BulkStartsPerHour { get; init; } = 5;
-
     /// <summary>Maximum requests per actor and Event in one hour, including retained withdrawn/rejected requests.</summary>
     public int RequestsPerHour { get; init; } = 5;
 
@@ -20,8 +14,7 @@ public sealed class EventOperationOptions
 
     internal void Validate()
     {
-        if (MaximumBulkRecipients is < 1 or > 100000 || BulkStartsPerHour < 1 ||
-            RequestsPerHour < 1 || InvitationsPerHour < 1 || DirectorySearchesPerMinute < 1)
-            throw new ArgumentException("Event operation limits must be positive and the recipient limit at most 100000.");
+        if (RequestsPerHour < 1 || InvitationsPerHour < 1 || DirectorySearchesPerMinute < 1)
+            throw new ArgumentException("Event operation limits must be positive.");
     }
 }

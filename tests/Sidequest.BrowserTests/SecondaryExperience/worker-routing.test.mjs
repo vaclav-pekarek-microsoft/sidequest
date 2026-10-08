@@ -37,7 +37,7 @@ function harness() {
 
 for (const path of [
     "/media", "/media/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    "/MeDiA/CoVeRs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?moderation=true",
+    "/MeDiA/CoVeRs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     "//MEDIA//covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     "/%6dedia/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     "/media%2fcovers%2faaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

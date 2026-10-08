@@ -10,7 +10,7 @@ namespace Sidequest.Application.Quests;
 public interface IQuestService
 {
     /// <summary>Lists Quests in the selected authorized view without leaking private/draft resources or suppressed counts.</summary>
-    /// <param name="kind">Participation, ownership, discovery, history, joined-first Event-local board, or explicit moderation view.</param>
+    /// <param name="kind">Participation, ownership, discovery, history, or joined-first Event-local board.</param>
     /// <param name="eventId">Optional internal parent Event filter; null still restricts results to the actor's authorized scope.</param>
     /// <param name="page">One-based paging input with page size 1 through 100.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of the query.</param>
@@ -20,7 +20,7 @@ public interface IQuestService
     public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
         CancellationToken cancellationToken = default);
     /// <summary>Lists authorized Quests whose start instants match the optional range, filtering before totals and pagination.</summary>
-    /// <param name="kind">Authorized participation, ownership, discovery, history, joined-first Event-local board, or moderation view.</param>
+    /// <param name="kind">Authorized participation, ownership, discovery, history, or joined-first Event-local board.</param>
     /// <param name="eventId">Optional internal parent Event filter; absence never broadens authorization.</param>
     /// <param name="page">One-based paging input with page size 1 through 100.</param>
     /// <param name="dates">Inclusive lower and exclusive upper start-instant bounds; null endpoints are unbounded.</param>
@@ -30,14 +30,13 @@ public interface IQuestService
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<PageResult<QuestSummary>> ListAsync(QuestListKind kind, Guid? eventId, PageRequest page,
         QuestDateFilter dates, CancellationToken cancellationToken = default);
-    /// <summary>Reads authorized Quest detail through ordinary access or the separately audited private moderation path.</summary>
+    /// <summary>Reads authorized Quest detail.</summary>
     /// <param name="id">Internal Quest identifier; knowing it grants no access.</param>
-    /// <param name="moderation">Requests non-draft Event-owner moderation, which excludes invitation, attendee, and follower rosters.</param>
-    /// <param name="cancellationToken">Requests cooperative cancellation of the read and applicable access audit.</param>
+    /// <param name="cancellationToken">Requests cooperative cancellation of the read.</param>
     /// <returns>Authorized content with withheld counts/rosters represented as null, not fabricated zeros or empty collections.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The actor is forbidden or the resource is unavailable without existence disclosure.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
-    public Task<QuestDetail> GetAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default);
+    public Task<QuestDetail> GetAsync(Guid id, CancellationToken cancellationToken = default);
     /// <summary>Creates a Draft Quest for an eligible member of an Active, not-ended Event, atomically assigning the creator as first equal owner.</summary>
     /// <param name="eventId">Internal parent Event identifier supplying dates, zone, and individual membership boundary.</param>
     /// <param name="input">Local scheduling and content input; ownership assignment does not join or follow.</param>
@@ -55,11 +54,11 @@ public interface IQuestService
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Access, validation, lifecycle, fixed visibility, or concurrency checks fail.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task EditAsync(Guid id, string version, QuestInput input, CancellationToken cancellationToken = default);
-    /// <summary>Applies an allowed lifecycle transition; suspension/reinstatement requires Event ownership, not merely Quest ownership.</summary>
+    /// <summary>Applies an allowed owner-managed lifecycle transition.</summary>
     /// <param name="id">Internal Quest identifier.</param>
     /// <param name="version">Expected Base64 rowversion.</param>
     /// <param name="target">Requested lifecycle state, subject to accepted transition and effective-time guards.</param>
-    /// <param name="reason">Required explanation for moderation, cancellation, and other reason-requiring transitions.</param>
+    /// <param name="reason">Required explanation for cancellation and other reason-requiring transitions.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of the atomic transition.</param>
     /// <returns>A task completing after state/history and applicable durable delivery effects are persisted.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Actor permissions, reason validation, lifecycle, or concurrency checks fail.</exception>
@@ -124,14 +123,13 @@ public interface IQuestService
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Access, lifecycle, or last-eligible-owner guards fail.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task RemoveOwnerAsync(Guid id, Guid userId, CancellationToken cancellationToken = default);
-    /// <summary>Reads authorized Quest history, keeping moderation records restricted to permitted owners/moderators.</summary>
+    /// <summary>Reads authorized Quest history, keeping full management records restricted to Quest managers.</summary>
     /// <param name="id">Internal Quest identifier.</param>
-    /// <param name="moderation">Selects the explicit non-draft Event-owner moderation view rather than ordinary Quest access.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of history retrieval.</param>
-    /// <returns>Only action history the actor may see; ordinary access does not imply full moderation history.</returns>
+    /// <returns>Only action history the actor may see; ordinary access does not imply full management history.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The Quest or selected history view is unavailable to the actor.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
-    public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, CancellationToken cancellationToken = default);
     /// <summary>Builds a minimal online-authorized snapshot of the actor's joined Quests for per-account offline display.</summary>
     /// <param name="cancellationToken">Requests cooperative cancellation of snapshot retrieval.</param>
     /// <returns>Joined-only display data, excluding descriptions, rosters, contacts, images, invitations, and tokens; local storage never grants authorization.</returns>

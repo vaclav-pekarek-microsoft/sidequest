@@ -388,8 +388,8 @@ belong to the parent Event. An invitation alone never grants Event membership.
 Private Quests should not appear in general Event discovery.
 
 Invitations are tied to the recipient's tenant/object identity, not freely shareable
-bearer links. Event managers have a separate, audited moderation view as specified
-in section 49; "Private" does not mean hidden from Event moderation.
+bearer links. Event ownership does not grant access to another Quest owner's private
+Quest; the Event manager must also be a Quest owner or named invitee.
 Invited members can immediately view and join the Quest. There is no separate
 Accept/Decline action for private Quest invitations, and invitation alone is not attendance.
 
@@ -411,46 +411,17 @@ The parent Event owner does **not automatically gain edit permissions** for the 
 
 ---
 
-## 18. Event Owner Moderation of Quests
+## 18. Quest Management Boundaries
 
-Although Event owners cannot directly edit someone else's Quest, they should have a moderation mechanism.
+Quest creators, assigned Quest owners, and Administrators are responsible for Quest
+content, ownership, invitations, attendance management, cancellation, and deletion.
+Event ownership alone grants no Quest access or management permission.
 
-An Event owner may **suspend a Quest**.
-
-Suspending requires a mandatory written reason.
-
-Example:
-
-> This Quest conflicts with company event policy.
-
-Suspension should:
-
-- change Quest status
-- notify Quest owners
-- notify joined attendees
-- notify followers
-- record the reason
-- record who suspended it
-- record when it happened
-
-There should not be a casual:
-
-> hide → unhide → hide
-
-workflow.
-
-A proper state transition and audit history should exist.
-
-The accepted lifecycle states (with exact transitions in section 51) are:
-
-- Draft
-- Active
-- Suspended
-- Cancelled
-- Completed
-- Archived
-
-Reinstatement is explicit, requires a reason, and triggers notifications.
+Quest moderation, suspension, and reinstatement are not product functions. The
+`Suspended` state remains only for compatible handling of historical records. Legacy
+Suspended Quests may be edited, have attendees removed, be cancelled, complete at
+their end time, or be cancelled by their parent Event, but cannot transition to or
+from Suspended through a user command.
 
 ---
 
@@ -809,7 +780,8 @@ Alice creates:
 
 John cannot edit Alice's Board Games Night simply because John owns Engineering Week.
 
-He can only use the defined Event moderation mechanism, such as suspending the Quest with a reason.
+He has no Quest access or management permission unless Alice adds him as a Quest owner
+or grants ordinary private-Quest access.
 
 ---
 
@@ -1109,8 +1081,8 @@ Normal users should be able to create things themselves.
 **Ownership over hierarchy.**  
 Users control what they created.
 
-**Moderation without takeover.**  
-Event owners may suspend inappropriate Quests but cannot silently edit them.
+**Quest ownership without hierarchy.**
+Event owners do not gain access to or control over another owner's Quest.
 
 **Soft restrictions where possible.**  
 For example, Quest capacity is guidance rather than a hard rule.
@@ -1164,8 +1136,8 @@ The scope below is accepted through D34, incorporating the refinements in D01–
 | Area | V1 requirement |
 |------|----------------|
 | Identity | Microsoft-alias magic-code sign-in, stable tenant/object account identity, database-managed administrators |
-| Events | One-step Active creation, listed discovery for all Active Events, direct self-service joining, duplicate warning, direct adds, invitations, individual membership with background group-to-user bulk add/invite, ownership, automatic completion, cancellation and archive |
-| Quests | Draft/publish, Public/Private visibility, invitations, ownership, advisory capacity, follow/join/leave, moderation, history |
+| Events | One-step Active creation, listed discovery for all Active Events, direct self-service joining, duplicate warning, direct individual adds, invitations, ownership, automatic completion, cancellation and archive |
+| Quests | Draft/publish, Public/Private visibility, invitations, ownership, advisory capacity, follow/join/leave, history |
 | Experience | Quest-first dashboard, Event overview, responsive accessible forms, explicit local times, installable web app with read-only offline basics for joined Quests |
 | Delivery | Email and in-app notifications, preferences, reminders, durable retries, ICS invitations/updates/cancellations |
 | Media | Optional uploaded cover (JPEG/PNG/WebP, up to 2 MiB and 20 megapixels), default cover, private storage; no AI generation |
@@ -1214,13 +1186,12 @@ callbacks, jobs, images, search results, counts, and exports. Hiding a button is
 | View full Event / public non-draft Quests | No | Yes | Yes | Yes, with membership | Yes |
 | Configure Event / manage audience / decide requests | No | No | Yes | No | Yes |
 | Create Quest | No | Yes, in Active Event | Yes, in Active Event | Yes, with membership | Yes, in Active Event |
-| View private non-draft Quest | No | Only with valid invitation | Moderation view only unless separately invited/owning | Yes, with membership | Yes |
+| View private non-draft Quest | No | Only with valid invitation | Only when separately invited/owning | Yes, with membership | Yes |
 | View draft Quest | No | No | No, unless also Quest manager | Yes | Yes |
 | Edit / publish / cancel Quest | No | No | No, unless also Quest manager | Yes | Yes |
 | Invite / revoke invite / remove attendee | No | No | No, unless also Quest manager | Yes | Yes |
 | Join / leave / follow / unfollow | No | Own participation, with Quest access and allowed state | Same member rules | Same member rules | Same member rules; management does not imply participation |
-| Suspend / reinstate Quest | No | No | Yes, with reason | No, unless also Event manager | Yes |
-| View moderation history | No | Status and participant-facing reason only | Own Event moderation records | Own Quest moderation records | Yes |
+| View management history | No | Status and participant-facing reason only | Only when also a Quest manager | Own Quest management records | Yes |
 | Add / remove equal owners | No | No | Yes, for their Event; retain at least one eligible owner | Yes, for their Quest; retain at least one eligible owner | Yes, with the same continuity guards |
 | Cancel / archive Event | No | No | Yes, with lifecycle guards | No | Yes, with lifecycle guards |
 | Manage global settings / templates / administrators | No | No | No | No | Yes |
@@ -1239,10 +1210,9 @@ on administrators using ordinary user features.
 - Private Quest URLs confer no access. Unauthorized Quest IDs, images, counts,
   notification links, and calendar downloads must not disclose resource existence
   or content. Draft Events are visible only to their managers.
-- A dedicated Event moderation screen includes private non-draft Quests and exposes
-  title, description, time, location, cover, owners, and moderation history, but not
-  invitation, attendee, or follower rosters. Record each private moderation detail
-  access. Explain this exception on the private Quest creation form.
+- Event management includes an embedded Event-scoped Quest list, but each card remains
+  subject to ordinary Quest authorization. Event owners do not receive a private-Quest
+  inspection exception.
 - Authorized ordinary Quest viewers see current attendee names and attendee/follower
   counts. Only Quest managers see follower names and invitation status/rosters.
   Email addresses are never a public roster field.
@@ -1561,7 +1531,7 @@ Completed/Cancelled/Archived Events are not candidates. No AI or hidden Event hi
 | Events | All Active Events with direct Join or confirmed Leave actions, owner contacts, separate retained history, create Event action and duplicate warning |
 | Event detail | Discovery or member context with direct Join or confirmed Leave and Event-scoped notification preferences in the card content panel; managers receive reusable Detail, Quests, Members, Invitations, and Settings tabs rather than separate management pages; non-managers receive the detail card without a management tab strip |
 | Quest detail | Status, time in the inherited Event zone and user-local equivalent, location, owners' contacts, advisory capacity, accessible cover, attendees; Join replaces Following; Joined state offers Leave, not Follow; leaving never restores Following |
-| Quest editor | Draft/save/publish flow, inherited Event time zone shown read-only, private-moderation disclosure, validation, pending upload indicators; no AI controls |
+| Quest editor | Draft/save/publish flow, inherited Event time zone shown read-only, private-access disclosure, validation, pending upload indicators; no AI controls |
 | Invitations | Pending Event invitations with accept/decline/expiry; private Quest invitations link directly to details with Join/Follow, never Accept/Decline; private cards require current access |
 | Offline joined Quests | Cached title, location, date/time and last-known status; visible last-refreshed/stale warning; no mutations or access to uncached details |
 | Notifications | Unread count, mark one/all read, authorized deep links, preferences |
@@ -1632,9 +1602,9 @@ outbox, and schedule changes transactionally in Azure SQL through EF Core.
 | OutboxMessage, ScheduledWork | Versioned payload/reference, stable recipient set or recipient-resolution basis, due time, attempts, next attempt, lease, completion/dead-letter state |
 | CalendarDeliveryState | Quest/user, latest intended/sent sequence and method, desired participation state, prior delivery outcome |
 
-`EventMembership` is the authoritative individual access record, not a projection from
-directory groups. Group expansion is a bulk command input only. Do not add group grants,
-membership-assertion caches, exclusion precedence, or periodic membership synchronization.
+`EventMembership` is the authoritative individual access record. Do not add group grants,
+group expansion workflows, membership-assertion caches, exclusion precedence, or periodic
+membership synchronization.
 `EventOwner` and `QuestOwner` relations are the ownership source of truth. Do not store
 a competing primary `OwnerId` on Event/Quest. Creator IDs are immutable management
 fallback grants but are not owner-list rows and do not satisfy owner-continuity guards.
@@ -1679,8 +1649,8 @@ mandatory for service messages; optional activity email follows user preferences
 Mandatory means delivery is durably attempted and failures surfaced, not guaranteed
 mailbox arrival. Joining clearly explains that service/calendar messages will follow.
 Registered members means individual Event members who have signed in at least once.
-Individual invitations/direct adds, including those created through a bulk group
-operation, may target directory-resolved users before their first sign-in.
+Individual invitations and direct adds may target directory-resolved users before
+their first sign-in.
 
 | Trigger | Recipients | Email / calendar behavior |
 |---------|------------|---------------------------|
@@ -1692,8 +1662,8 @@ operation, may target directory-resolved users before their first sign-in.
 | User leaves / attendee removed / access revoked | Affected user; Quest managers get in-app attendance change | Calendar withdrawal if previously invited; mandatory reason/access email for removal |
 | Quest time / location change | Current attendees and followers, plus other Quest managers | Mandatory attendee email/calendar update; optional follower/manager activity email; Quest has no independently changeable zone |
 | Title / description / cover / capacity change | Current attendees and followers, plus other Quest managers | Optional activity email; title/description changes also update attendees' calendars |
-| Content edited while Suspended | Event moderators and other Quest managers | In-app moderation update; no participant update email or active calendar request until explicit reinstatement |
-| Quest suspended / reinstated / cancelled | Quest managers, current attendees/followers, valid private invitees | Mandatory status email; attendee calendar withdrawal/restoration as appropriate |
+| Legacy Suspended Quest edited | Quest managers | In-app owner update; no participant update email or active calendar request |
+| Quest cancelled | Quest managers, current attendees/followers, valid private invitees | Mandatory status email and attendee calendar withdrawal |
 | Event cancelled | Effective registered Event members and affected Quest recipients | Mandatory Event status email; affected attendee calendar withdrawals |
 | Reminder due | Current joined attendees with reminders enabled; never followers | Optional email/in-app reminder X configured hours before start; one per user/Quest/start revision |
 | Owner added, removed, or recovered | Added/removed and remaining eligible owners | Mandatory service email and audit; no content delivery to departed/ineligible accounts |
@@ -1718,7 +1688,7 @@ input bounds are 0.01 through 168 hours, permitting up to two decimal places (fo
 0.5 hours), with explicit validation instead of silent rounding.
 Store the normalized duration, not a reminder-option enum.
 Users can override new-Quest email per Event. Preferences never disable required invitations,
-membership/ownership decisions, material attendee changes, moderation/cancellation, or
+membership/ownership decisions, material attendee changes, cancellation, or
 calendar withdrawals/updates. In-app activity records remain available even when optional
 email is off; disabling reminders disables both reminder channels.
 
@@ -1800,7 +1770,7 @@ Previously downloaded or emailed content cannot be remotely erased when access i
 | UI | Fluent UI Blazor, subject to the compatibility gate in section 40; static SSR plus Interactive Server where needed |
 | Persistence | EF Core with SQL Server/Azure SQL; one database and migration stream |
 | Authentication | ASP.NET Core protected application cookie plus SQL-backed, ACS-delivered Microsoft-alias magic codes; local synthetic development remains isolated |
-| Directory | Graph adapter for user/group selection and background group expansion only; least-privilege approved tenant permissions, no group authorization |
+| Directory | Graph adapter for explicit user selection and resolution only; least-privilege approved tenant permissions |
 | Jobs | ASP.NET Core `BackgroundService`, durable SQL outbox/scheduled work and leased claiming |
 | Images | Private Azure Blob Storage, mediated authorized delivery |
 | Email | Azure Communication Services Email adapter, subject to tenant/provider approval; local capture provider in development |
@@ -1958,16 +1928,16 @@ directory/provider fakes, plus real SQL Server integration tests for SQL behavio
 |----|--------------|------------------|
 | A01 | Wrong-tenant or excluded guest signs in | No application access or local administrator bootstrap |
 | A02 | User knows another Event's private Quest/image URL | No content, roster, count, or existence disclosure |
-| A03 | Event manager opens another owner's Quest | Can moderate with reason; cannot edit; private moderation access is audited |
+| A03 | Event manager opens another owner's private Quest without a Quest grant | No content, roster, count, image, history, or existence disclosure |
 | A04 | Administrator without membership accesses content | Denied; reasoned ownership recovery works without granting content-reading privilege |
-| A05 | Source group changes or Graph fails after a bulk add/invite | Existing individual memberships/invitations are unchanged; access performs no group verification; pending directory expansion reports failure without changing permissions |
+| A05 | Graph user lookup fails during an explicit add/owner action | Explicit dependency failure; no membership, invitation, ownership, audit, or delivery mutation |
 | A06 | Individual Event membership removal or private invite revocation occurs | Subsequent authorization denies access; participation ends; pending content suppressed; prior calendar withdrawn |
 | A07 | Concurrent request approvals or repeated Event invitation acceptance occur | One individual membership, one logical decision notification, complete history |
 | A08 | Follow then join, leave, repeat commands, or race join/follow beyond suggested capacity | Mutually exclusive None/Following/Joined state; joining unfollows atomically; leaving never restores following; correct counts, no duplicate delivery, no hard capacity block; Follow cannot silently leave a joined Quest |
 | A09 | Private Quest invitation issued, forwarded, revoked, or accessed by a non-member | Named Event member can view and Join/Follow immediately without Accept/Decline; no automatic attendance; forwarded/non-member access denied; revocation removes invitation access; historical access otherwise persists |
 | A10 | Event/Quest transition or edit violates state/date rules | Explicit conflict/validation; no partial state/audit/outbox changes |
 | A11 | Event with active private/public Quests is cancelled | Atomic child cancellation, preserved history, correct notifications and calendar withdrawals |
-| A12 | Quest is suspended, edited by its organizer, reinstated, then completed | Organizer edits are audited without enabling joining or restoring calendars; only Event moderator reinstates; latest details in same-UID calendar restoration; no completion cancellation |
+| A12 | A retained legacy Suspended Quest is edited, cancelled, reaches its end, or its Event is cancelled | Quest managers retain safe edit/attendance/cancel operations; no suspend/reinstate transition exists; completion and Event cancellation preserve history and audit |
 | A13 | DST gap/overlap, midnight boundary, or differing user/Event zone | Quest inherits Event zone with no override; gap rejected, overlap explicitly resolved, containment and UTC/user-local display correct |
 | A14 | Join, edit, leave, rejoin, cancellation, and retries | Same UID; increasing sequence for changes; exact retry payload; no roster leakage or intentionally stale later send |
 | A15 | Process dies after DB commit or provider acceptance; two workers race | Outbox survives, leases recover, logical notifications deduplicate; uncertain email delivery documented |
@@ -1981,7 +1951,7 @@ directory/provider fakes, plus real SQL Server integration tests for SQL behavio
 | A23 | Supported Outlook client receives invitation/update/withdrawal/restoration | Calendar behavior recorded through a real approved test mailbox; limitations reflected in UI |
 | A24 | Representative 300-user load and backup-restore exercise run | Section 57 latency, queue, and recovery targets measured and met or explicitly renegotiated before release |
 | A25 | Event reaches its local end boundary, is rescheduled, or completion processing restarts | Automatic Completed state at the current date boundary; no new activity even with late jobs; repeat-safe cleanup/history; no completion calendar withdrawals; manager may archive after child cleanup |
-| A26 | Bulk group expansion encounters pagination, duplicates, ineligible users, throttling, partial application, retry, or concurrent removal | Frozen eligible recipient list; visible failures/progress; ordinary individual add/invite semantics; no duplicate effects, stale reactivation, ongoing group grant, or automatic group synchronization |
+| A26 | Event manager searches for and selects an individual directory user | Only eligible resolved users are selectable; commands re-resolve identity, reject provider/tenant mismatches, and make no partial change on failure |
 
 At minimum, automate all allow/deny cells in section 49 across representative lifecycle
 states, not merely the happy path. Use xUnit for domain/integration tests, bUnit for
@@ -2137,8 +2107,8 @@ Shared M2 integration contracts:
   before a requested command's lifecycle rejection can roll it back; never commit an
   unvalidated user mutation. Quest-side cascades do not depend on the reconciler.
 - Cancelled unpublished Quests retain draft privacy after cancellation or archival:
-  only their current eligible member owners may read them, and moderation never exposes
-  them. A retained Draft-to-Cancelled history record identifies this case without
+  only their current eligible member owners may read them. A retained Draft-to-Cancelled
+  history record identifies this case without
   a new schema field; every direct content/delivery query must honor it.
 - `QuestDateFilter` supplies optional inclusive lower/exclusive upper UTC start-instant
   bounds to an additional `IQuestService.ListAsync` overload. Apply the same predicates
@@ -2180,8 +2150,8 @@ M3 starts from the merged M2 baseline. Media uses `IMediaService` for authorized
 cover upload/removal/read operations, `IImageSanitizer` for bounded actual decode and
 metadata-free re-encoding, and `IPrivateMediaStorage` for private provider I/O outside
 SQL transactions. Uploads retain the previous cover on failure or stale-editor
-conflict. Reads serve only ready, currently assigned covers; explicit moderation
-reads retain the same authorization and audit requirements as Quest content.
+conflict. Reads serve only ready, currently assigned covers and use the same ordinary
+Quest authorization as the detail view.
 Pending/failed uploads receive durable `media.cleanup.v1` work for their immutable
 24-hour expiry; final attachment must reject an expired upload. Separately identified
 and audited cleanup intent also handles media removed by an explicitly authorized
@@ -2211,7 +2181,7 @@ separate task worktrees. Do not infer completion from the presence of interfaces
 |--------------|------|-------------------------------|
 | Integration owner | Solution/project/package configuration, shared contracts, DbContext composition, migrations, app startup, navigation/layout, CI/Bicep, cross-feature tests | Accepted product behavior without updating this specification |
 | Identity and Events | Feature folders for identity adapters/policies, Event lifecycle, audience/membership, Event screens and tests | Quest internals or delivery provider implementation |
-| Quests | Quest lifecycle/participation/moderation, Quest screens and tests | Event membership source of truth, global roles, shared calendar delivery pipeline |
+| Quests | Quest lifecycle/participation/ownership, Quest screens and tests | Event membership source of truth, global roles, shared calendar delivery pipeline |
 | Notifications and calendar | Outbox dispatcher, recipient policy against shared access queries, preferences, templates, calendar sequencing, delivery screens/tests | Feature aggregate transitions or authorization shortcuts |
 | Media | Validated 2 MiB uploads, Blob adapter, cover components/tests | Quest ownership policy, global provider configuration format, or deferred AI features |
 | Administration and experience | Admin feature screens, dashboard composition, install/reconnect/accessibility flows, narrowly scoped offline joined-Quest cache | Shared shell/startup/navigation without integration-owner coordination |
@@ -2300,7 +2270,7 @@ not V1 release requirements.
 |----|-------------|----------|
 | D01 | 2026-09-14 | Listed-only Event discovery. All published Active Events are listed to eligible signed-in users. Non-members see name, dates, time zone, discovery summary, and owner contact and may request access. No Unlisted mode; discovery/direct links do not grant membership or reveal Quests/member lists. |
 | D02 | 2026-09-14 | Private Quest invitations may target existing Event members only. Non-members must first obtain Event membership through the normal Event access process. A Quest invitation never grants Event membership or bypasses that boundary. |
-| D03 | 2026-09-14 | Event owners may inspect published private Quests through an audited moderation view exposing content, Quest owners, and moderation history, but no attendee/follower/invitation rosters. They may suspend with a reason, not edit. Disclose this exception during private Quest creation. Drafts remain visible only to Quest managers. Owner terminology refined in D18. |
+| D03 | 2026-09-14 | Superseded by D41. Previously accepted Event-owner Quest moderation and suspension no longer apply. |
 | D04 | 2026-09-14 | Quest visibility can change while drafting but is fixed at publication. Switching Public/Private afterward requires a new Quest; no in-place audience conversion in V1. |
 | D05 | 2026-09-14 | Event cancellation requires a reason and impact confirmation, then atomically cancels Draft/Active/Suspended child Quests, preserves history, notifies affected users, and withdraws attendee calendars. Completed/Archived Quests are unchanged. This is an explicit exception to ordinary Quest ownership separation. |
 | D06 | 2026-09-14 | Events have an explicit Completed state, set automatically when the Event ends. New participation stops and historical access remains; managers can archive afterward. Child Quest cleanup subsequently accepted in D13. |
@@ -2309,15 +2279,17 @@ not V1 release requirements.
 | D09 | 2026-09-14 | Superseded by D15. Previously accepted 15-minute group-membership verification; no longer applies because groups are not used for authorization. |
 | D10 | 2026-09-14 | Confirmed loss of effective Event membership ends attendance/follows, revokes private Quest invitations, suppresses content delivery, and withdraws previously sent calendars while retaining history. Readmission does not restore participation or invitations: explicit rejoin/refollow/reinvitation is required. |
 | D11 | 2026-09-14 | Service email/in-app messages and applicable calendar invitations/updates/withdrawals are mandatory; users may disable optional activity email and reminders. Explain required messages before joining. No global opt-out from all service email. |
-| D12 | 2026-09-14 | V1 must include an in-app notification inbox and administrator-editable email templates with safe overrides, preview, and version history. Group-audience scope revised by D15 to one-time background group-to-individual add/invite, not ongoing group membership. |
-| D13 | 2026-09-14 | Accept the section 51 Quest lifecycle and Event-completion child cleanup, with organizer editing permitted while Suspended. Suspension still blocks new participation and withdraws calendars; editing does not reinstate. Only an Event manager reinstates with a reason. Completion retains historical calendars; no reopening/unarchiving in V1. |
+| D12 | 2026-09-14 | V1 must include an in-app notification inbox and administrator-editable email templates with safe overrides, preview, and version history. Its former group-audience scope is superseded by D42. |
+| D13 | 2026-09-14 | Refined by D41. Event-completion child cleanup and compatible handling of retained Suspended records remain; new suspension and reinstatement commands no longer apply. |
 | D14 | 2026-09-14 | Accept Event membership requests, invitations, and direct adds as specified in section 50: manager approval/direct add grants immediately; invitations require acceptance and expire after seven days or Event end; rejection requires a visible reason; retry requests are rate-limited; no new membership after Event end; draft audience setup is notification-free; actions are repeat-safe and audited. |
-| D15 | 2026-09-14 | Event access depends only on individual membership. Selecting a group for add/invite expands its members in the background into ordinary individual memberships/invitations. No ongoing group audience, synchronization, group authorization, or membership-freshness checks. Source group changes do not affect existing access. Supersedes D09 and the group-audience portion of D12. Bulk safeguards subsequently accepted in D16; manager-removal guard accepted in D17. |
-| D16 | 2026-09-14 | Accept section 50 one-time bulk-operation safeguards: eligible nested-group users, complete deduplicated recipient snapshot before applying changes, visible progress/failures, repeat-safe retries, ordinary individual add/invite semantics, skip existing members, no bulk-add reactivation of removed members, and concurrent removal taking precedence over stale work. No ongoing synchronization. |
+| D15 | 2026-09-14 | Refined by D42. Event access still depends only on individual membership; the one-time group expansion workflow no longer applies. |
+| D16 | 2026-09-14 | Superseded by D42. One-time bulk-operation safeguards no longer apply because the group workflow was removed. |
 | D17 | 2026-09-14 | Block ordinary Event membership removal or voluntary leaving while the member still owns that Event or any child Quest. Remove those assignments first, adding an eligible owner where necessary. D18 replaces the earlier primary-owner transfer rule with equal owner sets. |
 | D18 | 2026-09-14 | Every Event/Quest has one or more equal owners; creator is initially one owner, without continuing special rank. Any owner may add/remove owners, including themselves, provided at least one eligible owner remains. No normal ownership transfer. If an owner leaves Microsoft, remaining eligible owners continue; if the last eligible owner departs, an Administrator assigns a replacement through audited recovery. Refines D07/D08/D17. |
 | D19 | 2026-09-14 | Private Quest invitations simply give named Event members access to view and optionally Join/Follow. No Accept/Decline action or automatic attendance. Use Active/Revoked access grants, not a pending/accepted workflow; retain authorized historical access until revocation or Event membership loss. Event invitation acceptance remains unchanged. |
 | D20 | 2026-09-14 | Following and Joined are mutually exclusive: joining automatically unfollows; leaving has no effect on following and never restores it. Accept the remaining participation rules: join until end without approval/hard capacity, owners not automatically attending, owner removal requires reason/calendar withdrawal but is not a public-Quest rejoin ban, and owners cannot add attendees on their behalf. |
+| D41 | 2026-10-08 | Remove Quest moderation completely. Event ownership alone grants no Quest access or management. Quest creators, assigned Quest owners, and Administrators manage Quests. No new suspension or reinstatement command exists; retained Suspended records remain safely editable/cancellable/completable for compatibility. Event cancellation continues to cancel Draft, Active, and Suspended child Quests while preserving history and audit. Supersedes D03 and the moderation portions of D13. |
+| D42 | 2026-10-08 | Remove one-time directory-group add/invite functionality, including its pages, routes, service contracts, Graph group search/expansion, durable worker, and active tests. Event membership and invitations are managed only through explicit individual users. Historical database tables/migrations may remain inert for schema compatibility. Supersedes the group-expansion portions of D12/D15 and all of D16. |
 | D21 | 2026-09-14 | Quest time zone is inherited from the parent Event, with no per-Quest picker, override, or independently stored zone. Remaining date/time defaults subsequently accepted in D22. |
 | D22 | 2026-09-14 | Accept remaining date/time rules: inclusive Event dates, required Event zone fixed after publication, Quest start/end within Event dates in that inherited zone, UTC instants, Event-local plus differing user-local display, explicit DST handling, lifecycle-gated time edits with attendee updates, and no all-day/recurring Quests in V1. Completes D21 timing review. |
 | D23 | 2026-09-14 | Send reminders only to joined attendees, never followers. Reminder lead time is configurable as a numeric X hours, not limited to fixed presets. Other notification defaults and numeric input bounds subsequently accepted in D24. |
@@ -2369,7 +2341,7 @@ implementation in this documentation session.
 |------|-----------|-------------------|
 | Microsoft alias policy and account namespace | Live authentication integration | Approved `@microsoft.cz` mailbox-control policy, configured namespace ID and normalized current/legacy account-link review; initial administrator bootstrap alias is `vaclav.pekarek` |
 | Organizational departure verification | Live last-owner recovery | Approved process/evidence for confirming the last eligible owner left Microsoft; outages or inactivity are not sufficient |
-| Graph permission set, consent, supported group expansion strategy | Live directory integration / V1 release | Least-privilege permission mapping for user/group search and one-time background expansion; pagination, nested groups and eligible-user filtering proof; no group authorization dependency |
+| Graph permission set and consent | Live directory integration / V1 release | Least-privilege permission mapping for explicit user search and resolution |
 | Fluent UI/.NET 10 compatibility and dependency licenses | M1 exit | Working SSR/Interactive Server form/dialog/validation spike and recorded package versions/licenses |
 | Azure subscription, region, budget, deploy identity, operational owner | Infrastructure provisioning | Approved hosting and access configuration |
 | GitHub Azure-planning environment protections and administrator controls | Before enabling any live Azure planning | Deployment-owner verification of required reviewers, self-review prevention, main-only branch restrictions and disabled administrator bypass; explicit owner-controlled acknowledgement under D39, repeated after relevant protection/identity changes |

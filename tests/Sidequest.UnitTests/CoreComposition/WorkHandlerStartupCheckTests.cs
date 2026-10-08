@@ -9,7 +9,7 @@ namespace Sidequest.UnitTests.CoreComposition;
 /// <summary>Checks startup completeness against real registrations without starting any polling service.</summary>
 public sealed class WorkHandlerStartupCheckTests
 {
-    /// <summary>Validates all five actual production handlers in an isolated scope and shuts down without owning work.</summary>
+    /// <summary>Validates all four actual production handlers in an isolated scope and shuts down without owning work.</summary>
     /// <returns>A task completing after inert startup and shutdown validation.</returns>
     [Fact]
     public async Task CompleteProductionGraph_StartupCheckSucceeds_WithoutStartingWorkers()
@@ -20,7 +20,7 @@ public sealed class WorkHandlerStartupCheckTests
         await check.StartAsync(CancellationToken.None);
         await check.StopAsync(CancellationToken.None);
         using var scope = provider.CreateScope();
-        Assert.Equal(5, scope.ServiceProvider.GetServices<IBackgroundWorkHandler>().Select(x => x.WorkType).Distinct().Count());
+        Assert.Equal(4, scope.ServiceProvider.GetServices<IBackgroundWorkHandler>().Select(x => x.WorkType).Distinct().Count());
         Assert.Null(scope.ServiceProvider.GetRequiredService<Sidequest.Infrastructure.Background.WorkExecutionContext>().Lease);
     }
 

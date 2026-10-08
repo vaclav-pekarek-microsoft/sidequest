@@ -25,19 +25,12 @@
             case "detail":
                 <EventCard Item="detail.Summary" Description="@detail.Description" DetailLayout="true"
                            ShowParticipationActions="true" ShowNotificationPreferences="true"
-                           JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync">
-                    <AdditionalActions>
-                        @if (detail.Summary.Status == EventStatus.Active)
-                        {
-                            <a href="@($"/events/{Id}/bulk")">One-time group add/invite</a>
-                        }
-                    </AdditionalActions>
-                </EventCard>
+                           ShowOwnershipGuidance="true"
+                           JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync" />
                 break;
             case "quests" when detail.Summary.CanManage:
                 <EventQuestsPanel EventId="Id"
-                                  CanCreate="@(detail.Summary.Status == EventStatus.Active)"
-                                  CanModerate="detail.Summary.CanManage" />
+                                  CanCreate="@(detail.Summary.Status == EventStatus.Active)" />
                 break;
             case "members" when detail.Summary.CanManage:
                 <EventMembersPanel EventId="Id" Changed="LoadAsync" />
@@ -56,6 +49,7 @@
     {
         <EventCard Item="detail.Summary" Description="@detail.Description" DetailLayout="true"
                    ShowParticipationActions="true" ShowNotificationPreferences="true"
+                   ShowOwnershipGuidance="true"
                    JoinRequested="JoinAsync" LeaveRequested="OpenLeaveDialogAsync" />
     }
 }

@@ -4,7 +4,7 @@ using Sidequest.Application.Quests;
 
 namespace Sidequest.Web.Components.Quests;
 
-/// <summary>Collects explicit, confirmed owner/moderator intentions; never invokes persistence directly.</summary>
+/// <summary>Collects explicit, confirmed Quest-owner intentions; never invokes persistence directly.</summary>
 public partial class QuestManagement
 {
     private string selected = "";
@@ -14,12 +14,7 @@ public partial class QuestManagement
     private QuestManagementDraft? previousDraft;
     private bool Disabled => Busy || !confirmed;
     private bool TargetDisabled => Disabled || !Guid.TryParse(selected, out _);
-    private string CurrentAction => Moderation ? Detail.Summary.Status switch
-    {
-        Sidequest.Domain.Model.QuestStatus.Active => "suspend",
-        Sidequest.Domain.Model.QuestStatus.Suspended => "reinstate",
-        _ => ""
-    } : action;
+    private string CurrentAction => action;
     private bool NeedsPerson => CurrentAction is "add-owner" or "remove-owner" or "invite" or "revoke" or "remove-attendee";
     private bool NeedsReason => CurrentAction is "cancel" or "suspend" or "reinstate" or "revoke" or "remove-attendee";
     private bool IsDestructive => CurrentAction is "delete" or "cancel" or "remove-owner" or "revoke" or "remove-attendee";
@@ -47,13 +42,11 @@ public partial class QuestManagement
     private IEnumerable<PersonSummary> Candidates => Members.Concat(Detail.Owners.Select(o => new PersonSummary(o.Id, o.DisplayName, o.Email)))
         .DistinctBy(x => x.Id).OrderBy(x => x.DisplayName).ThenBy(x => x.Id);
 
-    /// <summary>Authorized detail; moderation mode must have null protected rosters.</summary>
+    /// <summary>Authorized Quest detail.</summary>
     [Parameter, EditorRequired] public QuestDetail Detail { get; set; } = default!;
-    /// <summary>Selects only dedicated moderation actions, not ordinary ownership actions.</summary>
-    [Parameter] public bool Moderation { get; set; }
     /// <summary>Blocks editing and confirmation while operations, revalidation, disconnection, or version conflicts prevent safe commands.</summary>
     [Parameter] public bool Busy { get; set; }
-    /// <summary>One authorized page of individual Event members; not fetched in moderation mode.</summary>
+    /// <summary>One authorized page of individual Event members.</summary>
     [Parameter] public IReadOnlyList<PersonSummary> Members { get; set; } = [];
     /// <summary>Current one-based member-selection page.</summary>
     [Parameter] public int MemberPage { get; set; } = 1;

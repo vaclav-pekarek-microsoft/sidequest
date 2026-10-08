@@ -137,12 +137,12 @@ public sealed class CoreWorkflowRegistrationTests
         Assert.IsType<RecipientCalendarRenderer>(provider.GetRequiredService<IRecipientCalendarRenderer>());
         Assert.IsType<AcsEmailGateway>(provider.GetRequiredService<IEmailGateway>());
         var handlers = first.ServiceProvider.GetServices<IBackgroundWorkHandler>().ToArray();
-        Assert.Equal(5, handlers.Length);
+        Assert.Equal(4, handlers.Length);
         Assert.IsType<ChangeOutboxHandler>(Assert.Single(handlers, x => x.WorkType == WorkTypes.Change));
         Assert.IsType<EventCompletionHandler>(Assert.Single(handlers, x => x.WorkType == WorkTypes.EventCompletion));
         Assert.IsType<QuestCompletionHandler>(Assert.Single(handlers, x => x.WorkType == WorkTypes.QuestCompletion));
-        Assert.IsType<BulkMembershipHandler>(Assert.Single(handlers, x => x.WorkType == WorkTypes.BulkMembership));
         Assert.IsType<ReminderWorkHandler>(Assert.Single(handlers, x => x.WorkType == WorkTypes.Reminder));
+        Assert.DoesNotContain(handlers, handler => handler.GetType().Name.Contains("Bulk", StringComparison.Ordinal));
         var otherHandlers = second.ServiceProvider.GetServices<IBackgroundWorkHandler>().ToArray();
         foreach (var handler in handlers)
             Assert.NotSame(handler, Assert.Single(otherHandlers, x => x.WorkType == handler.WorkType));
@@ -173,13 +173,11 @@ public sealed class CoreWorkflowRegistrationTests
     {
         var values = new Dictionary<string, string?>
         {
-            ["Events:MaximumBulkRecipients"] = "999", ["Directory:TenantId"] = Guid.NewGuid().ToString(),
+            ["Directory:TenantId"] = Guid.NewGuid().ToString(),
             ["Delivery:Concurrency"] = "15"
         };
         if (configured)
         {
-            values["Events:Limits:MaximumBulkRecipients"] = "42";
-            values["Events:Limits:BulkStartsPerHour"] = "7";
             values["Events:Limits:RequestsPerHour"] = "9";
             values["Events:Limits:InvitationsPerHour"] = "19";
             values["Events:Limits:DirectorySearchesPerMinute"] = "23";
@@ -204,8 +202,6 @@ public sealed class CoreWorkflowRegistrationTests
         }
         using var provider = Services(values).BuildServiceProvider();
         var limits = provider.GetRequiredService<EventOperationOptions>();
-        Assert.Equal(configured ? 42 : 5000, limits.MaximumBulkRecipients);
-        Assert.Equal(configured ? 7 : 5, limits.BulkStartsPerHour);
         Assert.Equal(configured ? 9 : 5, limits.RequestsPerHour);
         Assert.Equal(configured ? 19 : 1000, limits.InvitationsPerHour);
         Assert.Equal(configured ? 23 : 30, limits.DirectorySearchesPerMinute);
@@ -239,12 +235,6 @@ public sealed class CoreWorkflowRegistrationTests
     /// <param name="value">Boundary input.</param>
     /// <param name="valid">Whether registration must accept the value.</param>
     [Theory]
-    [InlineData("MaximumBulkRecipients", "0", false)]
-    [InlineData("MaximumBulkRecipients", "1", true)]
-    [InlineData("MaximumBulkRecipients", "100000", true)]
-    [InlineData("MaximumBulkRecipients", "100001", false)]
-    [InlineData("BulkStartsPerHour", "0", false)]
-    [InlineData("BulkStartsPerHour", "1", true)]
     [InlineData("RequestsPerHour", "0", false)]
     [InlineData("RequestsPerHour", "1", true)]
     [InlineData("InvitationsPerHour", "0", false)]
@@ -258,7 +248,7 @@ public sealed class CoreWorkflowRegistrationTests
         if (valid)
         {
             Assert.Same(services, services.AddSidequestCoreWorkflows(configuration, Authentication));
-            Assert.Equal(3, services.Count(x => x.ServiceType == typeof(IBackgroundWorkHandler)));
+            Assert.Equal(2, services.Count(x => x.ServiceType == typeof(IBackgroundWorkHandler)));
         }
         else
         {
@@ -274,7 +264,6 @@ public sealed class CoreWorkflowRegistrationTests
     [InlineData("Directory:Graph:TenantId", "mismatch")]
     [InlineData("Directory:Credentials:TenantId", "mismatch")]
     [InlineData("Directory:Graph:TenantId", "invalid")]
-    [InlineData("Events:Limits:MaximumBulkRecipients", "invalid")]
     public void DirectoryTenants_RejectIndependentMismatch_WithoutPartialCoreRegistration(string key, string value)
     {
         var services = new ServiceCollection();

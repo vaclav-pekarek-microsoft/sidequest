@@ -1,6 +1,6 @@
 namespace Sidequest.Application.Quests;
 
-/// <summary>Authorized Quest views; moderation is a separate privacy-restricted access path.</summary>
+/// <summary>Authorized Quest views for participation, ownership, discovery, and history.</summary>
 public enum QuestListKind
 {
     /// <summary>Current actor's joined activities, excluding follower-only participation.</summary>
@@ -15,8 +15,6 @@ public enum QuestListKind
     Invited,
     /// <summary>Past activities still accessible to the current actor.</summary>
     History,
-    /// <summary>Non-draft activities moderated by an Event owner, without participant or invitation roster disclosure.</summary>
-    Moderation,
     /// <summary>All ordinarily accessible Quests in current Event memberships, joined first, then Event-local start date/time.</summary>
     Board
 }

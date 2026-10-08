@@ -50,14 +50,19 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 
-test("Event management tabs use a bottom-border tab contract with a white selected surface", () => {
+test("Event management tabs wrap without scrolling and keep readable interactive states", () => {
     const styles = compile(join(web, "wwwroot", "app.scss")).css;
     assert.match(
         styles,
-        /\.management-tabs\s*\{[^}]*background: transparent;[^}]*border: 0;[^}]*border-bottom: 1px solid var\(--sq-line\);[^}]*border-radius: 0;/s);
+        /\.management-tabs\s*\{[^}]*flex-wrap: wrap;[^}]*overflow: visible;[^}]*background: color-mix\([^;]+;[^}]*border: 1px solid var\(--sq-line\);/s);
     assert.match(
         styles,
-        /\.management-tabs button\s*\{[^}]*background: transparent;[^}]*border-radius: 0\.8rem 0\.8rem 0 0;[^}]*box-shadow: none;[^}]*margin-bottom: -1px;/s);
+        /\.management-tabs button\s*\{[^}]*flex: 1 1 8rem;[^}]*min-width: max-content;[^}]*background: transparent;[^}]*box-shadow: none;[^}]*margin-bottom: -1px;/s);
+    const hover = styles.match(
+        /\.management-tabs button:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/s);
+    assert.ok(hover);
+    assert.match(hover.groups.body, /color: var\(--sq-blue-dark\);/);
+    assert.match(hover.groups.body, /background: color-mix\(/);
     const selected = styles.match(
         /\.management-tabs button\.selected,\s*\.management-tabs button\.selected:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/s);
     assert.ok(selected);

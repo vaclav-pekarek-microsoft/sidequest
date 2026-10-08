@@ -67,43 +67,7 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.False(await db.ScheduledWork.AnyAsync(x => x.QuestId == id && x.Type == WorkTypes.Reminder));
     }
 
-    /// <summary>Ordinary and moderation paths independently enforce grants and roster redaction, including an owner using moderation.</summary>
-    /// <returns>Completion after private denial, all null projections, and persisted access-audit assertions.</returns>
-    [Fact]
-    public async Task PrivateModeration_RedactsEveryRosterAndCount_WithoutGrantingOrdinaryAccess()
-    {
-        var scenario = await QuestScenario.CreateAsync(database, true);
-        var moderatorUser = await AddOrdinaryMemberAsync(scenario);
-        await FoundationSeed.PersistAsync(database,
-            new EventOwner { EventId = scenario.Seed.Event.Id, UserId = moderatorUser.Id });
-        var id = scenario.Seed.Quest.Id;
-        var owner = scenario.Service();
-        await owner.ParticipateAsync(id, ParticipationCommand.Join);
-        var moderator = scenario.Service(moderatorUser);
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.GetAsync(id))).Code);
-        var detail = await moderator.GetAsync(id, true);
-        Assert.Equal(scenario.Seed.Quest.Title, detail.Summary.Title);
-        Assert.Null(detail.Attendees);
-        Assert.Null(detail.Followers);
-        Assert.Null(detail.Invitees);
-        Assert.Null(detail.Summary.AttendeeCount);
-        Assert.Null(detail.Summary.FollowerCount);
-        Assert.Equal(ParticipationStatus.None, detail.Summary.Participation);
-        Assert.False(detail.Summary.IsOwner);
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            moderator.EditAsync(id, detail.Summary.Version, scenario.Input(QuestVisibility.Private)))).Code);
-        var history = await moderator.HistoryAsync(id, true);
-        Assert.DoesNotContain(history, h => h.Action.Contains(scenario.Seed.User.Id.ToString("N"), StringComparison.Ordinal));
-        var page = await moderator.ListAsync(QuestListKind.Moderation, scenario.Seed.Event.Id, new());
-        Assert.Null(Assert.Single(page.Items).AttendeeCount);
-        await owner.AddOwnerAsync(id, moderatorUser.Id);
-        Assert.Null((await moderator.GetAsync(id, true)).Attendees);
-        await using var db = database.CreateContext();
-        Assert.Equal(2, await db.AuditEntries.CountAsync(a => a.ResourceId == id && a.Action == "ModerationDetailRead"));
-        Assert.Single(await db.AuditEntries.Where(a => a.ResourceId == id && a.Action == "ModerationHistoryRead").ToListAsync());
-    }
-
-    /// <summary>Draft cancellation never turns unpublished content into ordinary or moderation discovery.</summary>
+    /// <summary>Draft cancellation never turns unpublished content into ordinary discovery.</summary>
     /// <returns>Completion after access and history-list privacy assertions.</returns>
     [Fact]
     public async Task CancelledUnpublishedDraft_RemainsOwnerOnly()
@@ -115,7 +79,6 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
         await owner.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Cancelled, "No longer needed.");
         var moderator = scenario.Service(scenario.Seed.Other);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.GetAsync(id))).Code);
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.GetAsync(id, true))).Code);
         Assert.DoesNotContain((await moderator.ListAsync(QuestListKind.History, scenario.Seed.Event.Id, new())).Items, q => q.Id == id);
         Assert.Equal(QuestStatus.Cancelled, (await owner.GetAsync(id)).Summary.Status);
     }
@@ -462,44 +425,56 @@ public sealed class QuestServiceTests(SqlTestDatabase database) : IClassFixture<
         }
     }
 
-    /// <summary>Suspended edits preserve status and withdrawn calendars; reinstatement alone restores them and archive retains history.</summary>
-    /// <returns>Completion after lifecycle, revision, recipient and retained-state participation assertions.</returns>
-    [Fact]
-    public async Task SuspendEditReinstateCancelArchive_PreservesLifecycleAndDeliveryRules()
+    /// <summary>Legacy Suspended Quests remain editable and cancellable, while new suspend and reinstate transitions are rejected.</summary>
+    /// <param name="principal">Assigned Quest owner or administrator managing the retained record.</param>
+    /// <returns>A task completing after content, attendance, lifecycle, history and transition assertions.</returns>
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("administrator")]
+    public async Task LegacySuspendedManager_CanEditRemoveAttendeeAndCancel_ButCannotSuspendOrReinstate(
+        string principal)
     {
         var scenario = await QuestScenario.CreateAsync(database);
-        var owner = scenario.Service();
-        var moderator = scenario.Service(scenario.Seed.Other);
+        var manager = scenario.Service();
+        if (principal == "administrator")
+        {
+            var administrator = FoundationSeed.NewUser();
+            administrator.TenantId = scenario.Seed.User.TenantId;
+            await FoundationSeed.PersistAsync(database, administrator, new Administrator { UserId = administrator.Id });
+            manager = scenario.Service(administrator);
+        }
+        var attendee = scenario.Service(scenario.Seed.Other);
         var id = scenario.Seed.Quest.Id;
-        await owner.ParticipateAsync(id, ParticipationCommand.Join);
-        var detail = await owner.GetAsync(id);
-        await moderator.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Suspended, "Please correct the location.");
-        detail = await owner.GetAsync(id);
+        var detail = await manager.GetAsync(id);
+        var suspend = await Assert.ThrowsAsync<DomainException>(() =>
+            manager.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Suspended, "No new suspension."));
+        Assert.Equal(ErrorCode.Conflict, suspend.Code);
+        await attendee.ParticipateAsync(id, ParticipationCommand.Join);
+        await using (var seedLegacy = database.CreateContext())
+        {
+            (await seedLegacy.Quests.SingleAsync(x => x.Id == id)).Status = QuestStatus.Suspended;
+            await seedLegacy.SaveChangesAsync();
+        }
+        detail = await manager.GetAsync(id);
         Assert.Equal(QuestStatus.Suspended, detail.Summary.Status);
-        await owner.EditAsync(id, detail.Summary.Version, scenario.Input() with { Location = "Corrected room" });
-        detail = await owner.GetAsync(id);
+        await manager.EditAsync(id, detail.Summary.Version, scenario.Input() with { Location = "Corrected room" });
+        detail = await manager.GetAsync(id);
         Assert.Equal(QuestStatus.Suspended, detail.Summary.Status);
         Assert.Equal("Corrected room", detail.Summary.Location);
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            owner.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Active, "I corrected the room."))).Code);
-        await moderator.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Active, "The corrected room is approved.");
-        detail = await owner.GetAsync(id);
-        await owner.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Cancelled, "The session is no longer needed.");
-        detail = await owner.GetAsync(id);
-        await owner.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Archived, "");
-        await owner.ParticipateAsync(id, ParticipationCommand.Leave);
-        Assert.Equal(ParticipationStatus.None, (await owner.GetAsync(id)).Summary.Participation);
+        var reinstate = await Assert.ThrowsAsync<DomainException>(() =>
+            manager.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Active, "No reinstatement."));
+        Assert.Equal(ErrorCode.Conflict, reinstate.Code);
+        await manager.RemoveAttendeeAsync(id, scenario.Seed.Other.Id, "Legacy attendee removal.");
+        detail = await manager.GetAsync(id);
+        await manager.ChangeStatusAsync(id, detail.Summary.Version, QuestStatus.Cancelled, "The session is no longer needed.");
         await using var db = database.CreateContext();
-        var changes = (await db.OutboxMessages.Where(x => x.AggregateId == id).ToListAsync())
-            .Select(x => JsonSerializer.Deserialize<ChangeEnvelope>(x.PayloadJson)!).ToArray();
-        var edited = Assert.Single(changes, x => x.Kind == NotificationKind.SuspendedQuestEdited);
-        Assert.False(edited.CalendarChanged);
-        Assert.Contains(scenario.Seed.Other.Id, edited.RecipientIds);
-        var reinstated = Assert.Single(changes, x => x.Kind == NotificationKind.QuestReinstated);
-        Assert.True(reinstated.CalendarChanged);
-        Assert.True(reinstated.CalendarRevision > edited.CalendarRevision);
-        Assert.Equal(new[] { scenario.Seed.User.Id }, reinstated.PreviousAttendeeIds);
-        Assert.Equal(4, await db.QuestStatusHistory.CountAsync(x => x.QuestId == id));
+        Assert.Equal(QuestStatus.Cancelled, (await db.Quests.SingleAsync(x => x.Id == id)).Status);
+        Assert.Equal(ParticipationStatus.None,
+            (await db.Participations.SingleAsync(x => x.QuestId == id && x.UserId == scenario.Seed.Other.Id)).Status);
+        var history = Assert.Single(await db.QuestStatusHistory.Where(x => x.QuestId == id).ToListAsync());
+        Assert.Equal(QuestStatus.Suspended, history.Previous);
+        Assert.Equal(QuestStatus.Cancelled, history.Next);
+        Assert.Equal("The session is no longer needed.", history.Reason);
     }
 
     /// <summary>Stale edits and invalid scheduling leave content, audit, history and durable work unchanged.</summary>

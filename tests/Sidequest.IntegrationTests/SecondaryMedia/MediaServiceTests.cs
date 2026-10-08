@@ -181,14 +181,14 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
         Assert.Equal(1, scenario.Storage.Writes);
     }
 
-    /// <summary>Private moderation is explicit and audited; Draft and retained-unpublished covers are never disclosed through it.</summary>
+    /// <summary>Event ownership does not disclose another owner's private cover in any retained state.</summary>
     /// <param name="state">Published, Draft or retained cancelled-unpublished state.</param>
-    /// <returns>Completion after direct-read denial and the exact audited moderation result.</returns>
+    /// <returns>Completion after direct read denial without provider access.</returns>
     [Theory]
     [InlineData("active")]
     [InlineData("draft")]
     [InlineData("retained")]
-    public async Task PrivateReads_RequireExplicitModerationAndExcludeUnpublished(string state)
+    public async Task EventOwner_PrivateCoverReadIsDeniedAcrossRetainedStates(string state)
     {
         var scenario = await MediaScenario.CreateAsync(database, draft: state != "active", privateQuest: true);
         var moderatorUser = await AddOrdinaryMemberAsync(scenario);
@@ -199,17 +199,7 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
             await scenario.Quests.ChangeStatusAsync(scenario.Seed.Quest.Id, uploaded.Version, QuestStatus.Cancelled, "");
         var moderator = scenario.Service(moderatorUser);
         Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.ReadAsync(uploaded.AssetId!.Value))).Code);
-        if (state == "active")
-        {
-            Assert.NotEmpty((await moderator.ReadAsync(uploaded.AssetId!.Value, true)).Data);
-            await using var db = database.CreateContext();
-            Assert.Equal(1, await db.AuditEntries.CountAsync(x => x.ResourceId == scenario.Seed.Quest.Id && x.Action == "ModerationCoverRead"));
-        }
-        else
-        {
-            Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() => moderator.ReadAsync(uploaded.AssetId!.Value, true))).Code);
-            Assert.Equal(0, scenario.Storage.Reads);
-        }
+        Assert.Equal(0, scenario.Storage.Reads);
     }
 
     /// <summary>A successful Blob read is discarded if authorization or current assignment changes while awaiting the provider.</summary>
@@ -359,11 +349,8 @@ public sealed class MediaServiceTests(SqlTestDatabase database) : IClassFixture<
                 (await edit.Users.SingleAsync(x => x.Id == user.Id)).IsEligible = false;
             await edit.SaveChangesAsync();
         }
-        foreach (var moderation in new[] { false, true })
-        {
-            var failure = await Assert.ThrowsAsync<DomainException>(() => scenario.Service(user).ReadAsync(result.AssetId!.Value, moderation));
-            Assert.Equal(denial == "disabled" ? ErrorCode.Forbidden : ErrorCode.NotFound, failure.Code);
-        }
+        var failure = await Assert.ThrowsAsync<DomainException>(() => scenario.Service(user).ReadAsync(result.AssetId!.Value));
+        Assert.Equal(denial == "disabled" ? ErrorCode.Forbidden : ErrorCode.NotFound, failure.Code);
         Assert.Equal(0, scenario.Storage.Reads);
     }
 

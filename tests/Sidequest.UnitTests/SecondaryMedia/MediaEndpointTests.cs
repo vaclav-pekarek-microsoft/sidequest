@@ -32,7 +32,7 @@ public sealed class MediaEndpointTests
         var id = Guid.NewGuid();
         foreach (var name in new[] { "first", "second" })
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"/media/covers/{id}?moderation=true");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/media/covers/{id}");
             request.Headers.Add("Test-Name", name);
             request.Headers.Range = new(0, 1);
             using var response = await host.Client.SendAsync(request);
@@ -50,7 +50,6 @@ public sealed class MediaEndpointTests
         Assert.All(host.Calls, call =>
         {
             Assert.Equal(id, call.Id);
-            Assert.True(call.Moderation);
             Assert.True(call.TokenMatches);
         });
         Assert.Equal("circuit", (await state.GetAuthenticationStateAsync()).User.Identity!.Name);
@@ -91,7 +90,7 @@ public sealed class MediaEndpointTests
         Assert.DoesNotContain("private-provider-sentinel", await response.Content.ReadAsStringAsync());
     }
 
-    private sealed record Call(Guid Id, string? Name, bool Moderation, bool TokenMatches);
+    private sealed record Call(Guid Id, string? Name, bool TokenMatches);
     private sealed record Failure(ErrorCode? Code);
 
     private sealed class Host(WebApplication app, HttpClient client, ConcurrentQueue<Call> calls) : IAsyncDisposable
@@ -167,10 +166,10 @@ public sealed class MediaEndpointTests
         ConcurrentQueue<Call> calls, Failure failure) : IMediaService
     {
         /// <inheritdoc />
-        public async Task<MediaContent> ReadAsync(Guid assetId, bool moderation = false, CancellationToken cancellationToken = default)
+        public async Task<MediaContent> ReadAsync(Guid assetId, CancellationToken cancellationToken = default)
         {
             calls.Enqueue(new(assetId, (await state.GetAuthenticationStateAsync()).User.Identity?.Name,
-                moderation, cancellationToken == http.HttpContext!.RequestAborted));
+                cancellationToken == http.HttpContext!.RequestAborted));
             if (failure.Code is { } code)
                 throw new DomainException(code, "private-provider-sentinel");
             return new([137, 80, 78, 71], "image/png");

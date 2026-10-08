@@ -18,7 +18,6 @@ public sealed class QuestRouteParameterTests : BunitContext
     [Theory]
     [InlineData(null, false)]
     [InlineData("", false)]
-    [InlineData("Moderation", true)]
     [InlineData("History", false)]
     [InlineData("unexpected", true)]
     public void ListRoute_TransfersRequestQueryAsExplicitParameters(string? view, bool filterEvent)
@@ -40,25 +39,21 @@ public sealed class QuestRouteParameterTests : BunitContext
         Assert.Equal(eventId, parameters.Get(x => x.EventId));
     }
 
-    /// <summary>Omitted moderation defaults to ordinary access; explicit true and false are preserved alongside the route identifier.</summary>
-    /// <param name="query">Optional moderation query value.</param>
-    /// <param name="expected">Expected explicit moderation parameter.</param>
-    [Theory]
-    [InlineData(null, false)]
-    [InlineData("false", false)]
-    [InlineData("true", true)]
-    public void DetailsRoute_TransfersIdentityAndModerationIntent(string? query, bool expected)
+    /// <summary>Details routes transfer only the Quest identity and expose no moderation component parameter.</summary>
+    [Fact]
+    public void DetailsRoute_TransfersIdentityWithoutModerationIntent()
     {
         ComponentFactories.AddStub<QuestDetails>();
         var id = Guid.NewGuid();
-        Services.GetRequiredService<NavigationManager>().NavigateTo(
-            $"/quests/{id}" + (query is null ? "" : $"?moderation={query}"));
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/{id}?moderation=true");
 
         var route = Render<QuestDetailsRoute>(p => p.Add(x => x.Id, id));
         var parameters = route.FindComponent<Stub<QuestDetails>>().Instance.Parameters;
 
         Assert.Equal(id, parameters.Get(x => x.Id));
-        Assert.Equal(expected, parameters.Get(x => x.Moderation));
+        Assert.DoesNotContain(typeof(QuestDetails).GetProperties(), property => property.Name == "Moderation");
+        Assert.DoesNotContain("moderation", parameters.Select(parameter => parameter.Key),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>Creation and existing editors preserve independent route identity and optional Event preselection.</summary>

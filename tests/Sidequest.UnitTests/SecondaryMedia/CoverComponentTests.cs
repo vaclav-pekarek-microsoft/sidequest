@@ -88,18 +88,19 @@ public sealed class CoverComponentTests : BunitContext
         Assert.DoesNotContain("Cover updated.", component.Markup);
     }
 
-    /// <summary>The generated placeholder is labeled by Quest name; moderation changes only the mediated endpoint query, never a storage URL.</summary>
+    /// <summary>The generated placeholder is labeled by Quest name and assigned media uses only the mediated route.</summary>
     [Fact]
-    public void Display_DefaultAndModerationUseAccessiblePrivatePresentation()
+    public void Display_DefaultAndAssignedCoverUseAccessiblePrivatePresentation()
     {
         var empty = Render<QuestCover>(parameters => parameters.Add(x => x.QuestTitle, "Board games"));
         Assert.Equal("https://placehold.co/600x400?text=Board%20games", empty.Find("img").GetAttribute("src"));
         Assert.Equal("Cover for Board games", empty.Find("img").GetAttribute("alt"));
         var id = Guid.NewGuid();
         var cover = Render<QuestCover>(parameters => parameters.Add(x => x.AssetId, id)
-            .Add(x => x.QuestTitle, "Board games").Add(x => x.Moderation, true));
-        Assert.Equal($"media/covers/{id:D}?moderation=true", cover.Find("img").GetAttribute("src"));
+            .Add(x => x.QuestTitle, "Board games"));
+        Assert.Equal($"media/covers/{id:D}", cover.Find("img").GetAttribute("src"));
         Assert.Equal("Cover for Board games", cover.Find("img").GetAttribute("alt"));
+        Assert.DoesNotContain("moderation", cover.Markup, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("blob", cover.Markup, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -229,7 +230,7 @@ public sealed class CoverComponentTests : BunitContext
         public Task<CoverUpdate> RemoveCoverAsync(Guid questId, string expectedVersion, CancellationToken cancellationToken = default) =>
             Task.FromResult(new CoverUpdate(null, "removed-version"));
         /// <inheritdoc />
-        public Task<MediaContent> ReadAsync(Guid assetId, bool moderation = false, CancellationToken cancellationToken = default) =>
+        public Task<MediaContent> ReadAsync(Guid assetId, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Components must use mediated HTTP display.");
     }
 }

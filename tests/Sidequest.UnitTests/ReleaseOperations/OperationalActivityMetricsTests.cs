@@ -32,8 +32,8 @@ public sealed class OperationalActivityMetricsTests
         var clock = new OperationalTestClock();
         using var metrics = new OperationalActivityMetrics(clock);
         var result = new object();
-        var expected = new[] { "directory_user_search", "directory_group_search", "directory_user_lookup",
-            "directory_group_expansion", "image_sanitization", "email_submission", "authorize_user",
+        var expected = new[] { "directory_user_search", "directory_user_lookup",
+            "image_sanitization", "email_submission", "authorize_user",
             "authorize_administrator", "authorize_event", "authorize_quest" };
         var calls = 0;
         foreach (var activity in Enum.GetValues<OperationalActivity>())
@@ -257,14 +257,11 @@ public sealed class OperationalActivityMetricsTests
 
     /// <summary>Every decorator forwards exact caller-owned objects, identities, flags and cancellation tokens once without touching SQL or consuming streams.</summary>
     /// <param name="ownerOnly">The unchanged Event/Quest ownership requirement.</param>
-    /// <param name="moderation">The unchanged Quest moderation requirement.</param>
-    /// <returns>Completion after all ten port calls return their original result references.</returns>
+    /// <returns>Completion after all retained port calls return their original result references.</returns>
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task DecoratorsPreserveAllArgumentsResultsAndCancellation(bool ownerOnly, bool moderation)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecoratorsPreserveAllArgumentsResultsAndCancellation(bool ownerOnly)
     {
         using var capture = new ActivityCapture();
         using var metrics = new OperationalActivityMetrics(new OperationalTestClock());
@@ -283,20 +280,18 @@ public sealed class OperationalActivityMetricsTests
         var message = new EmailMessage("private@sample.invalid", "private", "private", "private", "private-key");
 
         Assert.Same(inner.Users, await directory.SearchUsersAsync(query, token));
-        Assert.Same(inner.Groups, await directory.SearchGroupsAsync(query, token));
         Assert.Same(inner.DirectoryUser, await directory.GetUserAsync(userId, token));
-        Assert.Same(inner.Users, await directory.ExpandGroupAsync(resourceId, token));
         Assert.Same(inner.Receipt, await email.SendAsync(message, token));
         Assert.Same(inner.Image, await images.SanitizeAsync(stream, token));
         Assert.Same(inner.User, await access.RequireUserAsync(db, token));
         Assert.Same(inner.User, await access.RequireAdministratorAsync(db, token));
         Assert.Same(inner.Event, await access.RequireEventAsync(db, resourceId, userId, ownerOnly, token));
-        Assert.Same(inner.Quest, await access.RequireQuestAsync(db, resourceId, userId, ownerOnly, moderation, token));
+        Assert.Same(inner.Quest, await access.RequireQuestAsync(db, resourceId, userId, ownerOnly, token));
         object?[][] expected =
         [
-            [query, token], [query, token], [userId, token], [resourceId, token], [message, token],
+            [query, token], [userId, token], [message, token],
             [stream, token], [db, token], [db, token], [db, resourceId, userId, ownerOnly, token],
-            [db, resourceId, userId, ownerOnly, moderation, token]
+            [db, resourceId, userId, ownerOnly, token]
         ];
         Assert.Equal(expected.Length, inner.Calls.Count);
         for (var index = 0; index < expected.Length; index++)
@@ -304,8 +299,8 @@ public sealed class OperationalActivityMetricsTests
         Assert.True(stream.CanRead);
         Assert.Equal(0, stream.Position);
         var readings = capture.Read();
-        Assert.Equal(20, readings.Length);
-        Assert.Equal(10, readings.Where(reading => reading.Name == "sidequest.operation.completed")
+        Assert.Equal(16, readings.Length);
+        Assert.Equal(8, readings.Where(reading => reading.Name == "sidequest.operation.completed")
             .Select(reading => reading.Tags["operation"]).Distinct().Count());
         Assert.All(readings, reading =>
         {
@@ -336,12 +331,10 @@ public sealed class OperationalActivityMetricsTests
         internal RecordingPorts()
         {
             Users = [DirectoryUser];
-            Groups = [new(Guid.NewGuid(), "Private group")];
         }
 
         internal DirectoryUser DirectoryUser { get; } = new(Guid.NewGuid(), Guid.NewGuid(), "Private", "private@sample.invalid", true);
         internal IReadOnlyList<DirectoryUser> Users { get; }
-        internal IReadOnlyList<DirectoryGroup> Groups { get; }
         internal EmailReceipt Receipt { get; } = new("private-receipt");
         internal SanitizedImage Image { get; } = new([1, 2, 3], "image/png", 1, 1);
         internal UserAccount User { get; } = new();
@@ -359,14 +352,8 @@ public sealed class OperationalActivityMetricsTests
         public Task<IReadOnlyList<DirectoryUser>> SearchUsersAsync(string query, CancellationToken cancellationToken = default) =>
             Return(Users, query, cancellationToken);
         /// <inheritdoc />
-        public Task<IReadOnlyList<DirectoryGroup>> SearchGroupsAsync(string query, CancellationToken cancellationToken = default) =>
-            Return(Groups, query, cancellationToken);
-        /// <inheritdoc />
         public Task<DirectoryUser> GetUserAsync(Guid objectId, CancellationToken cancellationToken = default) =>
             Return(DirectoryUser, objectId, cancellationToken);
-        /// <inheritdoc />
-        public Task<IReadOnlyList<DirectoryUser>> ExpandGroupAsync(Guid groupId, CancellationToken cancellationToken = default) =>
-            Return(Users, groupId, cancellationToken);
         /// <inheritdoc />
         public Task<EmailReceipt> SendAsync(EmailMessage message, CancellationToken cancellationToken = default) =>
             Return(Receipt, message, cancellationToken);
@@ -384,8 +371,8 @@ public sealed class OperationalActivityMetricsTests
             CancellationToken cancellationToken = default) => Return(Event, db, eventId, userId, ownerOnly, cancellationToken);
         /// <inheritdoc />
         public Task<Quest> RequireQuestAsync(ISidequestDbContext db, Guid questId, Guid userId, bool ownerOnly = false,
-            bool moderation = false, CancellationToken cancellationToken = default) =>
-            Return(Quest, db, questId, userId, ownerOnly, moderation, cancellationToken);
+            CancellationToken cancellationToken = default) =>
+            Return(Quest, db, questId, userId, ownerOnly, cancellationToken);
     }
 
     private sealed class ActivityCapture : IDisposable

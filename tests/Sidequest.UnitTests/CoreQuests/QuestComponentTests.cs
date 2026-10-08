@@ -73,55 +73,24 @@ public sealed class QuestComponentTests : BunitContext
         Assert.Equal(new[] { ParticipationCommand.Leave }, requests);
     }
 
-    /// <summary>Moderation cards render neither counts nor the ordinary private link; capacity remains advisory for ordinary viewers.</summary>
+    /// <summary>Quest cards use the ordinary detail link and retain advisory-capacity guidance without moderation routing.</summary>
     [Fact]
-    public void Card_RedactsCountsAndUsesDedicatedModerationLink()
+    public void Card_UsesOrdinaryLinkAndCapacityRemainsAdvisory()
     {
-        var summary = Summary() with { AttendeeCount = null, FollowerCount = null, Visibility = QuestVisibility.Private };
-        var component = Render<QuestCard>(p => p.Add(c => c.Item, summary).Add(c => c.Moderation, true));
-        Assert.Equal($"/quests/{summary.Id}?moderation=true", component.Find("a").GetAttribute("href"));
-        Assert.DoesNotContain("joined", component.Markup);
-        Assert.DoesNotContain("following", component.Markup);
-        Assert.Contains("Europe/Prague", component.Markup);
-        Assert.Contains("2026-07-15 12:00", component.Markup);
-        var ordinary = Render<QuestCard>(p => p.Add(c => c.Item, Summary() with { AttendeeCount = 3, SuggestedCapacity = 1 }));
-        Assert.Contains("Above suggested capacity", ordinary.Markup);
-        Assert.Contains("Joining is still allowed", ordinary.Markup);
+        var summary = Summary() with { AttendeeCount = 3, SuggestedCapacity = 1 };
+        var component = Render<QuestCard>(p => p.Add(c => c.Item, summary));
+        Assert.Equal($"/quests/{summary.Id}", component.Find("a").GetAttribute("href"));
+        Assert.DoesNotContain("moderation", component.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Above suggested capacity", component.Markup);
+        Assert.Contains("Joining is still allowed", component.Markup);
     }
 
-    /// <summary>Moderation controls expose no owner editing, invitation, roster selector, or attendance-management action.</summary>
+    /// <summary>Public Quest components expose no moderation parameter after feature removal.</summary>
     [Fact]
-    public void Management_ModerationOffersOnlyReasonedSuspend()
+    public void QuestComponents_ExposeNoModerationParameter()
     {
-        var detail = new QuestDetail(Summary(), "Description", "", [], null, null, null);
-        var component = Render<QuestManagement>(p => p.Add(c => c.Detail, detail).Add(c => c.Moderation, true));
-        Assert.Empty(component.FindAll("select"));
-        Assert.Empty(component.FindAll("a"));
-        Assert.Single(component.FindComponents<FluentButton>());
-        Assert.Contains("Suspend", component.FindComponent<FluentButton>().Markup);
-        Assert.True(component.FindComponent<FluentButton>().Instance.Disabled);
-        Assert.Contains("no participant counts or rosters", component.Markup);
-    }
-
-    /// <summary>Input events update the reason before confirmation, without relying on a later blur/change event.</summary>
-    /// <returns>A task completing after the confirmed callback carries the exact reason entered before a busy transition.</returns>
-    [Fact]
-    public async Task Management_InputReasonIsCapturedBeforeConfirmationWithoutBlur()
-    {
-        var requests = new List<QuestActionRequest>();
-        var detail = new QuestDetail(Summary(), "Description", "", [], null, null, null);
-        var component = Render<QuestManagement>(p => p.Add(c => c.Detail, detail)
-            .Add(c => c.Moderation, true).Add(c => c.Execute, request => requests.Add(request)));
-        component.Find("fluent-text-area").Input("Browser acceptance action.");
-        component.Render(p => p.Add(c => c.Busy, true));
-        component.Render(p => p.Add(c => c.Busy, false));
-        component.Find("input[type=checkbox]").Change(true);
-        await component.InvokeAsync(() => component.FindComponent<FluentButton>().Instance.OnClick.InvokeAsync());
-
-        var request = Assert.Single(requests);
-        Assert.Equal("suspend", request.Action);
-        Assert.Null(request.UserId);
-        Assert.Equal("Browser acceptance action.", request.Reason);
+        Assert.DoesNotContain(typeof(QuestCard).GetProperties(), property => property.Name == "Moderation");
+        Assert.DoesNotContain(typeof(QuestManagement).GetProperties(), property => property.Name == "Moderation");
     }
 
     /// <summary>The draft editor validates a short title, never mutates parent input, and disables visibility changes when published.</summary>
@@ -144,7 +113,7 @@ public sealed class QuestComponentTests : BunitContext
         Assert.Equal("Corrected title", Assert.Single(submissions).Title);
         Assert.Equal("Original", initial.Title);
         Assert.NotNull(component.Find("select").GetAttribute("disabled"));
-        Assert.Contains("audited moderation view", component.Markup);
+        Assert.DoesNotContain("moderation", component.Markup, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>An existing second occurrence survives editing, and changing a repeated local time requires a new explicit occurrence choice.</summary>
@@ -207,5 +176,5 @@ public sealed class QuestComponentTests : BunitContext
 
     private static QuestSummary Summary() => new(Guid.NewGuid(), Guid.NewGuid(), "Synthetic Event", "Synthetic Quest", "Room",
         new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero),
-        "Europe/Prague", QuestStatus.Active, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, false, false, "", null);
+        "Europe/Prague", QuestStatus.Active, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, false, "", null);
 }

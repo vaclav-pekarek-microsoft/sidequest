@@ -610,30 +610,32 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 .table-scroll { overflow-x: auto; padding-bottom: .25rem; }
 .management-tabs {
     display: flex;
-    align-items: end;
-    gap: .15rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .4rem;
     margin-block: 1.25rem;
-    padding: 0 .55rem;
-    overflow-x: auto;
-    background: transparent;
-    border: 0;
+    padding: .45rem .55rem 0;
+    overflow: visible;
+    background: color-mix(in srgb, var(--sq-blue) 5%, white);
+    border: 1px solid var(--sq-line);
     border-bottom: 1px solid var(--sq-line);
-    border-radius: 0;
+    border-radius: var(--sq-radius-sm) var(--sq-radius-sm) 0 0;
 
     button {
-        flex: 0 0 auto;
+        flex: 1 1 8rem;
+        min-width: max-content;
         color: var(--sq-ink-soft);
         background: transparent;
         border: 1px solid transparent;
-        border-radius: .8rem .8rem 0 0;
+        border-radius: .7rem .7rem 0 0;
         box-shadow: none;
         margin-bottom: -1px;
 
         &:hover:not(:disabled) {
-            color: var(--sq-ink);
-            background: color-mix(in srgb, var(--sq-blue) 8%, white);
-            border-color: color-mix(in srgb, var(--sq-blue) 22%, var(--sq-line));
-            border-bottom-color: var(--sq-line);
+            color: var(--sq-blue-dark);
+            background: color-mix(in srgb, var(--sq-blue) 10%, white);
+            border-color: color-mix(in srgb, var(--sq-blue) 25%, var(--sq-line));
+            border-bottom-color: transparent;
             filter: none;
             box-shadow: none;
         }
@@ -645,7 +647,7 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
         background: white;
         border-color: var(--sq-line);
         border-bottom-color: white;
-        box-shadow: 0 -7px 18px rgb(0 103 184 / 7%);
+        box-shadow: 0 -5px 14px rgb(0 103 184 / 8%);
     }
 }
 .management-list {

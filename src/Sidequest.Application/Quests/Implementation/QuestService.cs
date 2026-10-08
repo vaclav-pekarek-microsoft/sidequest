@@ -38,11 +38,9 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
         if (eventId is not null)
-            await access.RequireEventAsync(db, eventId.Value, actor.Id, kind == QuestListKind.Moderation,
-                cancellationToken).ConfigureAwait(false);
+            await access.RequireEventAsync(db, eventId.Value, actor.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow();
-        var moderation = kind == QuestListKind.Moderation;
-        var query = Visible(db, actor.Id, moderation).Where(q => eventId == null || q.EventId == eventId);
+        var query = Visible(db, actor.Id).Where(q => eventId == null || q.EventId == eventId);
         if (dates.FromUtc is not null)
             query = query.Where(q => q.StartUtc >= dates.FromUtc.Value);
         if (dates.UntilUtc is not null)
@@ -76,7 +74,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         }
         var count = await query.CountAsync(cancellationToken).ConfigureAwait(false);
         var items = await Summaries(db, query.OrderBy(q => q.StartUtc).ThenBy(q => q.Id).Skip(offset).Take(page.Limit),
-            actor.Id, moderation, now).ToListAsync(cancellationToken).ConfigureAwait(false);
+            actor.Id, now).ToListAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(items, count, page.Page, page.Limit);
     }
@@ -102,22 +100,19 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             .ThenBy(key => key.StartUtc)
             .ThenBy(key => key.Id)
             .Skip(page.Offset).Take(page.Limit).Select(key => key.Id).ToArray();
-        var items = await Summaries(db, query.Where(quest => ids.Contains(quest.Id)), actor, false, now)
+        var items = await Summaries(db, query.Where(quest => ids.Contains(quest.Id)), actor, now)
             .ToDictionaryAsync(quest => quest.Id, token).ConfigureAwait(false);
         return new(ids.Select(id => items[id]).ToArray(), keys.Count, page.Page, page.Limit);
     }
 
     /// <inheritdoc />
-    public async Task<QuestDetail> GetAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default)
+    public async Task<QuestDetail> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        var parentId = moderation ? await QuestChanges.ParentIdAsync(db, id, cancellationToken).ConfigureAwait(false) : null;
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (parentId is not null)
-            await db.LockEventAsync(parentId.Value, cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
-        var quest = await RequireAsync(db, id, actor.Id, false, moderation, cancellationToken).ConfigureAwait(false);
-        var summary = await Summaries(db, db.Quests.Where(q => q.Id == id), actor.Id, moderation, clock.GetUtcNow())
+        var quest = await RequireAsync(db, id, actor.Id, false, cancellationToken).ConfigureAwait(false);
+        var summary = await Summaries(db, db.Quests.Where(q => q.Id == id), actor.Id, clock.GetUtcNow())
             .SingleAsync(cancellationToken).ConfigureAwait(false);
         var owners = await (from owner in db.QuestOwners
                             join user in db.Users on owner.UserId equals user.Id
@@ -125,19 +120,16 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                             orderby user.DisplayName, user.Id
                             select new OwnerSummary(user.Id, user.DisplayName, user.Email))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var attendees = moderation ? null : await RosterAsync(db, id, ParticipationStatus.Joined, cancellationToken).ConfigureAwait(false);
-        var followers = moderation || !summary.CanManage ? null :
+        var attendees = await RosterAsync(db, id, ParticipationStatus.Joined, cancellationToken).ConfigureAwait(false);
+        var followers = !summary.CanManage ? null :
             await RosterAsync(db, id, ParticipationStatus.Following, cancellationToken).ConfigureAwait(false);
-        var invitees = moderation || !summary.CanManage ? null :
+        var invitees = !summary.CanManage ? null :
             await (from invitation in db.QuestInvitations
                    join user in db.Users on invitation.UserId equals user.Id
                    where invitation.QuestId == id && invitation.Status == QuestInvitationStatus.Active &&
                        user.IsEligible && user.DepartureVerifiedUtc == null
                    orderby user.DisplayName, user.Id
                    select new QuestRosterPersonSummary(user.Id, user.DisplayName)).ToListAsync(cancellationToken).ConfigureAwait(false);
-        if (moderation && quest.Visibility == QuestVisibility.Private)
-            AuditModerationRead(db, quest, actor.Id, "ModerationDetailRead");
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new(summary, quest.Description, quest.StatusReason, owners, attendees, followers, invitees);
     }
@@ -170,7 +162,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task EditAsync(Guid id, string version, QuestInput input, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, true, false, async (db, quest, parent, actor, now, token) =>
+        MutateAsync(id, true, async (db, quest, parent, actor, now, token) =>
         {
             ArgumentNullException.ThrowIfNull(input);
             InputRules.Version(quest, version);
@@ -197,12 +189,8 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                     audience.Owners.Concat(audience.Attendees).Concat(audience.Followers), now,
                     previousAttendees: audience.Attendees, calendarChanged: calendar, material: material);
             if (quest.Status == QuestStatus.Suspended)
-            {
-                var moderators = await db.EventOwners.Where(x => x.EventId == parent.Id)
-                    .Select(x => x.UserId).ToArrayAsync(token).ConfigureAwait(false);
                 QuestChanges.Notify(db, writer, quest, change, actor, NotificationKind.SuspendedQuestEdited,
-                    audience.Owners.Concat(moderators), now);
-            }
+                    audience.Owners, now);
             if (quest.Status != QuestStatus.Draft && oldEnd != quest.EndUtc)
                 await QuestChanges.ScheduleAsync(db, quest, token).ConfigureAwait(false);
         }, cancellationToken);
@@ -213,32 +201,23 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
     {
         if (!Enum.IsDefined(target))
             throw new DomainException(ErrorCode.Validation, "Unknown Quest status.", "Status");
-        // Publication and reinstatement share a target, but never share an authorization grant.
-        await using var probe = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        await access.RequireUserAsync(probe, cancellationToken).ConfigureAwait(false);
-        var current = await probe.Quests.Where(q => q.Id == id).Select(q => (QuestStatus?)q.Status)
-            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        var moderation = target == QuestStatus.Suspended || target == QuestStatus.Active && current == QuestStatus.Suspended;
-        await MutateAsync(id, !moderation, moderation, async (db, quest, parent, actor, now, token) =>
+        await MutateAsync(id, true, async (db, quest, parent, actor, now, token) =>
         {
             InputRules.Version(quest, version);
             if (quest.Status == target)
                 return;
             var allowed = (quest.Status, target) switch
             {
-                (QuestStatus.Draft, QuestStatus.Active) => !moderation,
-                (QuestStatus.Active, QuestStatus.Suspended) => moderation,
-                (QuestStatus.Suspended, QuestStatus.Active) => moderation,
-                (QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended, QuestStatus.Cancelled) => !moderation,
-                (QuestStatus.Completed or QuestStatus.Cancelled, QuestStatus.Archived) => !moderation,
+                (QuestStatus.Draft, QuestStatus.Active) => true,
+                (QuestStatus.Draft or QuestStatus.Active or QuestStatus.Suspended, QuestStatus.Cancelled) => true,
+                (QuestStatus.Completed or QuestStatus.Cancelled, QuestStatus.Archived) => true,
                 _ => false
             };
             if (!allowed)
                 throw Conflict("This lifecycle transition is not allowed.");
-            var explanation = target == QuestStatus.Suspended || quest.Status == QuestStatus.Suspended && target == QuestStatus.Active ||
-                target == QuestStatus.Cancelled && quest.Status != QuestStatus.Draft ? InputRules.Reason(reason) :
+            var explanation = target == QuestStatus.Cancelled && quest.Status != QuestStatus.Draft ? InputRules.Reason(reason) :
                 target == QuestStatus.Cancelled ? InputRules.Text(reason, "Reason", 0, 2000) : "";
-            if (target is QuestStatus.Active or QuestStatus.Suspended or QuestStatus.Cancelled)
+            if (target is QuestStatus.Active or QuestStatus.Cancelled)
                 QuestChanges.RequireActive(parent, now);
             if (target == QuestStatus.Active)
             {
@@ -254,7 +233,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task DeleteDraftAsync(Guid id, string version, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, true, false, async (db, quest, parent, actor, now, token) =>
+        MutateAsync(id, true, async (db, quest, parent, actor, now, token) =>
         {
             InputRules.Version(quest, version);
             QuestChanges.RequireActive(parent, now);
@@ -271,7 +250,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task ParticipateAsync(Guid id, ParticipationCommand command, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, false, false, async (db, quest, parent, actor, now, token) =>
+        MutateAsync(id, false, async (db, quest, parent, actor, now, token) =>
         {
             if (command is ParticipationCommand.Join or ParticipationCommand.Follow)
             {
@@ -312,7 +291,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task InviteAsync(Guid id, Guid userId, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, true, false, async (db, quest, parent, actor, now, token) =>
+        MutateAsync(id, true, async (db, quest, parent, actor, now, token) =>
         {
             QuestChanges.RequireActive(parent, now);
             if (quest.Status != QuestStatus.Active || quest.Visibility != QuestVisibility.Private || quest.EndUtc <= now)
@@ -336,7 +315,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task RevokeInvitationAsync(Guid id, Guid userId, string reason, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, true, false, async (db, quest, _, actor, now, token) =>
+        MutateAsync(id, true, async (db, quest, _, actor, now, token) =>
         {
             var explanation = InputRules.Reason(reason);
             if (!await db.QuestInvitations.AnyAsync(i => i.QuestId == id && i.UserId == userId &&
@@ -348,7 +327,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     public Task RemoveAttendeeAsync(Guid id, Guid userId, string reason, CancellationToken cancellationToken = default) =>
-        MutateAsync(id, true, false, async (db, quest, parent, actor, now, token) =>
+        MutateAsync(id, true, async (db, quest, parent, actor, now, token) =>
         {
             QuestChanges.RequireActive(parent, now);
             if (quest.Status is not (QuestStatus.Active or QuestStatus.Suspended))
@@ -367,25 +346,20 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         ChangeOwnerAsync(id, userId, false, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, bool moderation = false,
+    public async Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id,
         CancellationToken cancellationToken = default)
     {
         await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        var parentId = moderation ? await QuestChanges.ParentIdAsync(db, id, cancellationToken).ConfigureAwait(false) : null;
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (parentId is not null)
-            await db.LockEventAsync(parentId.Value, cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
-        var quest = await RequireAsync(db, id, actor.Id, false, moderation, cancellationToken).ConfigureAwait(false);
+        var quest = await RequireAsync(db, id, actor.Id, false, cancellationToken).ConfigureAwait(false);
         var owner = quest.CreatorId == actor.Id ||
             await db.QuestOwners.AnyAsync(x => x.QuestId == id && x.UserId == actor.Id, cancellationToken).ConfigureAwait(false) ||
             await db.Administrators.AnyAsync(x => x.UserId == actor.Id, cancellationToken).ConfigureAwait(false);
         IReadOnlyList<QuestHistoryItem> history;
-        if (owner || moderation)
+        if (owner)
         {
-            // Moderators never receive action labels containing participant or invitee identifiers.
-            var audit = db.AuditEntries.Where(x => x.ResourceKind == ResourceKind.Quest && x.ResourceId == id &&
-                (!moderation || x.Action.StartsWith("Status:") || x.Action == "ContentEdited"));
+            var audit = db.AuditEntries.Where(x => x.ResourceKind == ResourceKind.Quest && x.ResourceId == id);
             history = await (from entry in audit
                              join user in db.Users on entry.ActorId equals user.Id into actors
                              from user in actors.DefaultIfEmpty()
@@ -408,14 +382,11 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         }
         else
         {
-            // Ordinary viewers get only the current participant-facing status, not moderation records.
+            // Ordinary viewers get only the current participant-facing status, not management records.
             var parent = await db.Events.SingleAsync(e => e.Id == quest.EventId, cancellationToken).ConfigureAwait(false);
             history = [new QuestHistoryItem(QuestChanges.EffectiveStatus(quest, parent, clock.GetUtcNow()).ToString(),
                 quest.StatusReason, quest.UpdatedUtc, null)];
         }
-        if (moderation && quest.Visibility == QuestVisibility.Private)
-            AuditModerationRead(db, quest, actor.Id, "ModerationHistoryRead");
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return history;
     }
@@ -427,7 +398,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         await using var transaction = await db.BeginTransactionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
         var now = clock.GetUtcNow();
-        var joined = Visible(db, actor.Id, false).Where(q =>
+        var joined = Visible(db, actor.Id).Where(q =>
             db.Participations.Any(p => p.QuestId == q.Id && p.UserId == actor.Id && p.Status == ParticipationStatus.Joined));
         var result = await (from quest in joined
                             join parent in db.Events on quest.EventId equals parent.Id
@@ -441,7 +412,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
     }
 
     private Task ChangeOwnerAsync(Guid id, Guid userId, bool add, CancellationToken token) =>
-        MutateAsync(id, true, false, async (db, quest, parent, actor, now, ct) =>
+        MutateAsync(id, true, async (db, quest, parent, actor, now, ct) =>
         {
             if (add && (quest.Status == QuestStatus.Archived || parent.Status == EventStatus.Archived))
                 throw Conflict("New owners of archived resources can only be assigned through recovery.");
@@ -469,19 +440,19 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                     revokeInvitation: false).ConfigureAwait(false);
         }, token);
 
-    private async Task MutateAsync(Guid id, bool ownerOnly, bool moderation,
+    private async Task MutateAsync(Guid id, bool ownerOnly,
         Func<ISidequestDbContext, Quest, Event, Guid, DateTimeOffset, CancellationToken, Task> mutation, CancellationToken token)
     {
         while (true)
         {
-            await ReconcileOverdueAsync(id, ownerOnly, moderation, token).ConfigureAwait(false);
+            await ReconcileOverdueAsync(id, ownerOnly, token).ConfigureAwait(false);
             await using var db = await factory.CreateAsync(token).ConfigureAwait(false);
             var parentId = await QuestChanges.ParentIdAsync(db, id, token).ConfigureAwait(false);
             await using var transaction = await db.BeginTransactionAsync(cancellationToken: token).ConfigureAwait(false);
             if (parentId is not null)
                 await db.LockEventAsync(parentId.Value, token).ConfigureAwait(false);
             var actor = await access.RequireUserAsync(db, token).ConfigureAwait(false);
-            var quest = await RequireAsync(db, id, actor.Id, ownerOnly, moderation, token).ConfigureAwait(false);
+            var quest = await RequireAsync(db, id, actor.Id, ownerOnly, token).ConfigureAwait(false);
             var parent = await db.Events.SingleAsync(x => x.Id == quest.EventId, token).ConfigureAwait(false);
             var now = clock.GetUtcNow();
             // A crossed cutoff needs a fresh reconciliation transaction, not cleanup rolled back by a rejected command.
@@ -495,7 +466,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         }
     }
 
-    private async Task ReconcileOverdueAsync(Guid id, bool ownerOnly, bool moderation, CancellationToken token)
+    private async Task ReconcileOverdueAsync(Guid id, bool ownerOnly, CancellationToken token)
     {
         await using var db = await factory.CreateAsync(token).ConfigureAwait(false);
         var parentId = await QuestChanges.ParentIdAsync(db, id, token).ConfigureAwait(false);
@@ -503,7 +474,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         if (parentId is not null)
             await db.LockEventAsync(parentId.Value, token).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, token).ConfigureAwait(false);
-        var quest = await RequireAsync(db, id, actor.Id, ownerOnly, moderation, token).ConfigureAwait(false);
+        var quest = await RequireAsync(db, id, actor.Id, ownerOnly, token).ConfigureAwait(false);
         var now = clock.GetUtcNow();
         var changed = await eventLifecycle.ReconcileAsync(db, quest.EventId, now, token).ConfigureAwait(false);
         if (quest.Status is QuestStatus.Active or QuestStatus.Suspended && now >= quest.EndUtc)
@@ -530,15 +501,15 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
     }
 
     private async Task<Quest> RequireAsync(ISidequestDbContext db, Guid id, Guid actor, bool owner,
-        bool moderation, CancellationToken token)
+        CancellationToken token)
     {
-        var quest = await access.RequireQuestAsync(db, id, actor, owner, moderation, token).ConfigureAwait(false);
-        if (!await Visible(db, actor, moderation, owner).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
+        var quest = await access.RequireQuestAsync(db, id, actor, owner, token).ConfigureAwait(false);
+        if (!await Visible(db, actor, owner).AnyAsync(q => q.Id == id, token).ConfigureAwait(false))
             throw new DomainException(ErrorCode.NotFound, "This resource is unavailable.");
         return quest;
     }
 
-    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool moderation, bool ownerOnly = false) =>
+    private static IQueryable<Quest> Visible(ISidequestDbContext db, Guid actor, bool ownerOnly = false) =>
         db.Quests.Where(q =>
             db.Events.Any(e => e.Id == q.EventId && e.Status != EventStatus.Draft &&
                 (db.Administrators.Any(a => a.UserId == actor) ||
@@ -548,16 +519,10 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                      h.Previous == EventStatus.Draft && h.Next == EventStatus.Cancelled))) &&
             (db.Administrators.Any(a => a.UserId == actor) ||
              db.EventMemberships.Any(m => m.EventId == q.EventId && m.UserId == actor && m.Status == MembershipStatus.Active)) &&
-            (ownerOnly && !moderation
+            (ownerOnly
                 ? db.Administrators.Any(a => a.UserId == actor) ||
                   q.CreatorId == actor ||
                   db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor)
-                : moderation
-                ? q.Status != QuestStatus.Draft &&
-                    !db.QuestStatusHistory.Any(h => h.QuestId == q.Id && h.Previous == QuestStatus.Draft && h.Next == QuestStatus.Cancelled) &&
-                    (db.Administrators.Any(a => a.UserId == actor) ||
-                     db.Events.Any(e => e.Id == q.EventId && e.CreatorId == actor) ||
-                     db.EventOwners.Any(o => o.EventId == q.EventId && o.UserId == actor))
                 : db.Administrators.Any(a => a.UserId == actor) ||
                     q.CreatorId == actor ||
                     db.QuestOwners.Any(o => o.QuestId == q.Id && o.UserId == actor) ||
@@ -567,7 +532,7 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
                      db.QuestInvitations.Any(i => i.QuestId == q.Id && i.UserId == actor && i.Status == QuestInvitationStatus.Active))));
 
     private static IQueryable<QuestSummary> Summaries(ISidequestDbContext db, IQueryable<Quest> quests,
-        Guid actor, bool moderation, DateTimeOffset now) =>
+        Guid actor, DateTimeOffset now) =>
         from quest in quests
         join parent in db.Events on quest.EventId equals parent.Id
         select new QuestSummary(quest.Id, parent.Id, parent.Name, quest.Title, quest.Location,
@@ -575,17 +540,14 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
             (quest.Status == QuestStatus.Active || quest.Status == QuestStatus.Suspended) && quest.EndUtc <= now
                 ? QuestStatus.Completed : quest.Status,
             quest.Visibility,
-            moderation ? null : db.Participations.Count(p => p.QuestId == quest.Id && p.Status == ParticipationStatus.Joined &&
+            db.Participations.Count(p => p.QuestId == quest.Id && p.Status == ParticipationStatus.Joined &&
                 db.Users.Any(u => u.Id == p.UserId && u.IsEligible && u.DepartureVerifiedUtc == null)),
-            moderation ? null : db.Participations.Count(p => p.QuestId == quest.Id && p.Status == ParticipationStatus.Following &&
+            db.Participations.Count(p => p.QuestId == quest.Id && p.Status == ParticipationStatus.Following &&
                 db.Users.Any(u => u.Id == p.UserId && u.IsEligible && u.DepartureVerifiedUtc == null)),
             quest.SuggestedCapacity,
-            moderation ? ParticipationStatus.None : db.Participations.Where(p => p.QuestId == quest.Id && p.UserId == actor)
+            db.Participations.Where(p => p.QuestId == quest.Id && p.UserId == actor)
                 .Select(p => p.Status).FirstOrDefault(),
             db.QuestOwners.Any(o => o.QuestId == quest.Id && o.UserId == actor),
-            db.Administrators.Any(a => a.UserId == actor) ||
-                parent.CreatorId == actor ||
-                db.EventOwners.Any(o => o.EventId == parent.Id && o.UserId == actor),
             Convert.ToBase64String(quest.Version), quest.CoverAssetId)
         {
             CanManage = db.Administrators.Any(a => a.UserId == actor) ||
@@ -643,17 +605,6 @@ public sealed class QuestService(ISidequestDbContextFactory factory, IResourceAc
         quest.StartUtc = start;
         quest.EndUtc = end;
     }
-
-    private void AuditModerationRead(ISidequestDbContext db, Quest quest, Guid actor, string action) =>
-        db.AuditEntries.Add(new AuditEntry
-        {
-            ResourceKind = ResourceKind.Quest,
-            ResourceId = quest.Id,
-            ActorId = actor,
-            Action = action,
-            OccurredUtc = clock.GetUtcNow(),
-            CorrelationId = Guid.NewGuid().ToString("N")
-        });
 
     private static DomainException Conflict(string message) => new(ErrorCode.Conflict, message);
 }

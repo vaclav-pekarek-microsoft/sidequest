@@ -108,5 +108,5 @@ public sealed class ExperienceComponentTests : BunitContext
             new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 7, 15, 11, 0, 0, TimeSpan.Zero),
             "Europe/Prague", QuestStatus.Active, QuestVisibility.Private, 0, 0, null,
-            participation, false, true, "", null);
+            participation, false, "", null);
 }

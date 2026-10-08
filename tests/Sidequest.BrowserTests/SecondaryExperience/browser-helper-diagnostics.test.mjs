@@ -75,5 +75,5 @@ test("Required reasons are determined by the action, not a transiently absent Fl
         assert.match(helper, /action is "Cancel Quest" or "Revoke invitation" or "Remove attendee"/);
         assert.match(helper, /await reason\.FillWhenActionableAsync\(/);
     }
-    assert.match(core, /var needsReason = moderation \|\|/);
+    assert.match(core, /var needsReason = action is "Cancel Quest" or "Revoke invitation" or "Remove attendee"/);
 });

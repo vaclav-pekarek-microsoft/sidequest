@@ -27,8 +27,7 @@
                 <option value="@QuestVisibility.Private">Private, named Event members only</option>
             </InputSelect>
         </label>
-        <p class="text-muted">Private Quest content and owners can be inspected by Event owners in an audited moderation view.
-            They cannot see invitation, attendee, or follower rosters in that view.</p>
+        <p class="text-muted">Private Quest content is available only to its owners, administrators, and named Event members.</p>
     </fieldset>
     <div class="page-actions">
         <FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent" Disabled="@Busy">Save @(Published ? "changes" : "draft")</FluentButton>

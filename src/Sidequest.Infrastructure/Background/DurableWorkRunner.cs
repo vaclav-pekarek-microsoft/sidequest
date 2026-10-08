@@ -38,7 +38,7 @@ public sealed class DurableWorkRunner(SqlWorkQueue queue, IEnumerable<IBackgroun
             {
                 if ((category == "outbox" && lease.Type != WorkTypes.Change) ||
                     (category == "scheduled" && lease.Type is not (WorkTypes.EventCompletion or WorkTypes.QuestCompletion
-                        or WorkTypes.BulkMembership or WorkTypes.Reminder or WorkTypes.MediaCleanup)))
+                        or WorkTypes.Reminder or WorkTypes.MediaCleanup)))
                     throw new DeliveryTransportException(TransportOutcome.Permanent, "Unsupported work version or queue category.");
                 var matches = handlers.Where(x => string.Equals(x.WorkType, lease.Type, StringComparison.Ordinal)).ToArray();
                 if (matches.Length != 1)

@@ -55,6 +55,7 @@ public sealed class EventCancellationCompositionTests
         historical.EndUtc = s.Clock.Now;
         await using (var db = s.Read())
         {
+            (await db.Quests.SingleAsync(x => x.Id == empty)).Status = QuestStatus.Suspended;
             (await db.Users.SingleAsync(x => x.Id == ineligible.Id)).IsEligible = false;
             (await db.Users.SingleAsync(x => x.Id == departed.Id)).DepartureVerifiedUtc = s.Clock.Now;
             (await db.Users.SingleAsync(x => x.Id == foreign.Id)).TenantId = Guid.NewGuid();
@@ -136,20 +137,27 @@ public sealed class EventCancellationCompositionTests
         Assert.Equal(QuestStatus.Cancelled, (await s.QuestAsync(empty)).Status);
         Assert.Equal(QuestStatus.Cancelled, (await s.QuestAsync(draft)).Status);
         Assert.Equal(QuestStatus.Completed, (await s.QuestAsync(historical.Id)).Status);
+        Assert.Equal(5, await after.Quests.CountAsync());
+        Assert.False(await after.Quests.AnyAsync(x => x.EventId == s.EventId &&
+            (x.Status == QuestStatus.Draft || x.Status == QuestStatus.Active || x.Status == QuestStatus.Suspended)));
         var actionIds = rows.Select(x => x.Id).ToArray();
         var parentHistory = Assert.Single(await after.EventStatusHistory.Where(x => x.Next == EventStatus.Cancelled).ToArrayAsync());
         Assert.Equal(EventStatus.Active, parentHistory.Previous);
         Assert.Equal(s.Manager.Id, parentHistory.ActorId);
         Assert.Equal("Weather closure", parentHistory.Reason);
         Assert.Equal(s.Clock.Now, parentHistory.OccurredUtc);
-        foreach (var id in new[] { q1, q2 })
+        foreach (var id in new[] { q1, q2, empty })
         {
             var history = Assert.Single(await after.QuestStatusHistory.Where(x => x.QuestId == id && x.Next == QuestStatus.Cancelled).ToArrayAsync());
-            Assert.Equal(QuestStatus.Active, history.Previous);
+            Assert.Equal(id == empty ? QuestStatus.Suspended : QuestStatus.Active, history.Previous);
             Assert.Equal(s.Manager.Id, history.ActorId);
             Assert.Equal("Weather closure", history.Reason);
             Assert.Equal(s.Clock.Now, history.OccurredUtc);
         }
+        var suspendedAudit = Assert.Single(await after.AuditEntries.Where(x => x.ResourceId == empty &&
+            x.Action == "Status:Suspended->Cancelled").ToArrayAsync());
+        Assert.Equal(s.Manager.Id, suspendedAudit.ActorId);
+        Assert.Equal("Weather closure", suspendedAudit.Reason);
         foreach (var change in changes)
         {
             var audit = await after.AuditEntries.SingleAsync(x => x.CorrelationId == change.ChangeId.ToString("N"));
@@ -176,7 +184,6 @@ public sealed class EventCancellationCompositionTests
         Assert.Null(await s.Queue.ClaimAsync("outbox"));
         Assert.Null(await s.Queue.ClaimAsync("delivery"));
         Assert.Equal(0, s.Directory.UserCalls);
-        Assert.Equal(0, s.Directory.ExpansionCalls);
     }
 
     /// <summary>Distinguishes already-ended children from future withdrawals at the precise persisted end boundary.</summary>
@@ -199,7 +206,11 @@ public sealed class EventCancellationCompositionTests
         await s.ParticipateAsync(id, attendee, ParticipationCommand.Join);
         s.ActAs(s.Manager);
         if (suspended)
-            await s.Quests.ChangeStatusAsync(id, await s.QuestVersionAsync(id), QuestStatus.Suspended, "Safety review");
+        {
+            await using var seedLegacy = s.Read();
+            (await seedLegacy.Quests.SingleAsync(x => x.Id == id)).Status = QuestStatus.Suspended;
+            await seedLegacy.SaveChangesAsync();
+        }
         await s.FlushAsync();
         var original = await s.QuestAsync(id);
         var baseline = (await s.OutboxAsync()).Select(x => x.Id).ToHashSet();
@@ -237,60 +248,6 @@ public sealed class EventCancellationCompositionTests
         Assert.Equal(ErrorCode.NotFound, error.Code);
         await s.FlushAsync();
         Assert.Empty(s.Gateway.Messages);
-    }
-
-    /// <summary>Preserves direct Quest status audiences and separates suspension/reinstatement from parent cancellation.</summary>
-    /// <param name="resume">Whether to resume a suspended Quest rather than cancel it directly.</param>
-    /// <returns>A task completing after real mandatory status and calendar delivery assertions.</returns>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ModerateQuest_SuspendThenResumeOrCancel_KeepsChildStatusAudienceDistinct(bool resume)
-    {
-        await using var s = await CoreCompositionScenario.CreateAsync();
-        var owner = await s.AddUserAsync("owner");
-        var attendee = await s.AddUserAsync("attendee");
-        var follower = await s.AddUserAsync("follower");
-        var invitee = await s.AddUserAsync("invitee");
-        var id = await s.CreateQuestAsync(owner, QuestVisibility.Private);
-        foreach (var user in new[] { attendee, follower, invitee })
-            await s.Quests.InviteAsync(id, user.Id);
-        await s.ParticipateAsync(id, attendee, ParticipationCommand.Join);
-        await s.ParticipateAsync(id, follower, ParticipationCommand.Follow);
-        await s.FlushAsync();
-        var revision = (await s.QuestAsync(id)).CalendarRevision;
-        s.ActAs(s.Manager);
-        var baseline = (await s.OutboxAsync()).Select(x => x.Id).ToHashSet();
-        await s.Quests.ChangeStatusAsync(id, await s.QuestVersionAsync(id), QuestStatus.Suspended, "Moderator hold");
-        var suspension = Assert.Single(await s.OutboxAsync(), x => !baseline.Contains(x.Id));
-        var change = CoreCompositionScenario.Payload<ChangeEnvelope>(suspension.PayloadJson);
-        Assert.Equal(NotificationKind.QuestSuspended, change.Kind);
-        Assert.Equal(new[] { owner.Id, attendee.Id, follower.Id, invitee.Id }.Order(), change.RecipientIds.Order());
-        var index = s.Gateway.Messages.Count;
-        await s.FlushAsync();
-        var cancel = Assert.Single(s.Gateway.Messages.Skip(index), x => x.CalendarMethod == "CANCEL");
-        var quest = await s.QuestAsync(id);
-        AssertCalendar(cancel, id, revision + 1, "CANCEL", attendee.Email, s.Clock.Now, quest.StartUtc, quest.EndUtc);
-        baseline = (await s.OutboxAsync()).Select(x => x.Id).ToHashSet();
-        index = s.Gateway.Messages.Count;
-        s.ActAs(resume ? s.Manager : owner);
-        await s.Quests.ChangeStatusAsync(id, await s.QuestVersionAsync(id),
-            resume ? QuestStatus.Active : QuestStatus.Cancelled, "Resolution");
-        var next = CoreCompositionScenario.Payload<ChangeEnvelope>(
-            Assert.Single(await s.OutboxAsync(), x => !baseline.Contains(x.Id)).PayloadJson);
-        Assert.Equal(resume ? NotificationKind.QuestReinstated : NotificationKind.QuestCancelled, next.Kind);
-        Assert.Equal(id, next.QuestId);
-        Assert.Equal(change.RecipientIds.Order(), next.RecipientIds.Order());
-        Assert.Equal(revision + 2, next.CalendarRevision);
-        await s.FlushAsync();
-        var messages = s.Gateway.Messages.Skip(index).ToArray();
-        Assert.Equal(new[] { owner.Email, attendee.Email, follower.Email, invitee.Email }.Order(),
-            messages.Select(x => x.Recipient).Order());
-        var calendar = Assert.Single(messages, x => x.CalendarContent is not null);
-        AssertCalendar(calendar, id, revision + 2, resume ? "REQUEST" : "CANCEL", attendee.Email,
-            s.Clock.Now, quest.StartUtc, quest.EndUtc);
-        Assert.DoesNotContain((await s.OutboxAsync()).Select(x => CoreCompositionScenario.Payload<ChangeEnvelope>(x.PayloadJson)),
-            x => x.Kind == NotificationKind.EventCancelled);
     }
 
     /// <summary>Leaves terminal history intact while cancelling a real private draft without disclosing it or creating participant intent.</summary>

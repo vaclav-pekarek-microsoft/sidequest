@@ -11,31 +11,25 @@ namespace Sidequest.IntegrationTests.CoreBoundaries;
 public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase database) : IClassFixture<SqlTestDatabase>
 {
     /// <summary>Gets literal role/mode outcomes crossed with both retained lifecycle states, visibilities and publication histories.</summary>
-    public static TheoryData<QuestStatus, QuestVisibility, string, bool, bool, bool, bool> AccessCases
+    public static TheoryData<QuestStatus, QuestVisibility, string, bool, bool, bool> AccessCases
     {
         get
         {
-            var data = new TheoryData<QuestStatus, QuestVisibility, string, bool, bool, bool, bool>();
-            (string Role, bool OwnerOnly, bool Moderation, bool Public, bool Private, bool Unpublished)[] policies =
+            var data = new TheoryData<QuestStatus, QuestVisibility, string, bool, bool, bool>();
+            (string Role, bool OwnerOnly, bool Public, bool Private, bool Unpublished)[] policies =
             [
-                ("member", false, false, true, false, false),
-                ("member", false, true, false, false, false),
-                ("invitee", false, false, true, true, false),
-                ("invitee", false, true, false, false, false),
-                ("admin", false, false, true, true, true),
-                ("admin", false, true, true, true, false),
-                ("eventOwner", false, false, true, false, false),
-                ("eventOwner", false, true, true, true, false),
-                ("questOwner", false, false, true, true, true),
-                ("questOwner", false, true, true, true, false),
-                ("questOwner", true, false, true, true, true),
-                ("questOwner", true, true, true, true, false)
+                ("member", false, true, false, false),
+                ("invitee", false, true, true, false),
+                ("admin", false, true, true, true),
+                ("eventOwner", false, true, false, false),
+                ("questOwner", false, true, true, true),
+                ("questOwner", true, true, true, true)
             ];
             foreach (var status in new[] { QuestStatus.Cancelled, QuestStatus.Archived })
                 foreach (var visibility in new[] { QuestVisibility.Public, QuestVisibility.Private })
                     foreach (var unpublished in new[] { false, true })
                         foreach (var policy in policies)
-                            data.Add(status, visibility, policy.Role, policy.OwnerOnly, policy.Moderation, unpublished,
+                            data.Add(status, visibility, policy.Role, policy.OwnerOnly, unpublished,
                                 unpublished ? policy.Unpublished : visibility == QuestVisibility.Public ? policy.Public : policy.Private);
             return data;
         }
@@ -46,14 +40,13 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
     /// <param name="visibility">Public or Private ordinary visibility.</param>
     /// <param name="role">The individual membership/invitation/admin/Event-owner/Quest-owner grant partition.</param>
     /// <param name="ownerOnly">Whether the operation explicitly requires Quest ownership.</param>
-    /// <param name="moderation">Whether the separate moderation route is requested.</param>
     /// <param name="unpublished">Whether history records direct Draft-to-Cancelled rather than publication before cancellation.</param>
     /// <param name="allowed">The independently specified access result.</param>
     /// <returns>A task completing after exact content or safe denial and durable history/grant nonmutation assertions.</returns>
     [Theory]
     [MemberData(nameof(AccessCases))]
     public async Task CancelledAndArchived_HistoryAndRoleMatrix_PreservesPrivacy(QuestStatus status,
-        QuestVisibility visibility, string role, bool ownerOnly, bool moderation, bool unpublished, bool allowed)
+        QuestVisibility visibility, string role, bool ownerOnly, bool unpublished, bool allowed)
     {
         var seed = await SetupAsync(status, visibility, role, unpublished);
         var fake = StubCurrentUser.For(seed.User);
@@ -61,7 +54,7 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
         await using var db = database.CreateContext();
         if (allowed)
         {
-            var result = await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly, moderation);
+            var result = await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly);
             Assert.Equal(seed.Quest.Id, result.Id);
             Assert.Equal("Sensitive Quest sentinel", result.Title);
             Assert.Equal("Private quest details", result.Description);
@@ -69,7 +62,7 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
             Assert.Equal(visibility, result.Visibility);
         }
         else
-            await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly, moderation));
+            await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly));
         Assert.Equal(1, fake.Calls);
         Assert.False(db.ChangeTracker.HasChanges());
         await AssertRetainedAsync(seed, status, role, unpublished);
@@ -138,16 +131,15 @@ public sealed class CancelledUnpublishedQuestAccessTests(SqlTestDatabase databas
         var access = new ResourceAccess(fake);
         await using var db = database.CreateContext();
         var tracked = await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id);
-        Assert.Same(tracked, await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, moderation: true));
+        Assert.Same(tracked, await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id));
         await FoundationSeed.PersistAsync(database, History(seed, QuestStatus.Draft, QuestStatus.Cancelled));
         await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id));
-        await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, moderation: true));
+        await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id));
         Assert.Same(tracked, db.Quests.Local.Single());
         Assert.Equal(4, fake.Calls);
         await FoundationSeed.PersistAsync(database, new QuestOwner { QuestId = seed.Quest.Id, UserId = seed.User.Id });
         Assert.Same(tracked, await access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, ownerOnly: true));
-        await DeniedAsync(() => access.RequireQuestAsync(db, seed.Quest.Id, seed.User.Id, true, true));
-        Assert.Equal(6, fake.Calls);
+        Assert.Equal(5, fake.Calls);
         Assert.False(db.ChangeTracker.HasChanges());
         await using var read = database.CreateContext();
         Assert.Equal(1, await read.QuestStatusHistory.CountAsync(x => x.QuestId == seed.Quest.Id &&

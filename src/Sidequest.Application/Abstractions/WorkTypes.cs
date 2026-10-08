@@ -9,8 +9,6 @@ public static class WorkTypes
     public const string EventCompletion = "event.complete.v1";
     /// <summary>Version-1 Quest end-time completion work.</summary>
     public const string QuestCompletion = "quest.complete.v1";
-    /// <summary>Version-1 one-time group expansion and individual membership/invitation work.</summary>
-    public const string BulkMembership = "event.bulk-membership.v1";
     /// <summary>Version-1 attendee reminder work, deduplicated by user, Quest, and start revision.</summary>
     public const string Reminder = "quest.reminder.v1";
     /// <summary>Version-1 cleanup of an expired unattached upload or media removed by an explicitly authorized unpublished-Draft deletion.</summary>

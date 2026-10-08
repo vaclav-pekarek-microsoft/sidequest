@@ -20,7 +20,7 @@ public sealed class WorkHandlerStartupCheck(IServiceScopeFactory scopes, WorkHan
         List<string> expected =
         [
             WorkTypes.Change, WorkTypes.EventCompletion, WorkTypes.QuestCompletion,
-            WorkTypes.BulkMembership, WorkTypes.Reminder
+            WorkTypes.Reminder
         ];
         if (requirements?.RequireMediaCleanup == true)
             expected.Add(WorkTypes.MediaCleanup);

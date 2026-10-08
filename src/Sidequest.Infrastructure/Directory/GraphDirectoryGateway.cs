@@ -7,10 +7,8 @@ using Sidequest.Domain.Rules;
 
 namespace Sidequest.Infrastructure.Directory;
 
-/// <summary>Real Graph user/group selection and complete nested-group expansion under an explicit workforce policy.</summary>
-/// <remarks>Only security and Microsoft 365 groups are supported. Transitive user pages are completely enumerated
-/// and deduplicated before returning; unsupported, permission-limited, malformed, or incomplete data fails explicitly.
-/// Member userType is an additional guest-exclusion check, never the workforce eligibility proof.
+/// <summary>Real Graph user selection and resolution under an explicit workforce policy.</summary>
+/// <remarks>Member userType is an additional guest-exclusion check, never the workforce eligibility proof.
 /// An explicitly constructed non-production Entra participant policy instead requires an enabled Member or Guest
 /// in the owner-maintained allowlist shared with authentication; it does not claim workforce status.</remarks>
 /// <param name="http">Host-owned dedicated HTTP client; automatic redirects should be disabled.</param>
@@ -35,17 +33,6 @@ public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProv
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DirectoryGroup>> SearchGroupsAsync(string query, CancellationToken cancellationToken = default)
-    {
-        options.Validate();
-        query = InputRules.Text(query, "Search", 2, 100).Replace("'", "''", StringComparison.Ordinal);
-        var rows = await ReadPagesAsync("groups?$select=id,displayName,securityEnabled,groupTypes&$top=100&$filter=" +
-            Uri.EscapeDataString($"startswith(displayName,'{query}')"), false, cancellationToken).ConfigureAwait(false);
-        return rows.Where(SupportedGroup).Select(x => new DirectoryGroup(RequiredId(x),
-            RequiredString(x, "displayName"))).DistinctBy(x => x.ObjectId).Take(100).ToArray();
-    }
-
-    /// <inheritdoc />
     public async Task<DirectoryUser> GetUserAsync(Guid objectId, CancellationToken cancellationToken = default)
     {
         options.Validate();
@@ -55,23 +42,6 @@ public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProv
         if (user.ObjectId != objectId)
             throw Failure("The directory returned an unexpected identity.");
         return user;
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<DirectoryUser>> ExpandGroupAsync(Guid groupId, CancellationToken cancellationToken = default)
-    {
-        options.Validate();
-        ValidateId(groupId);
-        using (var group = await GetAsync(GraphUri(
-            $"groups/{groupId:D}?$select=id,displayName,securityEnabled,groupTypes"), cancellationToken).ConfigureAwait(false))
-        {
-            if (RequiredId(group.RootElement) != groupId || !SupportedGroup(group.RootElement))
-                throw new DomainException(ErrorCode.Validation, "Choose a supported security or Microsoft 365 group.", "Group");
-        }
-        var rows = await ReadPagesAsync(
-            $"groups/{groupId:D}/transitiveMembers/microsoft.graph.user?$select={UserSelect}&$top=999&$count=true",
-            true, cancellationToken).ConfigureAwait(false);
-        return rows.Select(ParseUser).Where(x => x.IsEligible).DistinctBy(x => x.ObjectId).ToArray();
     }
 
     private async Task<IReadOnlyList<JsonElement>> ReadPagesAsync(string path, bool complete, CancellationToken cancellationToken)
@@ -172,15 +142,6 @@ public sealed class GraphDirectoryGateway(HttpClient http, IGraphAccessTokenProv
         // A UPN is not necessarily a routable mailbox. Missing mail remains explicit downstream delivery failure.
         return new(options.TenantId, id, displayName, email,
             approved && enabled.GetBoolean() && (userType == "Member" || (options.IsHackathon && userType == "Guest")));
-    }
-
-    private static bool SupportedGroup(JsonElement group)
-    {
-        if (group.ValueKind != JsonValueKind.Object || !group.TryGetProperty("securityEnabled", out var security) ||
-            security.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
-            !group.TryGetProperty("groupTypes", out var types) || types.ValueKind != JsonValueKind.Array)
-            throw Failure("Directory group details are incomplete.");
-        return security.GetBoolean() || types.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && x.GetString() == "Unified");
     }
 
     private static Guid RequiredId(JsonElement row)
