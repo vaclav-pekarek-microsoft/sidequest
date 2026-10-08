@@ -3,7 +3,7 @@ namespace Sidequest.UnitTests.CoreEvents;
 /// <summary>Guards the responsive and readable management-tab stylesheet contract.</summary>
 public sealed class ManagementStyleContractTests
 {
-    /// <summary>Management tabs wrap without horizontal scrolling and retain explicit hover and selected colors.</summary>
+    /// <summary>Management tabs wrap without scrolling and reuse the menu palette for hover and selected states.</summary>
     [Fact]
     public void ManagementTabs_WrapWithoutHorizontalOverflowAndPreserveReadableStates()
     {
@@ -21,9 +21,13 @@ public sealed class ManagementStyleContractTests
         Assert.Contains("overflow: visible", contract);
         Assert.DoesNotContain("overflow-x: auto", contract);
         Assert.Contains("&:hover:not(:disabled)", contract);
-        Assert.Contains("color: var(--sq-blue-dark)", contract);
+        Assert.Contains("background: transparent", contract);
+        Assert.Contains("border-bottom: 2px solid var(--sq-line)", contract);
+        Assert.Contains("color: var(--sq-accent)", contract);
+        Assert.Contains("background: var(--sq-accent-soft)", contract);
         Assert.Contains("button.selected", contract);
-        Assert.Contains("color: var(--sq-blue)", contract);
-        Assert.Contains("background: white", contract);
+        Assert.Contains("color: #fff", contract);
+        Assert.Contains("background: var(--sq-ink-soft)", contract);
+        Assert.DoesNotContain("transform:", contract);
     }
 }
