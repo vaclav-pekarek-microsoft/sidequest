@@ -698,6 +698,8 @@ public sealed class EventComponentTests : BunitContext
             .Add(component => component.EventId, eventId)
             .Add(component => component.CanCreate, true));
 
+        Assert.NotNull(cut.Find(".event-quests-header"));
+        Assert.Equal(rendered > 0, cut.FindAll(".event-quest-grid").Count == 1);
         Assert.Equal(rendered, cut.FindComponents<QuestCard>().Count);
         Assert.Equal($"/quests/create?eventId={eventId}",
             cut.FindAll("a").Single(link => link.TextContent.Trim() == "Create Quest").GetAttribute("href"));
