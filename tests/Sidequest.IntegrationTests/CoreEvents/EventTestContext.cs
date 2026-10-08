@@ -19,7 +19,6 @@ internal sealed class EventTestContext(SqlTestDatabase database) : ISidequestDbC
         Directory, Quests, new ChangeWriter(), Clock, Options);
 
     internal EventCompletionHandler Completion() => new(this, Quests, Clock);
-    internal BulkMembershipHandler Bulk() => new(this, Directory, new ChangeWriter(), Quests, Clock, Options);
 
     internal static EventInput Input(string name = "  New Event  ") =>
         new(name, "Member-only details", "Discovery summary", new(2026, 7, 15), new(2026, 7, 16), "Europe/Prague");

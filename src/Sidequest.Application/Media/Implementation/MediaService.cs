@@ -107,14 +107,13 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
 
     /// <inheritdoc />
     /// <remarks>Two nonqueued process-wide read slots bound buffers even while a provider or SQL is slow.</remarks>
-    public async Task<MediaContent> ReadAsync(Guid assetId, bool moderation = false,
-        CancellationToken cancellationToken = default)
+    public async Task<MediaContent> ReadAsync(Guid assetId, CancellationToken cancellationToken = default)
     {
         if (!await ReadSlots.WaitAsync(0, cancellationToken).ConfigureAwait(false))
             throw new DomainException(ErrorCode.DependencyUnavailable, "Image delivery is busy. Try again shortly.");
         try
         {
-            return await ReadCoreAsync(assetId, moderation, cancellationToken).ConfigureAwait(false);
+            return await ReadCoreAsync(assetId, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -122,9 +121,9 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
         }
     }
 
-    private async Task<MediaContent> ReadCoreAsync(Guid assetId, bool moderation, CancellationToken cancellationToken)
+    private async Task<MediaContent> ReadCoreAsync(Guid assetId, CancellationToken cancellationToken)
     {
-        var asset = await AuthorizeReadAsync(assetId, moderation, true, cancellationToken).ConfigureAwait(false);
+        var asset = await AuthorizeReadAsync(assetId, cancellationToken).ConfigureAwait(false);
         if (asset.SizeBytes is <= 0 or > 84_000_000 || asset.ContentType != "image/png" ||
             asset.Width <= 0 || asset.Height <= 0 || (long)asset.Width * asset.Height > 20_000_000 ||
             asset.BlobName != $"covers/{asset.Id:N}.png")
@@ -145,14 +144,14 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
         }
         if (output.Length != asset.SizeBytes)
             throw Unavailable();
-        var current = await AuthorizeReadAsync(assetId, moderation, false, deadline.Token).ConfigureAwait(false);
+        var current = await AuthorizeReadAsync(assetId, deadline.Token).ConfigureAwait(false);
         if (current.QuestId != asset.QuestId || current.BlobName != asset.BlobName ||
             current.SizeBytes != asset.SizeBytes || current.ContentType != asset.ContentType)
             throw Unavailable();
         return new(output.ToArray(), asset.ContentType);
     }
 
-    private async Task<MediaAsset> AuthorizeReadAsync(Guid id, bool moderation, bool recordAudit, CancellationToken token)
+    private async Task<MediaAsset> AuthorizeReadAsync(Guid id, CancellationToken token)
     {
         await using var db = await factory.CreateAsync(token).ConfigureAwait(false);
         var parent = await (from asset in db.MediaAssets
@@ -165,15 +164,9 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
         var actor = await access.RequireUserAsync(db, token).ConfigureAwait(false);
         var item = await db.MediaAssets.SingleOrDefaultAsync(x => x.Id == id, token).ConfigureAwait(false)
             ?? throw Unavailable();
-        var quest = await RequireQuestAsync(db, item.QuestId, actor.Id, false, moderation, token).ConfigureAwait(false);
+        var quest = await RequireQuestAsync(db, item.QuestId, actor.Id, false, token).ConfigureAwait(false);
         if (item.Status != MediaStatus.Ready || quest.CoverAssetId != item.Id)
             throw Unavailable();
-        if (moderation && recordAudit)
-            db.AuditEntries.Add(new AuditEntry
-            {
-                ResourceKind = ResourceKind.Quest, ResourceId = quest.Id, ActorId = actor.Id,
-                Action = "ModerationCoverRead", OccurredUtc = clock.GetUtcNow(), CorrelationId = Guid.NewGuid().ToString("N")
-            });
         await db.SaveChangesAsync(token).ConfigureAwait(false);
         await transaction.CommitAsync(token).ConfigureAwait(false);
         return item;
@@ -192,7 +185,7 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
             if (parentId is not null)
                 await db.LockEventAsync(parentId.Value, token).ConfigureAwait(false);
             var actor = await access.RequireUserAsync(db, token).ConfigureAwait(false);
-            var quest = await RequireQuestAsync(db, id, actor.Id, true, false, token).ConfigureAwait(false);
+            var quest = await RequireQuestAsync(db, id, actor.Id, true, token).ConfigureAwait(false);
             var parent = await db.Events.SingleAsync(x => x.Id == quest.EventId, token).ConfigureAwait(false);
             var now = clock.GetUtcNow();
             if (QuestChanges.ParentIsOverdue(parent, now) ||
@@ -217,7 +210,7 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
         if (parentId is not null)
             await db.LockEventAsync(parentId.Value, token).ConfigureAwait(false);
         var actor = await access.RequireUserAsync(db, token).ConfigureAwait(false);
-        var quest = await RequireQuestAsync(db, id, actor.Id, true, false, token).ConfigureAwait(false);
+        var quest = await RequireQuestAsync(db, id, actor.Id, true, token).ConfigureAwait(false);
         var now = clock.GetUtcNow();
         await eventLifecycle.ReconcileAsync(db, quest.EventId, now, token).ConfigureAwait(false);
         if (quest.Status is QuestStatus.Active or QuestStatus.Suspended && now >= quest.EndUtc)
@@ -228,9 +221,9 @@ public sealed class MediaService(ISidequestDbContextFactory factory, IResourceAc
     }
 
     private async Task<Quest> RequireQuestAsync(ISidequestDbContext db, Guid id, Guid actor,
-        bool owner, bool moderation, CancellationToken token)
+        bool owner, CancellationToken token)
     {
-        var quest = await access.RequireQuestAsync(db, id, actor, owner, moderation, token).ConfigureAwait(false);
+        var quest = await access.RequireQuestAsync(db, id, actor, owner, token).ConfigureAwait(false);
         if (!await db.EventMemberships.AnyAsync(x => x.EventId == quest.EventId &&
             x.UserId == actor && x.Status == MembershipStatus.Active, token).ConfigureAwait(false) ||
             await db.Events.AnyAsync(x => x.Id == quest.EventId && x.Status == EventStatus.Draft, token).ConfigureAwait(false))

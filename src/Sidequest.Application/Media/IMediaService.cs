@@ -28,10 +28,8 @@ public interface IMediaService
 
     /// <summary>Reads a ready, currently assigned cover only after reauthorizing the caller against its Quest and parent Event.</summary>
     /// <param name="assetId">Opaque media identifier; pending, failed, detached and unavailable assets are not served.</param>
-    /// <param name="moderation">Selects the explicit audited Event-owner moderation path, never a draft or administrator bypass.</param>
     /// <param name="cancellationToken">Cancels authorization and private storage reading.</param>
     /// <returns>Validated encoded image bytes and their MIME type, without exposing a Blob URL or key.</returns>
     /// <exception cref="Sidequest.Domain.Rules.DomainException">The content is unavailable to the caller or private storage is unavailable.</exception>
-    public Task<MediaContent> ReadAsync(Guid assetId, bool moderation = false,
-        CancellationToken cancellationToken = default);
+    public Task<MediaContent> ReadAsync(Guid assetId, CancellationToken cancellationToken = default);
 }

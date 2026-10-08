@@ -58,8 +58,7 @@ internal sealed class CoreCompositionScenario : IAsyncDisposable
             new ChangeOutboxHandler(factory, policy, scheduler, Execution, Clock),
             new ReminderWorkHandler(factory, policy, Execution, Options, Clock),
             new EventCompletionHandler(factory, lifecycle, Clock),
-            new QuestCompletionHandler(factory, writer, Clock, reconciler),
-            new BulkMembershipHandler(factory, Directory, writer, lifecycle, Clock, new EventOperationOptions())
+            new QuestCompletionHandler(factory, writer, Clock, reconciler)
         ];
         Runner = new(Queue, Handlers, delivery, Execution, Clock, Options, NullLogger<DurableWorkRunner>.Instance);
     }

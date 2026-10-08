@@ -100,8 +100,11 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
             await scenario.Service(scenario.Seed.Other).ParticipateAsync(id, ParticipationCommand.Join);
             await scenario.Service(follower).ParticipateAsync(id, ParticipationCommand.Follow);
         }
-        await scenario.Service(scenario.Seed.Other).ChangeStatusAsync(second, (await owner.GetAsync(second)).Summary.Version,
-            QuestStatus.Suspended, "The location needs review.");
+        await using (var seedSuspended = database.CreateContext())
+        {
+            (await seedSuspended.Quests.SingleAsync(x => x.Id == second)).Status = QuestStatus.Suspended;
+            await seedSuspended.SaveChangesAsync();
+        }
         Dictionary<Guid, long> revisions;
         await using (var db = database.CreateContext())
             revisions = await db.Quests.Where(q => ids.Contains(q.Id)).ToDictionaryAsync(q => q.Id, q => q.CalendarRevision);
@@ -281,8 +284,11 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
         var id = scenario.Seed.Quest.Id;
         await service.ParticipateAsync(id, ParticipationCommand.Join);
         if (suspended)
-            await scenario.Service(scenario.Seed.Other).ChangeStatusAsync(id, (await service.GetAsync(id)).Summary.Version,
-                QuestStatus.Suspended, "The location needs review.");
+        {
+            await using var seedSuspended = database.CreateContext();
+            (await seedSuspended.Quests.SingleAsync(x => x.Id == id)).Status = QuestStatus.Suspended;
+            await seedSuspended.SaveChangesAsync();
+        }
         await using (var db = database.CreateContext())
         {
             await using var transaction = await db.BeginTransactionAsync();
@@ -299,11 +305,11 @@ public sealed class QuestEventLifecycleTests(SqlTestDatabase database) : IClassF
         await using var read = database.CreateContext();
         var quest = await read.Quests.SingleAsync(q => q.Id == id);
         Assert.Equal(QuestStatus.Completed, quest.Status);
-        Assert.Equal(suspended ? 9 : 8, quest.CalendarRevision);
+        Assert.Equal(8, quest.CalendarRevision);
         Assert.Single(await read.QuestStatusHistory.Where(h => h.QuestId == id && h.Next == QuestStatus.Completed).ToListAsync());
         var envelopes = (await read.OutboxMessages.Where(o => o.AggregateId == id).ToListAsync())
             .Select(o => JsonSerializer.Deserialize<ChangeEnvelope>(o.PayloadJson)!).ToArray();
         Assert.DoesNotContain(envelopes, e => e.Kind is NotificationKind.QuestCancelled or NotificationKind.EventCancelled);
-        Assert.Equal(suspended ? 2 : 1, envelopes.Length);
+        Assert.Single(envelopes);
     }
 }

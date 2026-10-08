@@ -20,8 +20,7 @@ public partial class QuestList : IAsyncDisposable
         (QuestListKind.Organizing, "Organizing"),
         (QuestListKind.Discover, "Discover"),
         (QuestListKind.Invited, "Invited"),
-        (QuestListKind.History, "History"),
-        (QuestListKind.Moderation, "Moderation")
+        (QuestListKind.History, "History")
     ];
     private readonly CancellationTokenSource lifetime = new();
     private IReadOnlyList<EventSummary> events = [];

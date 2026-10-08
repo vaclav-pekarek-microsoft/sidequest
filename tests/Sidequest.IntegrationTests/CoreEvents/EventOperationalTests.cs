@@ -145,34 +145,6 @@ public sealed class EventOperationalTests(SqlTestDatabase database) : IClassFixt
         Assert.Equal(2, await read.OutboxMessages.CountAsync(x => x.AggregateId == seed.Event.Id));
     }
 
-    /// <summary>Rejects excess queued bulk starts atomically and reports frozen recipients through owner-only deterministic paging.</summary>
-    /// <returns>A task completing after rate-limit, recipient status, pagination, and denied-read assertions.</returns>
-    [Fact]
-    public async Task BulkLimitsAndOutcomePagingRemainOwnerScoped()
-    {
-        var context = new EventTestContext(database) { Options = new() { BulkStartsPerHour = 1 } };
-        var seed = await context.SeedAsync();
-        var sut = context.Service(seed.User);
-        var operation = await sut.StartBulkAsync(seed.Event.Id, Guid.NewGuid(), BulkMode.Invite);
-        Assert.Equal(ErrorCode.Conflict, (await Assert.ThrowsAsync<DomainException>(() =>
-            sut.StartBulkAsync(seed.Event.Id, Guid.NewGuid(), BulkMode.Add))).Code);
-        await FoundationSeed.PersistAsync(database,
-            new BulkMembershipRecipient { OperationId = operation, UserId = seed.User.Id, Status = BulkRecipientStatus.Skipped, Detail = "Already a member." },
-            new BulkMembershipRecipient { OperationId = operation, UserId = seed.Other.Id, Status = BulkRecipientStatus.Failed, Detail = "No longer eligible." });
-        var first = await sut.ListBulkRecipientsAsync(operation, new(1, 1));
-        var second = await sut.ListBulkRecipientsAsync(operation, new(2, 1));
-        Assert.Equal(2, first.TotalCount);
-        Assert.Equal(2, second.TotalCount);
-        var rows = first.Items.Concat(second.Items).ToArray();
-        Assert.Equal(2, rows.Select(x => x.User.Id).Distinct().Count());
-        Assert.Contains(rows, x => x.User.Id == seed.Other.Id && x.User.Email == seed.Other.Email &&
-            x.User.DisplayName == seed.Other.DisplayName && x.Status == BulkRecipientStatus.Failed && x.Detail == "No longer eligible.");
-        Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(() =>
-            context.Service(seed.Other).ListBulkRecipientsAsync(operation, new()))).Code);
-        await using var read = database.CreateContext();
-        Assert.Single(await read.BulkOperations.Where(x => x.EventId == seed.Event.Id).ToListAsync());
-    }
-
     /// <summary>The SQL lock adapter rejects calls without a transaction rather than pretending pessimistic serialization succeeded.</summary>
     /// <returns>A task completing after explicit provider-contract denial.</returns>
     [Fact]

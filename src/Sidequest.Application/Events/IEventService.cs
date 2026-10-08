@@ -185,22 +185,6 @@ public interface IEventService
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Access, lifecycle, or last-eligible-owner guards fail.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task RemoveOwnerAsync(Guid eventId, Guid userId, CancellationToken cancellationToken = default);
-    /// <summary>Starts a one-time background group expansion, saving a complete recipient snapshot before individual add/invite operations.</summary>
-    /// <param name="eventId">Internal Active, not-ended Event identifier managed by the actor.</param>
-    /// <param name="groupId">Supported same-tenant Entra group object ID retained only for operational/audit use.</param>
-    /// <param name="mode">Direct add or consent-based invitation; bulk add must not silently restore removed members.</param>
-    /// <param name="cancellationToken">Requests cooperative cancellation of durable workflow creation.</param>
-    /// <returns>The new bulk operation identifier, not a promise that expansion or recipient application has completed.</returns>
-    /// <exception cref="Sidequest.Domain.Rules.DomainException">Authorization, lifecycle, group/mode validation, or operation limits fail.</exception>
-    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
-    public Task<Guid> StartBulkAsync(Guid eventId, Guid groupId, BulkMode mode, CancellationToken cancellationToken = default);
-    /// <summary>Reads authorized bulk progress, including skips and partial failures, without implying ongoing group synchronization.</summary>
-    /// <param name="operationId">Internal bulk operation identifier.</param>
-    /// <param name="cancellationToken">Requests cooperative cancellation of the read.</param>
-    /// <returns>Current recorded workflow and recipient counts.</returns>
-    /// <exception cref="Sidequest.Domain.Rules.DomainException">The operation is unavailable to the current actor.</exception>
-    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
-    public Task<BulkOperationSummary> GetBulkAsync(Guid operationId, CancellationToken cancellationToken = default);
     /// <summary>Searches eligible directory candidates for explicit user selection without granting resource access.</summary>
     /// <param name="query">User search text subject to input/rate limits.</param>
     /// <param name="cancellationToken">Requests cooperative cancellation of the external directory query.</param>
@@ -208,11 +192,4 @@ public interface IEventService
     /// <exception cref="Sidequest.Domain.Rules.DomainException">Authorization, validation, or directory dependency checks fail.</exception>
     /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
     public Task<IReadOnlyList<DirectoryUser>> SearchUsersAsync(string query, CancellationToken cancellationToken = default);
-    /// <summary>Searches supported groups for an explicit one-time bulk action, never for group-based authorization.</summary>
-    /// <param name="query">Group search text subject to input/rate limits.</param>
-    /// <param name="cancellationToken">Requests cooperative cancellation of the external directory query.</param>
-    /// <returns>Authorized same-tenant group selection results.</returns>
-    /// <exception cref="Sidequest.Domain.Rules.DomainException">Authorization, validation, or directory dependency checks fail.</exception>
-    /// <exception cref="OperationCanceledException">Cancellation is observed.</exception>
-    public Task<IReadOnlyList<DirectoryGroup>> SearchGroupsAsync(string query, CancellationToken cancellationToken = default);
 }

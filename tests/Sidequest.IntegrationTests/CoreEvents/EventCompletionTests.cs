@@ -33,7 +33,7 @@ public sealed class EventCompletionTests(SqlTestDatabase database) : IClassFixtu
         if (partition == "schema")
             work.PayloadJson = JsonSerializer.Serialize(new EventCompletionPayload(2, seed.Event.Id, end));
         if (partition == "type")
-            work.Type = WorkTypes.BulkMembership;
+            work.Type = WorkTypes.Reminder;
         if (partition == "json")
             work.PayloadJson = "{";
         if (partition == "null")

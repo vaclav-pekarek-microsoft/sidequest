@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Shared;
@@ -585,58 +584,6 @@ public sealed class EventService : IEventService, IEventManagementQueries
         }, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<Guid> StartBulkAsync(Guid eventId, Guid groupId, BulkMode mode,
-        CancellationToken cancellationToken = default)
-    {
-        if (groupId == Guid.Empty || !Enum.IsDefined(mode))
-            throw new DomainException(ErrorCode.Validation, "Choose a valid group and bulk action.", "Group");
-        var operationId = Guid.NewGuid();
-        await MutateAsync(eventId, true, async (db, item, actor, now) =>
-        {
-            EventTransactions.RequireActive(item, now);
-            var since = now.AddHours(-1);
-            if (await db.BulkOperations.CountAsync(x => x.ActorId == actor.Id && x.CreatedUtc >= since,
-                cancellationToken).ConfigureAwait(false) >= options.BulkStartsPerHour)
-                throw EventTransactions.Conflict("The bulk operation rate limit was reached. Try again later.");
-            var operation = new BulkMembershipOperation
-            {
-                Id = operationId, EventId = eventId, ActorId = actor.Id, SourceGroupId = groupId,
-                Mode = mode, CreatedUtc = now, Status = BulkStatus.Expanding
-            };
-            db.BulkOperations.Add(operation);
-            EventTransactions.Audit(db, eventId, actor.Id, "Bulk.Started",
-                $"Operation {operationId:N}; source group {groupId:N}; mode {mode}.", now);
-            // Capture a database-ordered fence while the caller still holds the Event lock.
-            // Wall-clock timestamps cannot order removals across hosts with clock skew.
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            db.ScheduledWork.Add(new ScheduledWork
-            {
-                Type = WorkTypes.BulkMembership, DeduplicationKey = $"event.bulk-membership.v1:{operationId:N}",
-                PayloadJson = JsonSerializer.Serialize(new BulkMembershipPayload(1, operationId, Convert.ToBase64String(operation.Version))), DueUtc = now
-            });
-        }, cancellationToken).ConfigureAwait(false);
-        return operationId;
-    }
-
-    /// <inheritdoc />
-    public async Task<BulkOperationSummary> GetBulkAsync(Guid operationId, CancellationToken cancellationToken = default)
-    {
-        await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
-        var operation = await db.BulkOperations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == operationId,
-            cancellationToken).ConfigureAwait(false) ?? throw EventTransactions.Unavailable();
-        var item = await access.RequireEventAsync(db, operation.EventId, actor.Id, true, cancellationToken).ConfigureAwait(false);
-        await RequireTenantAsync(db, item, actor, cancellationToken).ConfigureAwait(false);
-        await RequireMembershipAsync(db, item.Id, actor.Id, cancellationToken).ConfigureAwait(false);
-        var outcomes = await db.BulkRecipients.Where(x => x.OperationId == operationId).GroupBy(x => x.Status)
-            .Select(x => new { Status = x.Key, Count = x.Count() }).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return new(operation.Id, operation.Mode, operation.Status, outcomes.Sum(x => x.Count),
-            outcomes.Where(x => x.Status == BulkRecipientStatus.Applied).Sum(x => x.Count),
-            outcomes.Where(x => x.Status == BulkRecipientStatus.Skipped).Sum(x => x.Count),
-            outcomes.Where(x => x.Status == BulkRecipientStatus.Failed).Sum(x => x.Count), operation.LastError);
-    }
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<DirectoryUser>> SearchUsersAsync(string query, CancellationToken cancellationToken = default)
     {
         var actor = await AuthorizeSearchAsync(query, cancellationToken).ConfigureAwait(false);
@@ -644,16 +591,6 @@ public sealed class EventService : IEventService, IEventManagementQueries
         if (results.Any(x => x.TenantId != actor.TenantId || x.ObjectId == Guid.Empty))
             throw new DomainException(ErrorCode.DependencyUnavailable, "The directory returned invalid tenant identities.");
         return results.Where(x => x.IsEligible).DistinctBy(x => x.ObjectId).Take(100).ToArray();
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<DirectoryGroup>> SearchGroupsAsync(string query, CancellationToken cancellationToken = default)
-    {
-        await AuthorizeSearchAsync(query, cancellationToken).ConfigureAwait(false);
-        var results = await directory.SearchGroupsAsync(query.Trim(), cancellationToken).ConfigureAwait(false);
-        if (results.Any(x => x.ObjectId == Guid.Empty))
-            throw new DomainException(ErrorCode.DependencyUnavailable, "The directory returned invalid group identities.");
-        return results.DistinctBy(x => x.ObjectId).Take(100).ToArray();
     }
 
     private async Task MutateAsync(Guid eventId, bool? ownerOnly,
@@ -822,27 +759,6 @@ public sealed class EventService : IEventService, IEventManagementQueries
         return await db.Quests.CountAsync(x => x.EventId == eventId &&
             (x.Status == QuestStatus.Draft || x.Status == QuestStatus.Active || x.Status == QuestStatus.Suspended),
             cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task<PageResult<BulkRecipientSummary>> ListBulkRecipientsAsync(Guid operationId, PageRequest page,
-        CancellationToken cancellationToken = default)
-    {
-        var offset = page.Offset;
-        await using var db = await factory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        var actor = await access.RequireUserAsync(db, cancellationToken).ConfigureAwait(false);
-        var operation = await db.BulkOperations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == operationId,
-            cancellationToken).ConfigureAwait(false) ?? throw EventTransactions.Unavailable();
-        var item = await access.RequireEventAsync(db, operation.EventId, actor.Id, true, cancellationToken).ConfigureAwait(false);
-        await RequireTenantAsync(db, item, actor, cancellationToken).ConfigureAwait(false);
-        await RequireMembershipAsync(db, item.Id, actor.Id, cancellationToken).ConfigureAwait(false);
-        var query = from recipient in db.BulkRecipients
-                    join user in db.Users on recipient.UserId equals user.Id
-                    where recipient.OperationId == operationId
-                    orderby user.DisplayName, user.Id
-                    select new BulkRecipientSummary(new(user.Id, user.DisplayName, user.Email), recipient.Status, recipient.Detail);
-        return new(await query.Skip(offset).Take(page.Limit).ToListAsync(cancellationToken).ConfigureAwait(false),
-            await query.CountAsync(cancellationToken).ConfigureAwait(false), page.Page, page.Limit);
     }
 
     private void Emit(ISidequestDbContext db, Guid eventId, Guid actorId, string action,

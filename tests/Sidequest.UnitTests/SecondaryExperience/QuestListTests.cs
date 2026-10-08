@@ -61,5 +61,5 @@ public sealed class QuestListTests : BunitContext
             new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 7, 15, 11, 0, 0, TimeSpan.Zero),
             "Europe/Prague", QuestStatus.Active, QuestVisibility.Public, 0, 0, null,
-            ParticipationStatus.None, false, false, "", null);
+            ParticipationStatus.None, false, "", null);
 }

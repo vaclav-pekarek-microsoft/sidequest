@@ -150,7 +150,7 @@ public sealed class QuestDashboardTests : BunitContext
         DateTimeOffset end,
         ParticipationStatus participation) =>
         new(Guid.NewGuid(), Guid.NewGuid(), "Parent Event", title, "Room", start, end, "Europe/Prague",
-            QuestStatus.Active, QuestVisibility.Public, 0, 0, null, participation, false, true, "", null);
+            QuestStatus.Active, QuestVisibility.Public, 0, 0, null, participation, false, "", null);
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

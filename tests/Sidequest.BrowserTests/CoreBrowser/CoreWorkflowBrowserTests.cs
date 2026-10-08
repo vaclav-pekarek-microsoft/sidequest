@@ -11,37 +11,6 @@ namespace Sidequest.BrowserTests.CoreBrowser;
 /// <param name="fixture">CI-only Chromium with off-origin requests blocked and an isolated, migrated application database.</param>
 public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) : IClassFixture<FoundationBrowserFixture>
 {
-    private const string ModerationDiagnosticsScript = """
-        expected => {
-            const main = document.querySelector('main');
-            if (!main) return JSON.stringify({ main: false });
-            const views = ['Joined', 'Following', 'Organizing', 'Invited', 'Discover', 'History', 'Moderation'];
-            const selects = main.querySelectorAll('select');
-            const view = selects[0]?.value;
-            const links = Array.from(main.querySelectorAll('a')).filter(link => link.textContent.trim() === expected.title);
-            const alerts = Array.from(main.querySelectorAll('[role="alert"]')).map(element => element.textContent);
-            const classification = alerts.length === 0 ? 'none' :
-                alerts.some(text => text.includes('conflicted') || text.includes('Reload and try again')) ? 'conflict' :
-                alerts.some(text => text.includes('resource is unavailable')) ? 'unavailable' :
-                alerts.some(text => text.includes('Sign in to continue') || text.includes('not eligible')) ? 'identity' :
-                alerts.some(text => text.includes('Quests could not be loaded')) ? 'unexpected' : 'other';
-            return JSON.stringify({
-                main: true,
-                view: views.includes(view) ? view : 'other',
-                eventMatches: selects[1]?.value === expected.eventId,
-                loading: main.textContent.includes('Loading authorized Quests'),
-                empty: main.textContent.includes('No Quests in this view.'),
-                alert: classification,
-                matchingLinks: links.length,
-                visibleMatches: links.filter(link => link.getClientRects().length > 0 &&
-                    getComputedStyle(link).visibility !== 'hidden').length,
-                mainHidden: main.hidden || main.inert || getComputedStyle(main).display === 'none',
-                connected: (document.querySelector('[data-connection]')?.textContent ?? '').startsWith('Connected'),
-                reconnectVisible: document.querySelector('#components-reconnect-modal')?.classList.contains('components-reconnect-show') ?? false
-            });
-        }
-        """;
-
     /// <summary>Proves direct Event joining, persisted public Quest creation, exclusive participation and recipient-only HTTP calendar recovery.</summary>
     /// <returns>A task completing after the independently authenticated owner and member finish the workflow.</returns>
     [Fact]
@@ -85,13 +54,13 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         await Expect(member.GetByRole(AriaRole.Button, new() { Name = "Follow", Exact = true })).ToBeVisibleAsync();
     }
 
-    /// <summary>Proves private invitation grants immediate access, ordinary Event ownership grants none, moderation hides rosters, and revocation removes access.</summary>
+    /// <summary>Proves private invitation grants immediate access, ordinary Event ownership grants none, and revocation removes access.</summary>
     /// <param name="delayCircuitStartup">Whether to delay the captured source-URL startup frame before using the interactive management tabs.</param>
     /// <returns>A task completing after three separate identities traverse their distinct authorization paths.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PrivateInvitationModerationAndRevocationPreserveDistinctAccess(bool delayCircuitStartup)
+    public async Task PrivateInvitationAndRevocationPreserveDistinctAccess(bool delayCircuitStartup)
     {
         await using var eventOwnerContext = await fixture.CreateContextAsync();
         await using var questOwnerContext = await fixture.CreateContextAsync();
@@ -137,15 +106,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         if (delayCircuitStartup)
             (await startup.Task.WaitAsync(TimeSpan.FromSeconds(15))).Invoke();
         await eventOwner.GetByRole(AriaRole.Tab, new() { Name = "Quests", Exact = true }).ClickAsync();
-        await eventOwner.GetByRole(AriaRole.Link, new() { Name = "Moderate Quests", Exact = true }).ClickAsync();
-        await Expect(eventOwner).ToHaveURLAsync(new Regex("/quests\\?view=Moderation&eventId="));
-        await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Quests", Exact = true })).ToBeVisibleAsync();
-        await Expect(eventOwner.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToBeEnabledAsync();
-        await OpenModerationQuestAsync(eventOwner, eventId, title);
-        await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
-        await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Attendees", Exact = true })).ToHaveCountAsync(0);
-        await Expect(eventOwner.GetByRole(AriaRole.Heading, new() { Name = "Active private invitations (immediate access)", Exact = true })).ToHaveCountAsync(0);
-        await Expect(eventOwner.GetByRole(AriaRole.Link, new() { Name = "Edit content", Exact = true })).ToHaveCountAsync(0);
+        await Expect(eventOwner.GetByRole(AriaRole.Link, new() { Name = title, Exact = true })).ToHaveCountAsync(0);
+        await Expect(eventOwner.GetByRole(AriaRole.Link, new() { NameRegex = new("Moderate") })).ToHaveCountAsync(0);
 
         await ChooseMemberAsync(questOwner, "Carol", "Invite (immediate access)");
         await ConfirmQuestActionAsync(questOwner, "Invite (immediate access)");
@@ -267,10 +229,9 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
     }
 
     /// <summary>An editor opened before a competing committed change cannot overwrite it; conflicts retain input while revoked private access clears the editor.</summary>
-    /// <param name="competingChange">Moderator suspension, equal-owner access revocation, or a committed content edit by another equal owner.</param>
+    /// <param name="competingChange">Equal-owner access revocation or a committed content edit by another equal owner.</param>
     /// <returns>Completion after one rejected stale save, exact persisted content/history checks, and explicit current-state reload or private-access denial.</returns>
     [Theory]
-    [InlineData("suspension")]
     [InlineData("ownership-revocation")]
     [InlineData("content-edit")]
     public async Task StaleQuestEditPreservesCommittedWinnerAndCurrentAccess(string competingChange)
@@ -323,16 +284,9 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
         var expectedTitle = originalTitle;
         var expectedDescription = "Synthetic private-safe activity description.";
         var expectedLocation = "Test meeting point";
-        var expectedStatus = competingChange == "suspension" ? "Suspended" : "Active";
+        const string expectedStatus = "Active";
         var expectedEdits = competingChange == "content-edit" ? 1 : 0;
-        if (competingChange == "suspension")
-        {
-            await manager.GotoAsync($"/quests/{questId}?moderation=true");
-            await Expect(manager.GetByRole(AriaRole.Heading, new() { Name = "Event-owner moderation", Exact = true })).ToBeVisibleAsync();
-            await Expect(manager.GetByRole(AriaRole.Link, new() { Name = "Edit content", Exact = true })).ToHaveCountAsync(0);
-            await ConfirmQuestActionAsync(manager, "Suspend");
-        }
-        else if (competingChange == "ownership-revocation")
+        if (competingChange == "ownership-revocation")
         {
             await manager.GotoAsync($"/quests/{questId}");
             await ChooseMemberAsync(manager, "Bob", "Remove owner access");
@@ -403,8 +357,6 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
             await Expect(times.Nth(0)).ToHaveAttributeAsync("datetime", originalStartUtc);
             await Expect(times.Nth(1)).ToHaveAttributeAsync("datetime", originalEndUtc);
             await Expect(manager.Locator("main li").Filter(new() { HasText = "ContentEdited" })).ToHaveCountAsync(expectedEdits);
-            if (competingChange == "suspension")
-                await Expect(manager.Locator("main li").Filter(new() { HasText = "Status:Active->Suspended" })).ToHaveCountAsync(1);
             if (competingChange == "ownership-revocation")
             {
                 await Expect(manager.Locator("main li").Filter(new() { HasText = "OwnerRemoved:" })).ToHaveCountAsync(1);
@@ -632,10 +584,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
     private static async Task ConfirmQuestActionAsync(IPage page, string action)
     {
-        var moderation = action is "Suspend" or "Reinstate with latest details";
-        var needsReason = moderation || action is "Cancel Quest" or "Revoke invitation" or "Remove attendee";
-        if (!moderation)
-            await SelectQuestActionAsync(page, action);
+        var needsReason = action is "Cancel Quest" or "Revoke invitation" or "Remove attendee";
+        await SelectQuestActionAsync(page, action);
         var reason = page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Reason \\(") });
         if (needsReason)
             await QuestConfirmationDiagnostics.ObserveAsync(page, reason, action, ConfirmAsync);
@@ -648,11 +598,8 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
                 await reason.FillWhenActionableAsync("Browser acceptance action.");
             if (action is not ("Cancel Quest" or "Delete draft" or "Remove owner access" or "Revoke invitation" or "Remove attendee"))
                 await page.GetByRole(AriaRole.Checkbox, new() { NameRegex = new("^I confirm this action") }).CheckAsync();
-            await page.GetByRole(AriaRole.Button, new() { Name = moderation ? action : $"Confirm: {action}", Exact = true }).ClickAsync();
-            if (moderation)
-                await Expect(reason).ToHaveValueAsync("");
-            else
-                await Expect(page.Locator(".management-confirmation")).ToHaveCountAsync(0);
+            await page.GetByRole(AriaRole.Button, new() { Name = $"Confirm: {action}", Exact = true }).ClickAsync();
+            await Expect(page.Locator(".management-confirmation")).ToHaveCountAsync(0);
             await Expect(page.GetByText("Change saved. Required delivery will be attempted durably.", new() { Exact = true })).ToBeVisibleAsync();
         }
     }
@@ -669,30 +616,6 @@ public sealed class CoreWorkflowBrowserTests(FoundationBrowserFixture fixture) :
 
     private static Task ParticipationAsync(IPage page, string value) =>
         Expect(page.GetByRole(AriaRole.Heading, new() { Name = $"Your participation: {value}", Exact = true })).ToBeVisibleAsync();
-
-    private static async Task OpenModerationQuestAsync(IPage page, Guid eventId, string title)
-    {
-        try
-        {
-            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Moderation", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
-            await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "Event", Exact = true })).ToHaveValueAsync(eventId.ToString());
-            await page.GetByRole(AriaRole.Link, new() { Name = title, Exact = true }).ClickAsync();
-        }
-        catch (Exception error) when (error is PlaywrightException or TimeoutException)
-        {
-            try
-            {
-                var state = await page.EvaluateAsync<string>(ModerationDiagnosticsScript,
-                    new { title, eventId = eventId.ToString() }).WaitAsync(TimeSpan.FromSeconds(2));
-                await Console.Out.WriteLineAsync($"Moderation navigation state: {state}");
-            }
-            catch (Exception diagnosticError) when (diagnosticError is PlaywrightException or TimeoutException)
-            {
-                await Console.Out.WriteLineAsync("Moderation navigation state unavailable; original failure retained.");
-            }
-            throw;
-        }
-    }
 
     private static ILocator NameInput(IPage page) =>
         page.GetByRole(AriaRole.Textbox, new() { NameRegex = new("^Name \\(3") });

@@ -92,7 +92,6 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
             () => service.ListAsync(QuestListKind.Joined, null, new PageRequest()),
             () => service.ListAsync(QuestListKind.Joined, null, new PageRequest(), new QuestDateFilter()),
             () => service.GetAsync(id),
-            () => service.GetAsync(id, true),
             () => service.CreateAsync(scenario.Seed.Event.Id, scenario.Input()),
             () => service.EditAsync(id, version, scenario.Input()),
             () => service.ChangeStatusAsync(id, version, QuestStatus.Cancelled, "Cancellation reason."),
@@ -138,7 +137,6 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
         foreach (var call in calls)
             Assert.Equal(ErrorCode.NotFound, (await Assert.ThrowsAsync<DomainException>(call)).Code);
         Assert.False(detail.Summary.IsOwner);
-        Assert.True(detail.Summary.CanModerate);
         Assert.Equal(ParticipationStatus.None, detail.Summary.Participation);
         await using var read = database.CreateContext();
         Assert.False(await read.AuditEntries.AnyAsync(a => a.ResourceId == id));
@@ -251,10 +249,6 @@ public sealed class QuestAuthorizationTests(SqlTestDatabase database) : IClassFi
             Assert.DoesNotContain("\"Email\"", serialized);
         }
 
-        var moderation = await viewer.GetAsync(scenario.Seed.Quest.Id, moderation: true);
-        Assert.Null(moderation.Attendees);
-        Assert.Null(moderation.Followers);
-        Assert.Null(moderation.Invitees);
     }
 
     /// <summary>Historical actions whose target no longer resolves use an explicit safe label rather than displaying the internal identifier.</summary>

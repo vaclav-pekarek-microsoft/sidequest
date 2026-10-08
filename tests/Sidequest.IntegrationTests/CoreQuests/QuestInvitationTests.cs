@@ -66,8 +66,6 @@ public sealed class QuestInvitationTests(SqlTestDatabase database) : IClassFixtu
         var denied = await Assert.ThrowsAsync<DomainException>(() => guestService.InviteAsync(scenario.Seed.Quest.Id, scenario.Seed.User.Id));
         Assert.Equal(ErrorCode.NotFound, denied.Code);
         Assert.False(gate.Started.Task.IsCompleted);
-        Assert.Equal(ErrorCode.NotFound,
-            (await Assert.ThrowsAsync<DomainException>(() => guestService.GetAsync(scenario.Seed.Quest.Id, true))).Code);
     }
 
     /// <summary>Failure or cancellation after all invitation SQL writes rolls back the grant, audit, outbox and Quest update together.</summary>

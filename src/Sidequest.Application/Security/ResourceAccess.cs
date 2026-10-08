@@ -59,7 +59,7 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
 
     /// <inheritdoc/>
     public async Task<Quest> RequireQuestAsync(ISidequestDbContext db, Guid questId, Guid userId,
-        bool ownerOnly = false, bool moderation = false, CancellationToken cancellationToken = default)
+        bool ownerOnly = false, CancellationToken cancellationToken = default)
     {
         var item = await db.Quests.SingleOrDefaultAsync(x => x.Id == questId, cancellationToken).ConfigureAwait(false);
         if (item is null)
@@ -68,18 +68,13 @@ public sealed class ResourceAccess(ICurrentUser currentUser) : IResourceAccess
         var administrator = await db.Administrators.AnyAsync(x => x.UserId == userId, cancellationToken).ConfigureAwait(false);
         var owner = item.CreatorId == userId || administrator ||
             await db.QuestOwners.AnyAsync(x => x.QuestId == questId && x.UserId == userId, cancellationToken).ConfigureAwait(false);
-        if ((moderation || !owner) && await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
+        if (!owner && await db.QuestStatusHistory.AnyAsync(x => x.QuestId == questId &&
             x.Previous == QuestStatus.Draft && x.Next == QuestStatus.Cancelled, cancellationToken).ConfigureAwait(false))
             throw Unavailable();
-        // An invitation cannot authorize an owner-only or moderation request, and owners already have access.
-        var invited = !owner && !ownerOnly && !moderation && await db.QuestInvitations.AnyAsync(
+        // An invitation cannot authorize an owner-only request, and owners already have access.
+        var invited = !owner && !ownerOnly && await db.QuestInvitations.AnyAsync(
             x => x.QuestId == questId && x.UserId == userId && x.Status == QuestInvitationStatus.Active, cancellationToken).ConfigureAwait(false);
-        var eventOwner = moderation && (administrator || parent.CreatorId == userId ||
-            await db.EventOwners.AnyAsync(
-                x => x.EventId == parent.Id && x.UserId == userId, cancellationToken).ConfigureAwait(false));
-        var allowed = moderation
-            ? AccessRules.CanModerate(true, true, eventOwner, item.Status)
-            : AccessRules.CanReadQuest(true, true, owner, invited, parent.Status, item.Status, item.Visibility);
+        var allowed = AccessRules.CanReadQuest(true, true, owner, invited, parent.Status, item.Status, item.Visibility);
         if (!allowed || (ownerOnly && !owner))
             throw Unavailable();
         return item;

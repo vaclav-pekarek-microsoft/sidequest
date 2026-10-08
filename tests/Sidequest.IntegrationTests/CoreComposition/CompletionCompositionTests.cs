@@ -32,11 +32,9 @@ public sealed class CompletionCompositionTests
         var suspended = await s.CreateQuestAsync(owner);
         var draft = await s.CreateQuestAsync(owner, QuestVisibility.Private, publish: false);
         await s.ParticipateAsync(active, attendee, ParticipationCommand.Join);
-        s.ActAs(s.Manager);
-        await s.Quests.ChangeStatusAsync(suspended, await s.QuestVersionAsync(suspended), QuestStatus.Suspended, "Safety review hold");
-        await s.FlushAsync();
         await using (var db = s.Read())
         {
+            (await db.Quests.SingleAsync(x => x.Id == suspended)).Status = QuestStatus.Suspended;
             db.MembershipRequests.Add(new EventMembershipRequest
             {
                 EventId = s.EventId, UserId = requester.Id, Status = MembershipRequestStatus.Pending, CreatedUtc = s.Clock.Now

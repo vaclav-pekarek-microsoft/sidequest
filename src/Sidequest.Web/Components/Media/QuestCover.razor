@@ -3,7 +3,7 @@
 <figure class="quest-cover">
     @if (AssetId is { } id)
     {
-        <img src="@($"media/covers/{id:D}?moderation={Moderation.ToString().ToLowerInvariant()}")"
+        <img src="@($"media/covers/{id:D}")"
              alt="@($"Cover for {QuestTitle}")" loading="lazy" />
     }
     else
@@ -18,7 +18,4 @@
 
     /// <summary>Authorized Quest title used for meaningful image alternative text.</summary>
     [Parameter, EditorRequired] public string QuestTitle { get; set; } = "";
-
-    /// <summary>Uses the explicit audited moderation image endpoint, never an implicit access grant.</summary>
-    [Parameter] public bool Moderation { get; set; }
 }

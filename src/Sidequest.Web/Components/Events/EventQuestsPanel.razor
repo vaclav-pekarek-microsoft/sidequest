@@ -1,24 +1,89 @@
+@using Sidequest.Application.Abstractions
+@using Sidequest.Application.Quests
+@using Sidequest.Web.Components.Quests
+@implements IAsyncDisposable
+@inject IQuestService Quests
+@inject ILogger<EventQuestsPanel> Logger
+
 <section class="section-box" aria-labelledby="event-quests-title">
     <h2 id="event-quests-title" class="section-heading">Event Quests</h2>
     <p>Joining this Event gives you access to its public Quests and any private Quests specifically shared with you.</p>
     <div class="page-actions">
-        <a href="@($"/quests?view=Discover&eventId={EventId}")">Browse Event Quests</a>
         @if (CanCreate)
         {
             <a class="button-link" href="@($"/quests/create?eventId={EventId}")">Create Quest</a>
         }
-        @if (CanModerate)
-        {
-            <a href="@($"/quests?view=Moderation&eventId={EventId}")">Moderate Quests</a>
-        }
     </div>
+    @if (loading)
+    {
+        <p role="status">Loading Event Quests…</p>
+    }
+    else if (error is not null)
+    {
+        <p role="alert">@error</p>
+        <FluentButton Disabled="@loading" OnClick="LoadAsync">Reload Quests</FluentButton>
+    }
+    else if (result is null || result.Items.Count == 0)
+    {
+        <p>No accessible Quests are available in this Event.</p>
+    }
+    else
+    {
+        <div class="quest-board">
+            @foreach (var item in result.Items)
+            {
+                <QuestCard @key="item.Id" Item="item" />
+            }
+        </div>
+        @if (result.TotalCount > PageSize)
+        {
+            <p><a href="@($"/quests?eventId={EventId}")">View all @result.TotalCount Event Quests</a></p>
+        }
+    }
 </section>
 
 @code {
-    /// <summary>Parent Event used to scope Quest discovery, creation, and moderation links.</summary>
+    private const int PageSize = 12;
+    private readonly CancellationTokenSource lifetime = new();
+    private PageResult<QuestSummary>? result;
+    private bool loading;
+    private string? error;
+
+    /// <summary>Parent Event used to scope authorized Quest listing and creation.</summary>
     [Parameter] public Guid EventId { get; set; }
+
     /// <summary>Whether the current member may create a Quest in the Active Event.</summary>
     [Parameter] public bool CanCreate { get; set; }
-    /// <summary>Whether the current Event owner may open audited Quest moderation.</summary>
-    [Parameter] public bool CanModerate { get; set; }
+
+    /// <inheritdoc />
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        result = null;
+        try
+        {
+            result = await Quests.ListAsync(QuestListKind.Board, EventId, new PageRequest(1, PageSize), lifetime.Token);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception failure)
+        {
+            var correlationId = Guid.NewGuid().ToString("N");
+            Logger.LogError(failure, "Event Quest panel load failed. Correlation {CorrelationId}.", correlationId);
+            error = $"Event Quests could not be loaded. Please retry. Reference: {correlationId}.";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await lifetime.CancelAsync();
+        lifetime.Dispose();
+    }
 }

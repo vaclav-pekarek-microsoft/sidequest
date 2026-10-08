@@ -293,33 +293,30 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         Assert.Empty(page.FindComponents<InputFile>());
     }
 
-    /// <summary>Cards and details preserve the explicit moderation flag when displaying the authorized cover.</summary>
-    /// <param name="moderation">Whether the separate audited display path was requested.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ReadSurfaces_UseAuthorizedCoverAndExplicitModeration(bool moderation)
+    /// <summary>Cards and details use the same authorized cover route without a moderation discriminator.</summary>
+    [Fact]
+    public void ReadSurfaces_UseAuthorizedCoverWithoutModerationDiscriminator()
     {
         SetRendererInfo(new("Server", true));
         quests.Detail = quests.Detail with
         {
             Summary = quests.Detail.Summary with
             {
-                Status = QuestStatus.Active, IsOwner = !moderation, CanManage = !moderation,
-                CanModerate = moderation,
-                AttendeeCount = moderation ? null : 0, FollowerCount = moderation ? null : 0
+                Status = QuestStatus.Active, IsOwner = true, CanManage = true,
+                AttendeeCount = 0, FollowerCount = 0
             },
-            Attendees = moderation ? null : [], Followers = moderation ? null : [], Invitees = moderation ? null : []
+            Attendees = [], Followers = [], Invitees = []
         };
-        Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/{quests.Detail.Summary.Id}?moderation={moderation}");
-        var card = Render<QuestCard>(p => p.Add(x => x.Item, quests.Detail.Summary).Add(x => x.Moderation, moderation));
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/quests/{quests.Detail.Summary.Id}");
+        var card = Render<QuestCard>(p => p.Add(x => x.Item, quests.Detail.Summary));
         var detail = Render<QuestDetailsRoute>(p => p.Add(x => x.Id, quests.Detail.Summary.Id));
         foreach (var image in new[] { card.FindComponent<QuestCover>().Instance, detail.FindComponent<QuestCover>().Instance })
         {
             Assert.Equal(quests.Detail.Summary.CoverAssetId, image.AssetId);
             Assert.Equal(quests.Detail.Summary.Title, image.QuestTitle);
-            Assert.Equal(moderation, image.Moderation);
         }
+        Assert.DoesNotContain("moderation", card.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("moderation", detail.Markup, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class DetailLogger : ILogger<QuestDetails>
@@ -342,7 +339,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
     {
         internal QuestDetail Detail { get; set; } = new(new(Guid.NewGuid(), EventStub.Id, "Parent Event", "Original title sentinel", "Room",
             new(2026, 7, 15, 10, 0, 0, TimeSpan.Zero), new(2026, 7, 15, 12, 0, 0, TimeSpan.Zero),
-            "Europe/Prague", QuestStatus.Draft, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, true, false,
+            "Europe/Prague", QuestStatus.Draft, QuestVisibility.Public, 0, 0, null, ParticipationStatus.None, true,
             "AAAAAAAAAAE=", Guid.NewGuid()), "Protected description sentinel", "", [], [], [], []);
         internal int Reads { get; private set; }
         internal int HistoryReads { get; private set; }
@@ -350,7 +347,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         internal List<(Guid Id, string Version, QuestInput Input)> Edits { get; } = [];
         internal List<(Guid Id, ParticipationCommand Command)> Participations { get; } = [];
         /// <inheritdoc />
-        public Task<QuestDetail> GetAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default)
+        public Task<QuestDetail> GetAsync(Guid id, CancellationToken cancellationToken = default)
         {
             Assert.Equal(Detail.Summary.Id, id);
             Reads++;
@@ -363,7 +360,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
             return Task.CompletedTask;
         }
         /// <inheritdoc />
-        public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, bool moderation = false, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<QuestHistoryItem>> HistoryAsync(Guid id, CancellationToken cancellationToken = default)
         {
             HistoryReads++;
             return Task.FromResult<IReadOnlyList<QuestHistoryItem>>([]);
@@ -414,7 +411,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         public Task<CoverUpdate> RemoveCoverAsync(Guid questId, string expectedVersion, CancellationToken cancellationToken = default) =>
             ChangeAsync(questId, expectedVersion);
         /// <inheritdoc />
-        public Task<MediaContent> ReadAsync(Guid assetId, bool moderation = false, CancellationToken cancellationToken = default) => throw Unexpected();
+        public Task<MediaContent> ReadAsync(Guid assetId, CancellationToken cancellationToken = default) => throw Unexpected();
 
         private Task<CoverUpdate> ChangeAsync(Guid id, string version)
         {
@@ -486,13 +483,7 @@ public sealed class QuestCoverPageTests : BunitContext, IAsyncLifetime
         /// <inheritdoc />
         public Task RemoveOwnerAsync(Guid eventId, Guid userId, CancellationToken cancellationToken = default) => throw Unexpected();
         /// <inheritdoc />
-        public Task<Guid> StartBulkAsync(Guid eventId, Guid groupId, BulkMode mode, CancellationToken cancellationToken = default) => throw Unexpected();
-        /// <inheritdoc />
-        public Task<BulkOperationSummary> GetBulkAsync(Guid operationId, CancellationToken cancellationToken = default) => throw Unexpected();
-        /// <inheritdoc />
         public Task<IReadOnlyList<DirectoryUser>> SearchUsersAsync(string query, CancellationToken cancellationToken = default) => throw Unexpected();
-        /// <inheritdoc />
-        public Task<IReadOnlyList<DirectoryGroup>> SearchGroupsAsync(string query, CancellationToken cancellationToken = default) => throw Unexpected();
     }
 
     private static InvalidOperationException Unexpected() => new("Unexpected service call in the Quest cover composition fixture.");

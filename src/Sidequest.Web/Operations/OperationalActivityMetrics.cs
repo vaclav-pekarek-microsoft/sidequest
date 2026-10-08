@@ -33,9 +33,7 @@ internal sealed class OperationalActivityMetrics : IDisposable
         var operation = activity switch
         {
             OperationalActivity.DirectoryUserSearch => "directory_user_search",
-            OperationalActivity.DirectoryGroupSearch => "directory_group_search",
             OperationalActivity.DirectoryUserLookup => "directory_user_lookup",
-            OperationalActivity.DirectoryGroupExpansion => "directory_group_expansion",
             OperationalActivity.ImageSanitization => "image_sanitization",
             OperationalActivity.EmailSubmission => "email_submission",
             OperationalActivity.UserAuthorization => "authorize_user",

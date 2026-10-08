@@ -4,12 +4,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Sidequest.Application.Abstractions;
 using Sidequest.Application.Events;
 using Sidequest.Application.Events.Implementation;
+using Sidequest.Application.Quests;
 using Sidequest.Domain.Model;
 using Sidequest.Domain.Rules;
 using Sidequest.UnitTests.SecondaryExperience;
 using Sidequest.Web.Components;
 using Sidequest.Web.Components.Events;
 using Sidequest.Web.Components.Pages.Events;
+using Sidequest.Web.Components.Quests;
 using Sidequest.Web.Experience;
 
 namespace Sidequest.UnitTests.CoreEvents;
@@ -21,6 +23,7 @@ public sealed class EventComponentTests : BunitContext
     public EventComponentTests()
     {
         Services.AddFluentUIComponents();
+        Services.AddSingleton<ExperienceCoordinator>();
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
@@ -37,7 +40,6 @@ public sealed class EventComponentTests : BunitContext
     [InlineData(typeof(EventInvitationsPage))]
     [InlineData(typeof(EventRequestsPage))]
     [InlineData(typeof(EventEditPage))]
-    [InlineData(typeof(EventBulkProgressPage))]
     public async Task EventReloadAppearsOnlyAfterFailureAndHidesAfterRecovery(Type pageType)
     {
         Services.AddLogging();
@@ -63,14 +65,8 @@ public sealed class EventComponentTests : BunitContext
                 nameof(IEventService.ListMembersAsync) => Task.FromResult(new PageResult<MembershipSummary>([], 0, 1, 25)),
                 nameof(IEventService.ListRequestsAsync) => Task.FromResult(new PageResult<RequestSummary>([], 0, 1, 25)),
                 nameof(IEventService.ListInvitationsAsync) => Task.FromResult(new PageResult<EventInvitationSummary>([], 0, 1, 25)),
-                nameof(IEventService.GetBulkAsync) => Task.FromResult(new BulkOperationSummary(id, BulkMode.Add, BulkStatus.Completed, 0, 0, 0, 0, null)),
                 _ => throw new NotSupportedException(method.Name)
             };
-        }));
-        Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
-        {
-            Assert.Equal(nameof(IEventManagementQueries.ListBulkRecipientsAsync), method.Name);
-            return Task.FromResult(new PageResult<BulkRecipientSummary>([], 0, 1, 25));
         }));
         await experience.ReportConnectionAsync(true, null);
         SetRendererInfo(new("Server", true));
@@ -78,7 +74,7 @@ public sealed class EventComponentTests : BunitContext
         {
             builder.OpenComponent(0, pageType);
             if (pageType == typeof(EventDetailPage) || pageType == typeof(EventMembersPage) ||
-                pageType == typeof(EventEditPage) || pageType == typeof(EventBulkProgressPage))
+                pageType == typeof(EventEditPage))
                 builder.AddAttribute(1, "Id", id);
             builder.CloseComponent();
         });
@@ -112,39 +108,6 @@ public sealed class EventComponentTests : BunitContext
         Assert.Empty(Reloads());
     }
 
-    /// <summary>Progress refresh remains useful for unfinished bulk work but is absent after terminal outcomes.</summary>
-    /// <param name="status">Persisted operation status returned by the authorized query.</param>
-    /// <param name="visible">Whether another progress read can track ongoing work.</param>
-    /// <returns>Completion after the actual bulk progress page renders.</returns>
-    [Theory]
-    [InlineData(BulkStatus.Expanding, true)]
-    [InlineData(BulkStatus.Applying, true)]
-    [InlineData(BulkStatus.Completed, false)]
-    [InlineData(BulkStatus.Failed, false)]
-    public async Task BulkRefreshIsVisibleOnlyForUnfinishedWork(BulkStatus status, bool visible)
-    {
-        Services.AddLogging();
-        var experience = new ExperienceCoordinator();
-        Services.AddSingleton(experience);
-        Services.AddSingleton(new EventCircuitRevalidation());
-        var id = Guid.NewGuid();
-        Services.AddSingleton(SnapshotServiceProxy.Create<IEventService>((method, _) =>
-        {
-            Assert.Equal(nameof(IEventService.GetBulkAsync), method.Name);
-            return Task.FromResult(new BulkOperationSummary(id, BulkMode.Add, status, 0, 0, 0, 0, null));
-        }));
-        Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
-        {
-            Assert.Equal(nameof(IEventManagementQueries.ListBulkRecipientsAsync), method.Name);
-            return Task.FromResult(new PageResult<BulkRecipientSummary>([], 0, 1, 25));
-        }));
-        await experience.ReportConnectionAsync(true, null);
-        SetRendererInfo(new("Server", true));
-        var cut = Render<EventBulkProgressPage>(p => p.Add(x => x.Id, id));
-        Assert.Equal(visible ? 1 : 0, cut.FindComponents<FluentButton>().Count(button =>
-            button.Find("fluent-button").TextContent.Contains("Refresh progress", StringComparison.Ordinal)));
-        Assert.Contains(status.ToString(), cut.Find("[role=status]").TextContent);
-    }
 
     /// <summary>Busy transitions update Fluent control parameters as well as the fieldset while retaining local edits and zone locks.</summary>
     /// <returns>A task completing after disabled and re-enabled control states are explicitly verified.</returns>
@@ -632,9 +595,9 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal(id, Assert.Single(leaves));
     }
 
-    /// <summary>An explicit Event owner cannot leave and alone receives ownership-continuity guidance; an ordinary member receives neither guidance nor owner treatment.</summary>
+    /// <summary>Event list cards suppress ownership guidance while still preventing owners from leaving.</summary>
     [Fact]
-    public void EventCardOwnerSuppressesLeaveAndOwnershipGuidanceIsOwnerOnly()
+    public void EventListCardOwnerSuppressesLeaveAndOwnershipGuidance()
     {
         var eventId = Guid.Parse("55000000-0000-0000-0000-000000000055");
         var owner = Render<EventCard>(parameters => parameters
@@ -645,8 +608,8 @@ public sealed class EventComponentTests : BunitContext
             .Add(component => component.ShowParticipationActions, true));
 
         Assert.Empty(owner.FindComponents<FluentButton>());
-        Assert.Contains("Owners must remove all Event and child Quest ownership assignments before leaving.",
-            owner.Find(".text-muted").TextContent);
+        Assert.Empty(owner.FindAll(".text-muted"));
+        Assert.DoesNotContain("ownership assignments", owner.Markup);
         Assert.Single(member.FindComponents<FluentButton>(),
             button => button.Find("fluent-button").TextContent.Trim() == "Leave Event…");
         Assert.Empty(member.FindAll(".text-muted"));
@@ -709,38 +672,79 @@ public sealed class EventComponentTests : BunitContext
         Assert.Equal(ButtonType.Submit, submit.Instance.Type);
     }
 
-    /// <summary>A member can browse and create Quests scoped to the Event without receiving owner moderation.</summary>
-    [Fact]
-    public void EventQuestsPanelMemberRendersQuestLinksWithoutOwnerModeration()
+    /// <summary>The Event Quests panel directly renders the first authorized page and exposes view-all only above twelve.</summary>
+    /// <param name="total">Authorized result total.</param>
+    /// <param name="rendered">Number of first-page cards returned by the service.</param>
+    /// <param name="viewAll">Whether the full Event-scoped list link is required.</param>
+    [Theory]
+    [InlineData(0, 0, false)]
+    [InlineData(1, 1, false)]
+    [InlineData(12, 12, false)]
+    [InlineData(13, 12, true)]
+    public void EventQuestsPanel_RendersFirstTwelveAuthorizedCardsAndBoundaryLink(
+        int total, int rendered, bool viewAll)
     {
         var eventId = Guid.Parse("52000000-0000-0000-0000-000000000025");
+        var items = Enumerable.Range(1, rendered).Select(QuestSummary).ToArray();
+        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((method, arguments) =>
+        {
+            Assert.Equal(nameof(IQuestService.ListAsync), method.Name);
+            Assert.Equal(QuestListKind.Board, arguments![0]);
+            Assert.Equal(eventId, arguments[1]);
+            Assert.Equal(new PageRequest(1, 12), arguments[2]);
+            return Task.FromResult(new PageResult<QuestSummary>(items, total, 1, 12));
+        }));
         var cut = Render<EventQuestsPanel>(parameters => parameters
             .Add(component => component.EventId, eventId)
             .Add(component => component.CanCreate, true));
-        var links = cut.FindAll("a");
 
-        Assert.Equal(["Browse Event Quests", "Create Quest"], links.Select(link => link.TextContent.Trim()));
-        Assert.Equal($"/quests?view=Discover&eventId={eventId}", links[0].GetAttribute("href"));
-        Assert.Equal($"/quests/create?eventId={eventId}", links[1].GetAttribute("href"));
-        Assert.DoesNotContain("Moderate Quests", cut.Markup);
+        Assert.Equal(rendered, cut.FindComponents<QuestCard>().Count);
+        Assert.Equal($"/quests/create?eventId={eventId}",
+            cut.FindAll("a").Single(link => link.TextContent.Trim() == "Create Quest").GetAttribute("href"));
+        Assert.Equal(viewAll, cut.FindAll("a").Any(link => link.TextContent.Contains("View all", StringComparison.Ordinal)));
+        if (viewAll)
+            Assert.Equal($"/quests?eventId={eventId}",
+                cut.FindAll("a").Single(link => link.TextContent.Contains("View all", StringComparison.Ordinal)).GetAttribute("href"));
+        Assert.Equal(total == 0, cut.Markup.Contains("No accessible Quests", StringComparison.Ordinal));
+        Assert.DoesNotContain("Browse Event Quests", cut.Markup);
+        Assert.DoesNotContain("Moderate", cut.Markup, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>An owner retains member Quest destinations and additionally receives the Event-scoped moderation destination.</summary>
+    /// <summary>Create Quest is hidden when the Event projection does not authorize creation.</summary>
     [Fact]
-    public void EventQuestsPanelOwnerAdditionallyRendersModerationLink()
+    public void EventQuestsPanel_HidesCreateWhenNotAllowed()
     {
         var eventId = Guid.Parse("53000000-0000-0000-0000-000000000035");
-        var cut = Render<EventQuestsPanel>(parameters => parameters
-            .Add(component => component.EventId, eventId)
-            .Add(component => component.CanCreate, true)
-            .Add(component => component.CanModerate, true));
-        var links = cut.FindAll("a");
+        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((_, _) =>
+            Task.FromResult(new PageResult<QuestSummary>([], 0, 1, 12))));
+        var cut = Render<EventQuestsPanel>(parameters => parameters.Add(component => component.EventId, eventId));
 
-        Assert.Equal(["Browse Event Quests", "Create Quest", "Moderate Quests"],
-            links.Select(link => link.TextContent.Trim()));
-        Assert.Equal($"/quests?view=Discover&eventId={eventId}", links[0].GetAttribute("href"));
-        Assert.Equal($"/quests/create?eventId={eventId}", links[1].GetAttribute("href"));
-        Assert.Equal($"/quests?view=Moderation&eventId={eventId}", links[2].GetAttribute("href"));
+        Assert.Empty(cut.FindAll("a"));
+        Assert.Contains("No accessible Quests", cut.Markup);
+    }
+
+    /// <summary>A failed Event Quest read exposes a concrete error and reload action that recovers to the empty state.</summary>
+    [Fact]
+    public async Task EventQuestsPanel_ErrorReloadRecoversToEmptyState()
+    {
+        var attempts = 0;
+        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((_, _) =>
+        {
+            attempts++;
+            return attempts == 1
+                ? Task.FromException<PageResult<QuestSummary>>(new InvalidOperationException("Synthetic read failure."))
+                : Task.FromResult(new PageResult<QuestSummary>([], 0, 1, 12));
+        }));
+        var cut = Render<EventQuestsPanel>(parameters => parameters.Add(component => component.EventId, Guid.NewGuid()));
+
+        Assert.Contains("Event Quests could not be loaded", cut.Find("[role=alert]").TextContent);
+        var reload = Assert.Single(cut.FindComponents<FluentButton>());
+        Assert.Equal("Reload Quests", reload.Find("fluent-button").TextContent.Trim());
+        await cut.InvokeAsync(() => reload.Instance.OnClick.InvokeAsync());
+
+        Assert.Equal(2, attempts);
+        Assert.Empty(cut.FindAll("[role=alert]"));
+        Assert.Contains("No accessible Quests", cut.Markup);
     }
 
     /// <summary>The Event list requests All by default, groups cards in the responsive grid, and offers Join only on an Active card the actor has not joined.</summary>
@@ -1035,7 +1039,7 @@ public sealed class EventComponentTests : BunitContext
         Assert.Empty(cut.FindComponents<EventCard>());
         var quests = cut.FindComponent<EventQuestsPanel>();
         Assert.Equal(eventId, quests.Instance.EventId);
-        Assert.True(quests.Instance.CanModerate);
+        Assert.True(quests.Instance.CanCreate);
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Members").Click();
         Assert.Equal(eventId, cut.FindComponent<EventMembersPanel>().Instance.EventId);
         cut.FindAll("[role=tab]").Single(tab => tab.TextContent.Trim() == "Invitations").Click();
@@ -1613,6 +1617,10 @@ public sealed class EventComponentTests : BunitContext
         Services.AddSingleton(experience);
         Services.AddSingleton(new EventCircuitRevalidation());
         Services.AddSingleton(events);
+        Services.AddSingleton(SnapshotServiceProxy.Create<IQuestService>((method, _) =>
+            method.Name == nameof(IQuestService.ListAsync)
+                ? Task.FromResult(new PageResult<QuestSummary>([], 0, 1, 12))
+                : throw new NotSupportedException(method.Name)));
         Services.AddSingleton(SnapshotServiceProxy.Create<IEventManagementQueries>((method, _) =>
             throw new NotSupportedException(method.Name)));
         await experience.ReportConnectionAsync(true, null);
@@ -1631,6 +1639,12 @@ public sealed class EventComponentTests : BunitContext
         {
             CanManage = canManage ?? isOwner
         };
+
+    private static QuestSummary QuestSummary(int number) =>
+        new(Guid.Parse($"75000000-0000-0000-0000-{number:D12}"), Guid.NewGuid(), "Parent Event",
+            $"Quest {number}", "Room", new(2026, 9, 10, 10, 0, 0, TimeSpan.Zero),
+            new(2026, 9, 10, 11, 0, 0, TimeSpan.Zero), "Europe/Prague", QuestStatus.Active,
+            QuestVisibility.Public, number, number + 1, null, ParticipationStatus.None, false, "", null);
 
     /// <summary>Confirming owner-role removal dispatches only the owner operation with the selected Event and user identifiers.</summary>
     /// <returns>Completion after the real dialog callback and subsequent panel refresh.</returns>
@@ -2015,7 +2029,8 @@ public sealed class EventComponentTests : BunitContext
             "Ordinary member", EventStatus.Active, true);
 
         var cut = Render<EventParticipationActions>(parameters => parameters
-            .Add(component => component.Item, item));
+            .Add(component => component.Item, item)
+            .Add(component => component.ShowOwnershipGuidance, true));
 
         var leave = Assert.Single(cut.FindComponents<FluentButton>());
         Assert.Equal("Leave Event…", leave.Find("fluent-button").TextContent.Trim());
@@ -2035,7 +2050,8 @@ public sealed class EventComponentTests : BunitContext
         };
 
         var cut = Render<EventParticipationActions>(parameters => parameters
-            .Add(component => component.Item, item));
+            .Add(component => component.Item, item)
+            .Add(component => component.ShowOwnershipGuidance, true));
 
         Assert.False(item.IsOwner);
         Assert.False(item.CanManage);

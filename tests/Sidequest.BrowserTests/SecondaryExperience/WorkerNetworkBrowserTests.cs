@@ -60,7 +60,7 @@ public sealed class WorkerNetworkBrowserTests(FoundationBrowserFixture fixture) 
     /// <returns>Completion after a working offline fallback control and a protected navigation that never returns that HTML.</returns>
     [Theory]
     [InlineData("/media/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")]
-    [InlineData("/MeDiA/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?moderation=true")]
+    [InlineData("/MeDiA/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")]
     [InlineData("/%6dedia/covers/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")]
     [InlineData("/media%2fcovers%2faaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")]
     [InlineData("/notifications/calendar/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")]

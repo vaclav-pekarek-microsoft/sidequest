@@ -47,7 +47,7 @@ public sealed class QuestHomeServiceTests
         new(Guid.NewGuid(), Guid.NewGuid(), "Event", $"Quest {index}", "Room",
             now.AddHours(index + 1), now.AddHours(index + 2), "Etc/UTC",
             QuestStatus.Active, QuestVisibility.Public, 0, 0, null,
-            ParticipationStatus.Joined, false, false, "", null);
+            ParticipationStatus.Joined, false, "", null);
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

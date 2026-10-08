@@ -6,7 +6,7 @@ namespace Sidequest.Application.Events.Implementation;
 /// <summary>Registers real Event application workflows and their versioned job handlers without substituting providers.</summary>
 public static class EventFeatureRegistration
 {
-    /// <summary>Registers operation-scoped Event services and both generic-dispatcher handlers.</summary>
+    /// <summary>Registers operation-scoped Event services and the Event lifecycle handler.</summary>
     /// <param name="services">Host service registrations.</param>
     /// <param name="options">Explicit workflow limits, or the documented conservative defaults.</param>
     /// <returns>The same collection for host composition.</returns>
@@ -27,7 +27,6 @@ public static class EventFeatureRegistration
         services.AddScoped<IEventManagementQueries>(provider => provider.GetRequiredService<EventService>());
         services.AddScoped<IEventLifecycleReconciler, EventLifecycleReconciler>();
         services.AddScoped<IBackgroundWorkHandler, EventCompletionHandler>();
-        services.AddScoped<IBackgroundWorkHandler, BulkMembershipHandler>();
         return services;
     }
 }

@@ -67,7 +67,7 @@ else
     <div class="@(layout == QuestLayout.Board ? "quest-board" : "quest-list")">
         @foreach (var item in result.Items)
         {
-            <QuestCard @key="item.Id" Item="item" Moderation="@(kind == QuestListKind.Moderation)" />
+            <QuestCard @key="item.Id" Item="item" />
         }
     </div>
 }

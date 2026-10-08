@@ -12,7 +12,7 @@ using Sidequest.Web.Operations;
 
 namespace Sidequest.UnitTests.SecondaryExperience;
 
-/// <summary>Verifies the actual feature registrations compose with the existing core graph and require the sixth durable handler before polling.</summary>
+/// <summary>Verifies the actual feature registrations compose with the existing core graph and require Media cleanup before polling.</summary>
 public sealed class ExperienceHostCompositionTests
 {
     /// <summary>Real home, administration and media services resolve without provider I/O; departure recovery stays closed and omitting required Media fails startup.</summary>
@@ -21,7 +21,7 @@ public sealed class ExperienceHostCompositionTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ComposedExperienceRequiresExactlySixRealHandlers(bool includeMedia)
+    public async Task ComposedExperienceRequiresExactlyFiveRealHandlers(bool includeMedia)
     {
         var services = CoreWorkflowRegistrationTests.Services();
         services.AddSidequestExperience();
@@ -47,9 +47,9 @@ public sealed class ExperienceHostCompositionTests
         }
         Assert.IsType<MediaService>(first.ServiceProvider.GetRequiredService<IMediaService>());
         var handlers = first.ServiceProvider.GetServices<IBackgroundWorkHandler>().ToArray();
-        Assert.Equal(6, handlers.Length);
+        Assert.Equal(5, handlers.Length);
         Assert.Equal(new[] { WorkTypes.Change, WorkTypes.EventCompletion, WorkTypes.QuestCompletion,
-            WorkTypes.BulkMembership, WorkTypes.Reminder, WorkTypes.MediaCleanup }.Order(), handlers.Select(h => h.WorkType).Order());
+ WorkTypes.Reminder, WorkTypes.MediaCleanup }.Order(), handlers.Select(h => h.WorkType).Order());
         Assert.IsType<MediaCleanupHandler>(Assert.Single(handlers, h => h.WorkType == WorkTypes.MediaCleanup));
         await check.StartAsync(CancellationToken.None);
     }

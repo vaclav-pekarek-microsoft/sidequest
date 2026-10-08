@@ -163,17 +163,11 @@ public sealed class AccessRulesTests
         return data;
     }
 
-    /// <summary>Checks that moderation requires all account/ownership gates and never exposes Quest drafts.</summary>
-    /// <param name="eligible">Whether the moderator is eligible.</param>
-    /// <param name="member">Whether active individual Event membership exists.</param>
-    /// <param name="eventOwner">Whether the caller owns the parent Event.</param>
-    /// <param name="status">The Quest state considered for moderation.</param>
-    /// <param name="expected">The permission required by the explicit moderation row.</param>
-    [Theory]
-    [MemberData(nameof(ModerationCases))]
-    public void CanModerate_RequiresEligibilityMembershipAndEventOwnerForNonDraft(
-        bool eligible, bool member, bool eventOwner, QuestStatus status, bool expected)
+    /// <summary>The public access policy exposes no moderation permission after product removal.</summary>
+    [Fact]
+    public void AccessRules_ExposeNoModerationPermission()
     {
-        Assert.Equal(expected, AccessRules.CanModerate(eligible, member, eventOwner, status));
+        Assert.DoesNotContain(typeof(AccessRules).GetMethods(), method =>
+            method.Name.Contains("Moderate", StringComparison.OrdinalIgnoreCase));
     }
 }

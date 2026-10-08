@@ -39,7 +39,7 @@ public static class BusinessEmailRules
         [NotificationKind.EventCancelled] = "event.cancelled",
         [NotificationKind.Reminder] = "quest.reminder",
         [NotificationKind.OwnershipChanged] = "ownership.changed",
-        [NotificationKind.SuspendedQuestEdited] = "quest.moderation-update",
+        [NotificationKind.SuspendedQuestEdited] = "quest.suspended-update",
         [NotificationKind.BulkCompleted] = "event.bulk-completed"
     };
 

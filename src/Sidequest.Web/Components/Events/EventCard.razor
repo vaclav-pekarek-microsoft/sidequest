@@ -21,6 +21,7 @@
         {
             <EventParticipationActions Item="Item" Busy="Busy"
                                        ShowNotificationPreferences="ShowNotificationPreferences"
+                                       ShowOwnershipGuidance="ShowOwnershipGuidance"
                                        JoinRequested="JoinRequested" LeaveRequested="LeaveRequested">
                 @AdditionalActions
             </EventParticipationActions>
@@ -43,6 +44,9 @@
 
     /// <summary>Whether joined members receive the Event-scoped notification preferences link.</summary>
     [Parameter] public bool ShowNotificationPreferences { get; set; }
+
+    /// <summary>Whether ownership-related leave guidance is rendered for this detail context.</summary>
+    [Parameter] public bool ShowOwnershipGuidance { get; set; }
 
     /// <summary>Whether the owning Event list is running an operation.</summary>
     [Parameter] public bool Busy { get; set; }
