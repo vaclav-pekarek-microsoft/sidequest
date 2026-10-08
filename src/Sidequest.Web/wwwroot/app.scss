@@ -428,6 +428,60 @@ main .quest-card.quest-card-joined { border-top-color: var(--sq-cyan); }
     height: 100%;
     flex-direction: column;
 }
+.event-quests-panel {
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+.event-quests-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+    margin-bottom: 1.25rem;
+
+    > div { min-width: 0; }
+    p { max-width: 58rem; margin-bottom: 0; color: var(--sq-muted); }
+    .button-link { flex: 0 0 auto; }
+}
+.event-quest-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 1rem;
+
+    .quest-card {
+        display: flex;
+        min-width: 0;
+        height: 100%;
+        flex-direction: column;
+        gap: .15rem;
+        padding: 1rem;
+        border-top: 3px solid var(--sq-cyan);
+        background: linear-gradient(180deg, #fff, #f8fbff);
+    }
+
+    .quest-card h2 {
+        min-height: 2.8em;
+        margin-bottom: .35rem;
+        font-size: 1.12rem;
+        line-height: 1.4;
+    }
+
+    .quest-cover {
+        width: 100%;
+        max-width: none;
+        margin-bottom: .55rem;
+    }
+
+    .quest-cover img,
+    .quest-cover .placeholder-cover {
+        width: 100%;
+        aspect-ratio: 5 / 3;
+        object-fit: cover;
+        border-radius: .65rem;
+    }
+
+    .quest-card > :last-child { margin-bottom: 0; }
+}
 .event-participation-actions {
     display: flex;
     flex-wrap: wrap;
@@ -721,6 +775,7 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 @media (max-width: 900px) {
     .feature-grid { grid-template-columns: 1fr; margin-top: -2rem; }
     .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .event-quest-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .authentication-shell { grid-template-columns: 1fr; }
     .authentication-brand { min-height: 23rem; padding: 2rem; }
     .authentication-promise h2 { max-width: 18ch; font-size: clamp(2rem, 8vw, 3.5rem); }
@@ -728,6 +783,13 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 
 @media (max-width: 640px) {
     .event-card-grid { grid-template-columns: 1fr; }
+    .event-quest-grid { grid-template-columns: 1fr; }
+    .event-quests-header {
+        align-items: stretch;
+        flex-direction: column;
+
+        .button-link { align-self: flex-start; }
+    }
     main .event-card.event-card-detail {
         grid-template-columns: 1fr;
 

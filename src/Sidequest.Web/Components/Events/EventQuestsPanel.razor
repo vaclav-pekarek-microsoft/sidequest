@@ -5,15 +5,17 @@
 @inject IQuestService Quests
 @inject ILogger<EventQuestsPanel> Logger
 
-<section class="section-box" aria-labelledby="event-quests-title">
-    <h2 id="event-quests-title" class="section-heading">Event Quests</h2>
-    <p>Joining this Event gives you access to its public Quests and any private Quests specifically shared with you.</p>
-    <div class="page-actions">
+<section class="section-box event-quests-panel" aria-labelledby="event-quests-title">
+    <header class="event-quests-header">
+        <div>
+            <h2 id="event-quests-title" class="section-heading">Event Quests</h2>
+            <p>Joining this Event gives you access to its public Quests and any private Quests specifically shared with you.</p>
+        </div>
         @if (CanCreate)
         {
             <a class="button-link" href="@($"/quests/create?eventId={EventId}")">Create Quest</a>
         }
-    </div>
+    </header>
     @if (loading)
     {
         <p role="status">Loading Event Quests…</p>
@@ -29,7 +31,7 @@
     }
     else
     {
-        <div class="quest-board">
+        <div class="event-quest-grid">
             @foreach (var item in result.Items)
             {
                 <QuestCard @key="item.Id" Item="item" />

@@ -87,6 +87,22 @@ test("Event detail cards keep equal columns, cap media to its column, and collap
         /@media \(max-width: 640px\)\s*\{[\s\S]*?main \.event-card\.event-card-detail\s*\{[^}]*grid-template-columns: 1fr;/s);
 });
 
+test("Event detail Quest cards use a three-column responsive grid", () => {
+    const styles = compile(join(web, "wwwroot", "app.scss")).css;
+    assert.match(
+        styles,
+        /\.event-quest-grid\s*\{[^}]*display: grid;[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[^}]*align-items: stretch;/s);
+    assert.match(
+        styles,
+        /\.event-quest-grid \.quest-card\s*\{[^}]*display: flex;[^}]*height: 100%;[^}]*flex-direction: column;[^}]*border-top: 3px solid var\(--sq-cyan\);/s);
+    assert.match(
+        styles,
+        /@media \(max-width: 900px\)\s*\{[\s\S]*?\.event-quest-grid\s*\{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/s);
+    assert.match(
+        styles,
+        /@media \(max-width: 640px\)\s*\{[\s\S]*?\.event-quest-grid\s*\{[^}]*grid-template-columns: 1fr;/s);
+});
+
 test("Only the requested NuGet proxy is enabled and local settings are excluded from publishing", async () => {
     const config = await readFile(join(root, "NuGet.Config"), "utf8");
     assert.match(config, /https:\/\/packagefeedproxy\.microsoft\.io\/nuget\/v3\/index\.json/);
