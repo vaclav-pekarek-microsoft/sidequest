@@ -104,14 +104,13 @@ button, .button-link {
     font-weight: 680;
     text-decoration: none;
     cursor: pointer;
-    transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    transition: box-shadow 160ms ease, filter 160ms ease;
     &:hover:not(:disabled) {
         color: white;
-        filter: saturate(1.12) brightness(.96);
-        box-shadow: 0 12px 26px rgb(15 108 189 / 24%);
-        transform: translateY(-1px);
+        filter: saturate(1.06) brightness(.97);
+        box-shadow: 0 9px 20px rgb(15 108 189 / 20%);
     }
-    &:active:not(:disabled) { transform: translateY(0); }
+    &:active:not(:disabled) { filter: brightness(.93); }
     &:disabled { cursor: not-allowed; filter: grayscale(.25); opacity: .56; box-shadow: none; }
 }
 .button-quiet {
@@ -391,11 +390,10 @@ main .event-card.event-card {
     border-color: var(--sq-line);
     background: linear-gradient(180deg, #fff, #fbfcff);
     box-shadow: var(--sq-shadow-sm);
-    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    transition: box-shadow 180ms ease, border-color 180ms ease;
     &:hover {
         border-color: #b6c9e4;
-        box-shadow: 0 18px 44px rgb(18 42 82 / 14%);
-        transform: translateY(-3px);
+        box-shadow: 0 12px 30px rgb(18 42 82 / 11%);
     }
 }
 main .quest-card.quest-card { border-top-color: #b9c9e2; }
@@ -612,30 +610,32 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
-    gap: .4rem;
+    gap: .25rem;
     margin-block: 1.25rem;
-    padding: .45rem .55rem 0;
+    padding: 0 .4rem;
     overflow: visible;
-    background: color-mix(in srgb, var(--sq-blue) 5%, white);
-    border: 1px solid var(--sq-line);
-    border-bottom: 1px solid var(--sq-line);
-    border-radius: var(--sq-radius-sm) var(--sq-radius-sm) 0 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid var(--sq-line);
+    border-radius: 0;
 
     button {
-        flex: 1 1 8rem;
+        flex: 0 1 auto;
         min-width: max-content;
-        color: var(--sq-ink-soft);
+        padding: .62rem .95rem;
+        color: var(--sq-muted);
         background: transparent;
         border: 1px solid transparent;
+        border-bottom: 0;
         border-radius: .7rem .7rem 0 0;
         box-shadow: none;
-        margin-bottom: -1px;
+        margin-bottom: -2px;
+        transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
 
         &:hover:not(:disabled) {
-            color: var(--sq-blue-dark);
-            background: color-mix(in srgb, var(--sq-blue) 10%, white);
-            border-color: color-mix(in srgb, var(--sq-blue) 25%, var(--sq-line));
-            border-bottom-color: transparent;
+            color: var(--sq-accent);
+            background: var(--sq-accent-soft);
+            border-color: color-mix(in srgb, var(--sq-accent) 18%, var(--sq-line));
             filter: none;
             box-shadow: none;
         }
@@ -643,11 +643,10 @@ details.section-box > summary { color: var(--sq-ink-soft); font-weight: 720; cur
 
     button.selected,
     button.selected:hover:not(:disabled) {
-        color: var(--sq-blue);
-        background: white;
-        border-color: var(--sq-line);
-        border-bottom-color: white;
-        box-shadow: 0 -5px 14px rgb(0 103 184 / 8%);
+        color: #fff;
+        background: var(--sq-ink-soft);
+        border-color: var(--sq-ink-soft);
+        box-shadow: none;
     }
 }
 .management-list {

@@ -50,25 +50,28 @@ test("Navigation hides compatibility and account switching while retaining safe 
     assert.match(styles, /\[hidden\]\s*\{[^}]*display: none !important/s);
 });
 
-test("Event management tabs wrap without scrolling and keep readable interactive states", () => {
+test("Event management tabs use the menu palette without hover movement", () => {
     const styles = compile(join(web, "wwwroot", "app.scss")).css;
     assert.match(
         styles,
-        /\.management-tabs\s*\{[^}]*flex-wrap: wrap;[^}]*overflow: visible;[^}]*background: color-mix\([^;]+;[^}]*border: 1px solid var\(--sq-line\);/s);
+        /\.management-tabs\s*\{[^}]*flex-wrap: wrap;[^}]*overflow: visible;[^}]*background: transparent;[^}]*border: 0;[^}]*border-bottom: 2px solid var\(--sq-line\);[^}]*border-radius: 0;/s);
     assert.match(
         styles,
-        /\.management-tabs button\s*\{[^}]*flex: 1 1 8rem;[^}]*min-width: max-content;[^}]*background: transparent;[^}]*box-shadow: none;[^}]*margin-bottom: -1px;/s);
+        /\.management-tabs button\s*\{[^}]*flex: 0 1 auto;[^}]*min-width: max-content;[^}]*color: var\(--sq-muted\);[^}]*background: transparent;[^}]*box-shadow: none;[^}]*margin-bottom: -2px;/s);
     const hover = styles.match(
         /\.management-tabs button:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/s);
     assert.ok(hover);
-    assert.match(hover.groups.body, /color: var\(--sq-blue-dark\);/);
-    assert.match(hover.groups.body, /background: color-mix\(/);
+    assert.match(hover.groups.body, /color: var\(--sq-accent\);/);
+    assert.match(hover.groups.body, /background: var\(--sq-accent-soft\);/);
+    assert.doesNotMatch(hover.groups.body, /transform:/);
     const selected = styles.match(
         /\.management-tabs button\.selected,\s*\.management-tabs button\.selected:hover:not\(:disabled\)\s*\{(?<body>[^}]*)\}/s);
     assert.ok(selected);
-    assert.match(selected.groups.body, /background: white;/);
-    assert.match(selected.groups.body, /border-bottom-color: white;/);
+    assert.match(selected.groups.body, /color: #fff;/);
+    assert.match(selected.groups.body, /background: var\(--sq-ink-soft\);/);
     assert.doesNotMatch(selected.groups.body, /linear-gradient|border-radius:\s*(?:999|100%|50%)/);
+    assert.doesNotMatch(styles, /main \.quest-card\.quest-card,\s*main \.event-card\.event-card\s*\{[^}]*transform:/s);
+    assert.doesNotMatch(styles, /button, \.button-link\s*\{[^}]*transform:/s);
 });
 
 test("Event detail cards keep equal columns, cap media to its column, and collapse at the mobile boundary", () => {
